@@ -260,12 +260,11 @@
 				"box": {
 					"id": "obj-12",
 					"maxclass": "newobj",
-					"text": "sel 1",
-					"numinlets": 2,
-					"numoutlets": 2,
+					"text": "t b",
+					"numinlets": 1,
+					"numoutlets": 1,
 					"outlettype": [
-						"bang",
-						""
+						"bang"
 					],
 					"patching_rect": [
 						400.0,
