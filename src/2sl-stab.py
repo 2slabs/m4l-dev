@@ -351,6 +351,11 @@ def gen_patcher(code, ins, outs):
 # Every visible parameter must have an entry and every entry must name a parameter (checked at build time).
 # The text says what the code does; keep it short, the Info View is small.
 INFO = {
+    # views
+    "Steps view": ("Pattern", "The machine's 16 steps. Click a step to cycle rest, hit, accent. Bright with a bar on "
+                   "top: accent (full velocity, fires at Density x1.4). Dim: hit (softer, fires at Density). Empty "
+                   "steps: the lighter ones start each beat. Blue outline: the step playing now. Orange outline: "
+                   "that stab was thrown into the echo."),
     # header
     "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working."),
     "Preset": ("Preset", "Sets every control (and the machine's pattern) to a preset; tweak from there. "
@@ -597,9 +602,14 @@ def on_page(page, b_id, varname):
     return b_id
 
 
-def view(mode, x, y, w, h, page, background=False):
+def view(mode, x, y, w, h, page, background=False, info=None):
     # background=True: Max's "Include in Background", so it always sits behind every other object
     extra = {"ignoreclick": 1, "background": 1} if background else {}
+    if info:
+        # info: an INFO key, shown in Live's Info View on hover (as for parameters)
+        title, text = INFO[info]
+        INFO_USED.add(info)
+        extra.update(annotation_name=title, annotation=text)
     b = box(cls="jsui", rect=(1500 + x, 1000 + y, w, h), ins=1, outs=1, filename="2sl-stab-view.js",
             jsarguments=[mode], presentation=1, presentation_rect=[float(x), float(y), float(w), float(h)], border=0,
             **extra)
@@ -747,7 +757,7 @@ dial("Tone", "Tone", voice, "tonemac", -100, 100, 0, 5, C1, DIAL_Y, "play", scal
 dial("Length", "Length", voice, "lenmac", -100, 100, 0, 5, C1 + 70, DIAL_Y, "play", scale=0.01)
 dial("Drift", "Drift", memory, "drift", 0, 100, 0, 5, C1 + 140, DIAL_Y, "play", scale=0.01, inlet=1)
 
-v_steps = view("steps", C2, VIEW_Y, 280, VIEW_H, "play")
+v_steps = view("steps", C2, VIEW_Y, 280, VIEW_H, "play", info="Steps view")
 wire(memory, v_steps, 2, 0)
 wire(v_steps, memory, 0, 1)          # clicks edit steps
 wire(memory, v_chord, 3, 0)

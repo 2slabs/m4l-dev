@@ -2168,6 +2168,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Pattern",
+					"annotation": "The machine's 16 steps. Click a step to cycle rest, hit, accent. Bright with a bar on top: accent (full velocity, fires at Density x1.4). Dim: hit (softer, fires at Density). Empty steps: the lighter ones start each beat. Blue outline: the step playing now. Orange outline: that stab was thrown into the echo.",
 					"varname": "view_steps"
 				}
 			},
