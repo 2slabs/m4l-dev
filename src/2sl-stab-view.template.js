@@ -81,10 +81,23 @@ function fade(t, ms) { return Math.max(0, 1 - (now() - t) / ms); }
 
 // ---- drawing: Cozette text ---------------------------------------------------------------------
 
+var missingGlyphsReported = {};
+/** The Cozette bitmap for a codepoint. One that tools/bdf2js.py didn't embed draws as "?", and says so once. */
+function glyph(codepoint) {
+  var found = COZETTE[codepoint];
+  if (found) return found;
+  if (!missingGlyphsReported[codepoint]) {
+    missingGlyphsReported[codepoint] = 1;
+    error("2sl stab: the " + MODE + " display has no Cozette glyph for U+" + codepoint.toString(16).toUpperCase() +
+          " (add it to tools/bdf2js.py's list): drawn as ?\n");
+  }
+  return COZETTE[63];
+}
+
 /** Width of `str` in pixels at scale 1 (13 px) or 2 (26 px). */
 function measure(str, scale) {
   var w = 0;
-  for (var i = 0; i < str.length; i++) { var g = COZETTE[str.charCodeAt(i)] || COZETTE[63]; w += g[0]; }
+  for (var i = 0; i < str.length; i++) { var g = glyph(str.charCodeAt(i)); w += g[0]; }
   return w * (scale || 1);
 }
 
@@ -95,7 +108,7 @@ function text(str, x, y, c, scale) {
   rgba(c);
   var pen = Math.round(x);
   for (var i = 0; i < str.length; i++) {
-    var g = COZETTE[str.charCodeAt(i)] || COZETTE[63];
+    var g = glyph(str.charCodeAt(i));
     var w = g[1], h = g[2], xo = g[3], yo = g[4];
     var nb = Math.ceil(w / 8) * 8;
     var top = Math.round(y) - (yo + h) * k;

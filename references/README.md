@@ -25,3 +25,10 @@ Sources the code follows. Links and what they say; the pages themselves are not 
   pulse. https://notebook.zoeblade.com/Sub-oscillator.html
 
 So the sub is the oscillator divided by 2 or 4: locked to it, following its range (footage) switch.
+
+## Max and Live APIs (2sl stab)
+
+- **Max JS global methods** (Max 7 vignette, still the current text):
+  https://docs.cycling74.com/max7/vignettes/jsglobal
+  `error()` "Sends a red tinged message to the Max window"; `post()` "Prints a representation of the
+  arguments in the Max window". The device's loud failures use `error()`; notices use `post()`.
