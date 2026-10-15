@@ -52,3 +52,10 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
 - **Live Object Model, Song** (fetched in LPX_Script/references/live-lom-song.md from
   https://docs.cycling74.com/apiref/lom/song/): `tempo` "Current tempo of the Live Set in BPM, 20.0 ... 999.0";
   `current_song_time` "The playing position in the Live Set, in beats."
+- **gen~ Delay** (Max reference): https://docs.cycling74.com/reference/gen_dsp_delay/
+  "The first argument specifies the maximum delay time (in samples, default samplerate)."
+  It must be a constant expression; Graham Wakefield (Cycling '74): "this argument must be a constant
+  expression (and for gen~, "samplerate" functions pretty much like a constant)"
+  (https://cycling74.com/forums/gen-parameter-is-not-defined). `samplerate` is listed under Constants in
+  https://docs.cycling74.com/userguide/gen/gen~_operators/. So the echo sizes its buffers as
+  `samplerate * seconds`. (The same thread: samplerate updates on a gen~ reset/restart.)

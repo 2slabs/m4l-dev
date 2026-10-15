@@ -191,6 +191,14 @@ y = s4 * (1 + k * 0.4);
 out1 = y * env * (0.35 + 0.65 * velo_smoothed) * level;
 """
 
+# The echo's longest time: 1/2 note at Live's slowest tempo, 20 BPM (Live Object Model, Song.tempo: "20.0 ...
+# 999.0"), is 6000 ms. The left side runs 3.1% long and wow adds up to 0.12%: 6193 ms, plus the cubic read's
+# 3 samples. The buffers hold 6.25 s at whatever the sample rate is.
+ECHO_LONGEST_MS = 60000.0 / 20.0 * 2.0
+ECHO_BUFFER_SECONDS = 6.25
+if ECHO_LONGEST_MS * 1.031 * 1.0012 / 1000.0 >= ECHO_BUFFER_SECONDS - 0.01:
+    raise SystemExit("2sl-stab.py: the echo buffer is shorter than the longest echo time")
+
 FX = r"""
 // in1: the voices, mono. in2: Live's beat ramp (plugphasor~). out1/out2: left/right.
 // soft clip: clean below 0.8, rounding off above (gen needs functions first)
@@ -205,7 +213,7 @@ sclip(v) {
 
 // The echo is only for throws: silent until Dub, Throw or Freeze feeds it.
 Param drive(0.25, min=0, max=1);        // tape saturation
-Param dtime(363, min=20, max=1900);     // ms (Live's tempo x the Time menu)
+Param dtime(363, min=20, max=ECHO_LONGEST_MS);  // ms (Live's tempo x the Time menu): 1/2 at 20 BPM is the longest
 Param dub(0, min=0, max=1);             // the dub macro: send, feedback, darker, smeared
 Param throwgate(0, min=0, max=1);       // 1 while a throw is open
 Param freeze(0, min=0, max=1);          // hold the loop
@@ -219,15 +227,15 @@ Param transport(0, min=0, max=1);       // 1 while Live plays: lock to its beat
 Param volume(0, min=-60, max=12);       // output, dB
 Param panic(0);                         // Stop: every new number empties the echo
 
-Delay dl(200000);
-Delay dr(200000);
+Delay dl(samplerate * ECHO_BUFFER_SECONDS);   // samplerate is a constant to gen~, so the size follows it
+Delay dr(samplerate * ECHO_BUFFER_SECONDS);
 Delay al1(2000);
 Delay al2(2000);
 Delay ar1(2000);
 Delay ar2(2000);
 History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
 History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
-History lastpanic(0), elapsed(400000), pressfade(0);
+History lastpanic(0), elapsed(1e9), pressfade(0);
 
 sr = samplerate;
 gain = 1 + drive * 5;
@@ -249,8 +257,9 @@ ts = ts + (dtime - ts) * 0.0004;
 wph = wrap(wph + 0.53 / sr, 0, 1);
 wph2 = wrap(wph2 + 0.137 / sr, 0, 1);
 wow = (sin(twopi * wph) * 0.6 + sin(twopi * wph2) * 0.4) * 0.0012;
-tl = clamp(mstosamps(ts * 1.031 * (1 + wow)), 2, 199000);
-tr = clamp(mstosamps(ts * 0.979 * (1 - 0.8 * wow)), 2, 199000);
+echo_buffer_samples = samplerate * ECHO_BUFFER_SECONDS;
+tl = clamp(mstosamps(ts * 1.031 * (1 + wow)), 2, echo_buffer_samples - 4);   // -4: room for the cubic read
+tr = clamp(mstosamps(ts * 0.979 * (1 - 0.8 * wow)), 2, echo_buffer_samples - 4);
 
 // Stop: everything in the buffers is from before it. `clean` is a gain by where the longest read lands:
 // 0 on audio from before Stop, rising to 1 over the 2 ms of audio written after it. It is a position, not
@@ -261,7 +270,7 @@ if (panic != lastpanic) {
 	elapsed = 0;
 	pressfade = 1;
 }
-elapsed = min(elapsed + 1, 400000);
+elapsed = min(elapsed + 1, 1e9);       // capped far past any read, so `clean` stays 1 long after Stop
 clean = clamp((elapsed - max(tl, tr) - 3) / mstosamps(2), 0, 1);   // -3: the cubic read's reach
 pressfade = max(pressfade - 1 / mstosamps(2), 0);
 keep = max(clean, pressfade);
@@ -334,6 +343,8 @@ gain = dbtoa(volume) * 2;              // +6 dB over the old level; the soft cli
 out1 = sclip((x + rl * 1.2) * gsm * gain);
 out2 = sclip((x + rr * 1.2) * gsm * gain);
 """
+
+FX = FX.replace("ECHO_LONGEST_MS", repr(ECHO_LONGEST_MS)).replace("ECHO_BUFFER_SECONDS", repr(ECHO_BUFFER_SECONDS))
 
 # ---- patch building ----------------------------------------------------------------
 
