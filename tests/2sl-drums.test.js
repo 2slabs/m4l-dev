@@ -22,18 +22,14 @@ const tests = [];
 function test(name, body) { tests.push({ name, body }); }
 
 // ---- Max stubs: the shared sandbox ----------------------------------------------------------------------
-const { sandbox } = require(path.join(ROOT, "tools", "max_sandbox.js"));
+const { sandbox, deliverMessage } = require(path.join(ROOT, "tools", "max_sandbox.js"));
 
 function loadBrain(seed) {
   const { context, record } = sandbox(seed === undefined ? 1 : seed);
   vm.runInContext(BRAIN_SOURCE, context, { filename: "2sl-drums.js" });
   const brain = {
     context, record,
-    send(name) {
-      context.inlet = 1;
-      context.messagename = name;
-      context.anything.apply(null, Array.prototype.slice.call(arguments, 1));
-    },
+    send(name) { deliverMessage(context, 1, name, Array.prototype.slice.call(arguments, 1)); },
     note(pitch, velocity) { context.inlet = 0; context.list(pitch, velocity); },
     clear() { record.outlets.length = 0; record.posts.length = 0; },
     lastRows() {
@@ -656,7 +652,7 @@ test("UI: presets wait for ready, then set every control they name; pages show a
   const preset = context.PRESETS[2];
   for (const name in preset) assert.ok(sent.some((s) => s[0] === name && s[1] === preset[name]), "preset didn't set " + name);
   record.outlets.length = 0;
-  context.page(1);
+  deliverMessage(context, 0, "page", [1]);
   assert.strictEqual(hiddenNow(record, "view_mix"), 0);
   assert.strictEqual(hiddenNow(record, "view_grid"), 1);
   context.msg_int(99);
@@ -667,7 +663,7 @@ test("UI: presets wait for ready, then set every control they name; pages show a
 test("UI: the Voice buttons show one voice's controls on the kit page, and nothing off it", () => {
   const { context, record } = loadUi();
   context.messagename = "ready"; context.anything();
-  context.page(1);
+  deliverMessage(context, 0, "page", [1]);
   assert.strictEqual(hiddenNow(record, "view_bd"), 0);
   assert.strictEqual(hiddenNow(record, "bd_tune"), 0);
   assert.strictEqual(hiddenNow(record, "hat_tune"), 1);
@@ -677,7 +673,7 @@ test("UI: the Voice buttons show one voice's controls on the kit page, and nothi
   assert.strictEqual(hiddenNow(record, "view_hats"), 0);
   assert.strictEqual(hiddenNow(record, "hat_tune"), 0);
   assert.strictEqual(hiddenNow(record, "bd_level"), 0, "the mixer stays");
-  context.page(0);
+  deliverMessage(context, 0, "page", [0]);
   assert.strictEqual(hiddenNow(record, "hat_tune"), 1);
   assert.strictEqual(hiddenNow(record, "view_grid"), 0);
   context.messagename = "group"; context.anything("nonsense", 1);
@@ -697,7 +693,7 @@ function loadView(mode, size) {
   const { context, record } = sandbox(1, { mgraphics, Task, jsarguments: ["2sl-drums-view.js", mode],
                                            max: { getcolor: () => [0.15, 0.15, 0.15, 1], launchbrowser: () => {} } });
   vm.runInContext(VIEW_SOURCE, context, { filename: "2sl-drums-view.js" });
-  const send = (name, ...args) => { context.messagename = name; context.anything(...args); };
+  const send = (name, ...args) => deliverMessage(context, 0, name, args);
   return { context, record, drawn, send };
 }
 
@@ -744,6 +740,31 @@ test("Every display draws with its Init values, takes its messages; the grid's c
 
 // ---- run ----------------------------------------------------------------------------------------------------
 let failed = 0;
+test("no message the patch sends a script is also a global function's name (Max would call it, skipping anything())", () => {
+  const MAX_ENTRY_POINTS = ["anything", "list", "bang", "msg_int", "msg_float", "loadbang", "notifydeleted"];
+  const sourceByFile = { "2sl-drums.js": BRAIN_SOURCE, "2sl-drums-ui.js": UI_SOURCE, "2sl-drums-view.js": VIEW_SOURCE };
+  const boxById = {};
+  for (const b of BOXES) boxById[b.id] = b;
+  const collisions = [];
+  for (const scriptBox of BOXES) {
+    const file = scriptBox.filename || ((scriptBox.text || "").match(/^js (\S+)/) || [])[1];
+    if (!sourceByFile[file]) continue;
+    const { context } = sandbox(1, { mgraphics: new Proxy({}, { get: () => () => {}, set: () => true }),
+      Task: function () { this.repeat = () => {}; this.cancel = () => {}; },
+      jsarguments: [file, "grid"], max: { getcolor: () => [0, 0, 0, 1], launchbrowser: () => {} } });
+    vm.runInContext(sourceByFile[file], context, { filename: file });
+    for (const line of LINES) {
+      if (line.destination[0] !== scriptBox.id) continue;
+      const sender = boxById[line.source[0]], text = sender.text || "";
+      const name = sender.maxclass === "message" ? text.split(" ")[0]
+                 : (text.match(/^prepend (\S+)/) || [])[1];
+      if (name && !MAX_ENTRY_POINTS.includes(name) && typeof context[name] === "function")
+        collisions.push(file + " gets '" + name + "' from " + sender.id);
+    }
+  }
+  assert.strictEqual(collisions.length, 0, collisions.join("; "));
+});
+
 for (const t of tests) {
   try { t.body(); console.log("ok   " + t.name); }
   catch (e) { failed++; console.log("FAIL " + t.name + "\n     " + (e.stack || e).toString().split("\n").slice(0, 4).join("\n     ")); }

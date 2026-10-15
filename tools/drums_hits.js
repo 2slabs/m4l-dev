@@ -9,11 +9,11 @@ const fs = require("fs");
 const path = require("path");
 
 const request = JSON.parse(process.argv[2]);
-const { sandbox } = require("./max_sandbox");
+const { sandbox, deliverMessage } = require("./max_sandbox");
 const { context, record } = sandbox(request.seed || 1);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "devices", "2sl-drums", "2sl-drums.js"), "utf8"), context);
 const toGen = () => record.outlets.filter((o) => o[0] === 0).map((o) => [o[1], o[2]]);
-function send(name, value) { context.inlet = 1; context.messagename = name; context.anything(value); }
+function send(name, value) { deliverMessage(context, 1, name, [value]); }
 send("ready");
 send("tempo", request.tempo || 120);
 send("playing", 1);

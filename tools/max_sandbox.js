@@ -1,6 +1,6 @@
 // A sandbox with Max's [js] globals stubbed, for running 2sl device scripts in plain node (no packages).
 // Used by tests/2sl-drums.test.js and tools/drums_hits.js. Math.random is seeded (mulberry32) so runs repeat.
-//   const { sandbox } = require("./max_sandbox");
+//   const { sandbox, deliverMessage } = require("./max_sandbox");
 //   const { context, record } = sandbox(seed, { extra globals });  vm.runInContext(source, context);
 // record.outlets: [[outlet, ...args]]   record.errors / record.posts: what error() / post() printed.
 "use strict";
@@ -36,4 +36,16 @@ function sandbox(seed, extraGlobals) {
   return { context, record };
 }
 
-module.exports = { sandbox, seededRandom };
+/** Deliver message `name` the way Max's [js] does: a global function of that name takes it (bypassing
+ *  anything()); only names without one reach anything(). So a test sees what Live will do when a handler
+ *  name collides with a function the script defines. */
+function deliverMessage(context, inletIndex, name, args) {
+  context.inlet = inletIndex;
+  context.messagename = name;
+  const sameNamedFunction = context[name];
+  if (typeof sameNamedFunction === "function" && name !== "anything") return sameNamedFunction.apply(null, args);
+  if (typeof context.anything !== "function") throw new Error("the script has no anything() for '" + name + "'");
+  return context.anything.apply(null, args);
+}
+
+module.exports = { sandbox, seededRandom, deliverMessage };

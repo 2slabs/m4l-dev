@@ -414,7 +414,7 @@ var TICKS_PER_SIXTEENTH = 120;        // Max: 480 ticks per quarter note
 var ON_SIXTEENTH_TOLERANCE = 0.25;    // a bang within a quarter of a 16th of one is on it (clock jitter)
 var lastPlayedSixteenth = null;       // song position (in 16ths) of the last 16th played while Live plays
 
-function tick(ticks) {
+function clockTick(ticks) {
   if (!playing) return;
   if (!isFinite(ticks)) {
     error(DEVICE_NAME + ": the clock got a song position of " + ticks + " ticks: 16th skipped\n");
@@ -535,7 +535,7 @@ function append(pattern, label) {
 }
 
 /** Run: the selected function on the selected rows. Returns true when the pattern changed. */
-function run() {
+function runSelectedFunction() {
   var fn = FUNCTIONS[functionIndex];
   var names = selectedNames();
   if (!names.length) {
@@ -577,7 +577,7 @@ function run() {
   return true;
 }
 
-function undo() {
+function undoOneStep() {
   if (historyIndex === 0) {
     post(DEVICE_NAME + ": Undo: this is the oldest pattern kept (" + HISTORY_LIMIT + " at most)\n");
     showStatus("nothing older to undo to");
@@ -730,8 +730,8 @@ function anything() {
       setParam(a[0], a[1], a[2]);
       if (ready) showStatus();
       break;
-    case "run": if (run()) changed(); break;
-    case "undo": if (undo()) changed(); break;
+    case "run": if (runSelectedFunction()) changed(); break;
+    case "undo": if (undoOneStep()) changed(); break;
     case "select":
       selectRow(voiceArgument("select", value), a[1] ? 1 : 0);
       changed();
@@ -757,7 +757,7 @@ function anything() {
       resetClock();
       if (!playing) outlet(1, "pos", -1);
       break;
-    case "tick": tick(value); break;
+    case "tick": clockTick(value); break;
     case "ready":
       ready = 1;
       history = [{ pattern: currentPattern(), label: "the saved pattern" }];

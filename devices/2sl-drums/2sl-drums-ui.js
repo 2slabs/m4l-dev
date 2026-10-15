@@ -265,7 +265,7 @@ function show() {
   }
 }
 
-function group(selector, i) {
+function showGroup(selector, i) {
   if (!GROUPS[selector]) {
     error(DEVICE_NAME + ": group selector '" + selector + "' doesn't exist (a wiring error): ignored\n");
     return;
@@ -276,7 +276,7 @@ function group(selector, i) {
   show();
 }
 
-function page(i) {
+function showPage(i) {
   var last = PAGE_NAMES.length - 1;
   if (!(i >= 0 && i <= last)) error(DEVICE_NAME + ": page " + i + " doesn't exist (0-" + last + "): showing the nearest\n");
   currentPage = Math.max(0, Math.min(last, Math.round(i))) || 0;
@@ -356,9 +356,13 @@ function anything() {
     recolor();
     return;
   }
+  if (messagename === "page") {
+    showPage(arrayfromargs(arguments)[0]);
+    return;
+  }
   if (messagename === "group") {
     var groupArguments = arrayfromargs(arguments);
-    group(String(groupArguments[0]), groupArguments[1]);
+    showGroup(String(groupArguments[0]), groupArguments[1]);
     return;
   }
   if (messagename === "ready") {

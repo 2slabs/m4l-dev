@@ -8,7 +8,7 @@ var TICKS_PER_SIXTEENTH = 120;        // Max: 480 ticks per quarter note
 var ON_SIXTEENTH_TOLERANCE = 0.25;    // a bang within a quarter of a 16th of one is on it (clock jitter)
 var lastPlayedSixteenth = null;       // song position (in 16ths) of the last 16th played while Live plays
 
-function tick(ticks) {
+function clockTick(ticks) {
   if (!playing) return;
   if (!isFinite(ticks)) {
     error(DEVICE_NAME + ": the clock got a song position of " + ticks + " ticks: 16th skipped\n");
