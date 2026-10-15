@@ -32,6 +32,8 @@ smoothing_coefficient(time_constant_ms, sample_rate) {
 
 VOICE = GEN_SMOOTHING_FUNCTION + r"""
 // One voice. in1: frequency (Hz). in2: gate = velocity 0..1, 0 = release. in3: the LFO (-1..1, shared).
+// in4: the note-on count: a new number on every note-on (the patch counts them), so a note-on always starts the
+// envelope, even when it changes no other value (a voice stolen for its own pitch at the same velocity).
 // Two oscillators, a sub and noise into a mixer, like the Juno / Jupiter / Prophet voices of the time.
 // (gen requires functions before everything else, declarations included.)
 // polyBLEP: removes the aliasing from a saw's jump
@@ -75,7 +77,7 @@ Param tonemac(0, min=-1, max=1);        // Play page Tone: cutoff and envelope u
 Param lenmac(0, min=-1, max=1);         // Play page Length: decay and release x0.25..x4
 Param panic(0);                         // Stop: every new number ramps the voice to silence
 
-History env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);
+History env(0), stage(0), lastgate(0), velo(0), last_note_on_count(0), lastpanic(0), fadeleft(0), fadestep(0);
 History velo_smoothed(0);   // velo, glided: a stolen voice's new velocity mustn't jump the gain (a click)
 History ph1(0), ph2(0), dco1_cycle_count(0), s1(0), s2(0), s3(0), s4(0);
 
@@ -83,17 +85,20 @@ lfo = in3;
 note = max(in1, 1);                    // the played pitch (vibrato is applied on top)
 freq = note * pow(2, vibamt * lfo * 0.5 / 12);
 gatein = in2;
+note_on_count = in4;
 sr = samplerate;
 
-// gate edges; a new velocity or pitch while held = a stolen voice: start again
-if (gatein > 0 && (lastgate <= 0 || gatein != lastgate || note != lastfreq)) {
+// A note-on is a new count with the gate up: start the envelope. The gate falling is the note-off. Values alone
+// can't be the note-on: messages within one vector reach gen~ as their last value, so a voice stolen for the same
+// pitch and velocity (note-off, note-on: gate v, 0, v) would see nothing change.
+if (note_on_count != last_note_on_count && gatein > 0) {
 	stage = 1;
 	velo = gatein;
 } else if (gatein <= 0 && lastgate > 0) {
 	stage = 3;
 }
 lastgate = gatein;
-lastfreq = note;
+last_note_on_count = note_on_count;
 
 // Stop: ramp to exactly 0 over 20 ms, whatever the release. A key pressed during the ramp starts when it ends.
 if (panic != lastpanic) {
@@ -106,6 +111,7 @@ if (fadeleft > 0) {
 	stage = 0;
 	env = fadeleft > 0 ? max(env - fadestep, 0) : 0;
 	lastgate = 0;
+	last_note_on_count = -1;           // the counts start at 1: a key held through the ramp starts when it ends
 }
 
 // the velocity glides to a new value over ~2 ms (time constant 0.5 ms: 98% there in 2 ms)
@@ -603,9 +609,10 @@ wire(parse, memory)
 wire(memory, fmt)
 wire(fmt, alloc, 1, 0)
 
-# note-on: pitch -> frequency target, THEN velocity -> gate target (the voice starts on its gate, so it must
-# already have the new pitch); note-off: gate 0. The trigger fixes the order (right outlet first).
-on_order = box("t l l", rect=(30, 215, 50, 22), ins=1, outs=2, outtype=["", ""])
+# note-on: pitch -> frequency target, velocity -> gate target, THEN a new note-on count -> its target (the voice
+# starts on a new count, so it must already have the new pitch and velocity); note-off: gate 0. The trigger fixes
+# the order (right outlet first). The count is what makes every note-on start: see the voice's in4.
+on_order = box("t b l l", rect=(30, 215, 60, 22), ins=1, outs=3, outtype=["bang", "", ""])
 on_pitch = box("unpack 0 0", rect=(30, 240, 80, 22), ins=1, outs=2, outtype=["int", "int"])
 on_velocity = box("unpack 0 0", rect=(120, 240, 80, 22), ins=1, outs=2, outtype=["int", "int"])
 mtof = box("mtof", rect=(30, 270, 40, 22), outtype=["float"])
@@ -613,9 +620,13 @@ vel = box("/ 127.", rect=(120, 270, 50, 22), ins=2, outtype=["float"])
 offmsg = box("t 0", rect=(200, 270, 30, 22), outtype=["int"])
 tgt_f = box("mc.target", rect=(30, 300, 70, 22), ins=2, outs=2)
 tgt_g = box("mc.target", rect=(120, 300, 70, 22), ins=2, outs=2)
+note_on_counter = box("counter 1 1000000", rect=(260, 240, 110, 22), ins=3, outs=4, outtype=["int", "", "", "int"])
+tgt_note_on = box("mc.target", rect=(260, 270, 70, 22), ins=2, outs=2)
+wire(on_order, note_on_counter, 0, 0)
+wire(note_on_counter, tgt_note_on)
 wire(alloc, on_order, 0, 0)
-wire(on_order, on_pitch, 1, 0)
-wire(on_order, on_velocity, 0, 0)
+wire(on_order, on_pitch, 2, 0)
+wire(on_order, on_velocity, 1, 0)
 wire(on_pitch, mtof, 0, 0)
 wire(on_velocity, vel, 1, 0)
 wire(mtof, tgt_f)
@@ -624,9 +635,10 @@ wire(alloc, offmsg, 1, 0)
 wire(offmsg, tgt_g)
 wire(alloc, tgt_f, 5, 1)
 wire(alloc, tgt_g, 5, 1)
+wire(alloc, tgt_note_on, 5, 1)
 
-voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=3, outs=1, outtype=["multichannelsignal"],
-            patcher=gen_patcher(VOICE, 3, 1))
+voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=4, outs=1, outtype=["multichannelsignal"],
+            patcher=gen_patcher(VOICE, 4, 1))
 # the LFO: a cosine of a phasor~'s phase (cos~: "the cosine of 2pi times the input"), so the displays can read
 # the phase itself (snapshot~ below) and draw the LFO in step with the sound
 lfo_phase = box(f"phasor~ {BASE['LFO Rate']}", rect=(220, 300, 80, 22), ins=2, outs=1, outtype=["signal"])
@@ -635,6 +647,7 @@ wire(lfo_phase, lfo)
 wire(lfo, voice, 0, 2)
 wire(tgt_f, voice, 0, 0)
 wire(tgt_g, voice, 0, 1)
+wire(tgt_note_on, voice, 0, 3)
 wire(voice, alloc)  # busy state: a voice stays allocated until its release has faded
 
 mix = box("mc.mixdown~ 1 @autogain 0", rect=(30, 390, 170, 22), ins=2, outs=1, outtype=["multichannelsignal"])
