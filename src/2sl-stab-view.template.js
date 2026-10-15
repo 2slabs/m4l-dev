@@ -3,7 +3,7 @@
 //   link    the 2sl wordmark chip: hover shows 2sl.to, click opens it
 //   chord   big chord name, its notes, a lit keyboard            (from the chord brain)
 //   steps   the machine's 16 steps: click to edit; playhead, hits, throws, status line
-//   echo    the dub echo: repeats decaying (more and darker with Dub), throws, freeze, live level
+//   echo    the dub echo as measured: its last time rounds and the one now, throws, freeze, live level
 //   pump    the duck curve over a beat, with a moving playhead
 //   sub     the sub oscillator: its wave for Sub Mode, over DCO 1's two cycles
 //   osc1    DCO 1: its waveform (saw, pulse, both), pulse width, PWM
@@ -36,7 +36,7 @@ var S = {
   page: 0,
   name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
-  level: 0, throwAt: 0, phase: 0,
+  throwAt: 0, phase: 0,
   tempo: 120                        // Live's tempo (the pump), until Live reports it
 };
 var VIEW_DEFAULTS = /*VIEW_DEFAULTS*/;
@@ -65,7 +65,7 @@ function anything() {
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
   else if (m === "lfophase") recordLfoReading(a[0]);
-  else if (m === "roundpeak") recordEchoRound(a[0]);
+  else if (m === "echo") recordEchoReading(a);
   else if (m in S) S[m] = a[0];
   else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
@@ -267,51 +267,51 @@ function onclick(x, y) {
   outlet(0, "edit", Math.max(0, Math.min(15, Math.floor((x - 4) / ((w - 8) / 16)))));
 }
 
-// The echo's peak over each time round it completes (from the FX: |left| + |right|, the level line's measure), the
-// newest last. Frozen, the display draws these: what the loop really did, round by round, its filters and
-// saturation and all, so a swell rises at the rate it really has and flattens where the loop holds.
-var ECHO_ROUNDS_SHOWN = 10;
-var echoRoundPeaks = [];
-function recordEchoRound(peak) {
-  if (!(peak >= 0)) {
-    error("2sl stab: the echo display got a round peak of " + peak + " (a wiring error): ignored\n");
+// The echo as the FX measured it (|left| + |right|), read every 33 ms in one message: its level now, its peak so far
+// in the time round it is in, then its peaks over its last whole rounds, the newest first. The FX keeps those rounds
+// itself, so a reading always has all of them, however short the rounds or late the reading. Frozen or not, this is
+// what the display draws: what the loop really did, round by round, its filters and saturation and all. Stop
+// empties them in the FX (rounds since Stop read 0).
+var echoReading = { level: 0, roundNow: 0, wholeRounds: [] };    // nothing drawn until the first reading
+function recordEchoReading(values) {
+  for (var i = 0; i < values.length; i++) {
+    if (!(values[i] >= 0)) {
+      error("2sl stab: the echo display got a reading of " + values.join(" ") + " (not all levels): ignored\n");
+      return;
+    }
+  }
+  if (values.length < 3) {
+    error("2sl stab: the echo display got " + values.length + " values, not the level, the round now and whole " +
+          "rounds (a wiring error): ignored\n");
     return;
   }
-  echoRoundPeaks.push(peak);
-  if (echoRoundPeaks.length > ECHO_ROUNDS_SHOWN) echoRoundPeaks.shift();
+  echoReading = { level: values[0], roundNow: values[1], wholeRounds: values.slice(2) };
 }
-// Frozen, heights are in dB below the most the loop can carry: each side writes tanh(...) / 1.1 back, under 1 / 1.1,
-// so |left| + |right| stays under 2 / 1.1. ECHO_FROZEN_RANGE_DB below that is the bottom.
+// Heights are in dB below the most the loop can carry: each side writes tanh(...) / 1.1 back, under 1 / 1.1, so
+// |left| + |right| stays under 2 / 1.1 (fresh sound sent in can go over: drawn full). ECHO_RANGE_DB below is the bottom.
 var ECHO_LOOP_CEILING = 2 / 1.1;
-var ECHO_FROZEN_RANGE_DB = 48;
-function frozenRoundHeight(peak) {
+var ECHO_RANGE_DB = 48;
+function echoRoundHeight(peak) {
   var db = 20 * Math.log(Math.max(peak, 1e-9) / ECHO_LOOP_CEILING) / Math.LN10;
-  return Math.max(0, Math.min(1, 1 + db / ECHO_FROZEN_RANGE_DB));
+  return Math.max(0, Math.min(1, 1 + db / ECHO_RANGE_DB));
 }
 
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
-  var fb = Math.max(0.3 + S.dub * 0.62, thrown * 0.9);
-  var on = S.dub > 0 || thrown > 0 || S.freeze;
   viewLabel("echo");
   var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
-  var top = 18, base = h - 8, n = ECHO_ROUNDS_SHOWN, gap = (w - 20) / n;
-  rect(6, top, 6, base - top, T.ink);                          // the stab
-  // frozen: the loop's last rounds as the audio had them, oldest first, the round just finished on the right
-  var firstRound = n - echoRoundPeaks.length;                   // rounds not heard yet (just loaded) aren't drawn
-  var amp = 1;
-  for (var i = 1; i <= n; i++) {                                // its repeats, darker each time round
-    if (S.freeze) {
-      if (i - 1 < firstRound) continue;
-      amp = frozenRoundHeight(echoRoundPeaks[i - 1 - firstRound]);
-    } else amp *= fb;
-    var x = 6 + i * gap, bh = Math.max(1, (base - top) * amp);
-    var col = S.freeze ? T.mint : mix(T.mint, T.rest, Math.min(1, i / (2 + S.dub * 8)));
-    if (on) rect(x, base - bh, 6, bh, col);
-    else frame(x, base - bh, 6, bh, T.rest);
+  // the whole rounds, oldest on the left, then the round now on the far right, outlined (it is still growing)
+  var rounds = echoReading.wholeRounds.slice().reverse().concat([echoReading.roundNow]);
+  var top = 18, base = h - 8, gap = (w - 20) / Math.max(1, rounds.length - 1);
+  for (var i = 0; i < rounds.length; i++) {
+    var x = 6 + i * gap, bh = (base - top) * echoRoundHeight(rounds[i]);
+    var isRoundNow = i === rounds.length - 1;
+    if (bh < 1) rect(x, base - 1, 6, 1, T.rest);                  // silent: a dash
+    else if (isRoundNow) frame(x, base - bh, 6, bh, T.mint);
+    else rect(x, base - bh, 6, bh, T.mint);
   }
-  rect(4, h - 4, (w - 8) * Math.min(1, S.level * 3), 2, thrown > 0 ? T.warm : T.mint);  // tape level
+  rect(4, h - 4, (w - 8) * Math.min(1, echoReading.level * 3), 2, thrown > 0 ? T.warm : T.mint);  // tape level
   if (thrown > 0) frame(0, 0, w, h, T.warm, 2 * thrown);
 }
 
