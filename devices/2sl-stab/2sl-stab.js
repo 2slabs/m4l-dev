@@ -2,7 +2,8 @@
 //   in 0: note list (pitch velocity), velocity 0 = note off
 //   in 1: control messages
 //     shape i       Chord menu: 0 poly, 1 minor, 2 m7, 3 m9, 4 m11, 5 sus4, 6 fifths, 7 dark
-//     inkey i       1 = build chords from Live's scale instead of a fixed (parallel) shape
+//     inkey i       1 = build chords from Live's scale instead of a fixed (parallel) shape (a scale under
+//                   5 notes falls back to the fixed shapes, and the chord display says so)
 //     root i / intervals ...   Live's Scale Mode key
 //     drift f       0..1: chance each stab gets a different voicing
 //     machine i / latch i
@@ -18,6 +19,8 @@
 // out 0: note lists for midiformat
 // out 1: bang = throw
 // out 2: to the step display     out 3: to the chord display     out 4: stepbits/accbits to store
+// A control value outside its range can only come from a wiring or message error: it is logged in the Max
+// window, then clamped. (Clamping that is behaviour, like velocity math, uses clampi directly.)
 inlets = 2;
 outlets = 5;
 
@@ -70,7 +73,24 @@ function patternString() {
   return shown;
 }
 function clampi(v, lo, hi) { return Math.max(lo, Math.min(hi, Math.round(v))); }
-function clampf(v) { return Math.max(0, Math.min(1, v)); }
+/** A control's integer value, lo..hi. Out of range (or not a number) is a wiring error: logged, then clamped. */
+function controlInt(control, v, lo, hi) {
+  if (!(v >= lo && v <= hi)) {
+    error("2sl stab: " + control + " got " + v + ", outside " + lo + ".." + hi + " (a wiring or message error): using " +
+          (clampi(v, lo, hi) || lo) + "\n");
+    return clampi(v, lo, hi) || lo;
+  }
+  return Math.round(v);
+}
+/** A control's 0..1 value. Out of range (or not a number) is a wiring error: logged, then clamped. */
+function controlUnit(control, v) {
+  if (!(v >= 0 && v <= 1)) {
+    var used = Math.max(0, Math.min(1, v)) || 0;
+    error("2sl stab: " + control + " got " + v + ", outside 0..1 (a wiring or message error): using " + used + "\n");
+    return used;
+  }
+  return v;
+}
 
 function send(p, v) { if (p >= 0 && p <= 127) outlet(0, p, v); }
 function sound(pitches, v) {
@@ -120,7 +140,25 @@ function chordName(pitches) {
   return NAMES[best] + q + (best !== low ? "/" + NAMES[low] : "");
 }
 
+var intervalsKnown = false;   // Live's scale has been reported (until then In Key can't be judged)
 function scaleOk() { return inkey && intervals.length >= 5; }
+
+/** In Key with Live's scale under 5 notes: the chords fall back to the fixed shapes. That is the behaviour,
+ *  but it must show: the chord display says so, and the Max window logs each change. */
+var fixedShapesNoticeShown = false;
+function updateInKeyNotice() {
+  var fallingBack = !!(inkey && SHAPES[shape] && intervalsKnown && intervals.length < 5);
+  if (fallingBack === fixedShapesNoticeShown) return;
+  fixedShapesNoticeShown = fallingBack;
+  if (fallingBack) {
+    post("2sl stab: In Key: Live's scale has " + intervals.length + " notes, under 5: chords use the fixed shapes\n");
+    outlet(3, "notice", "scale <5 notes: fixed shapes");
+  } else {
+    post("2sl stab: In Key: " + (inkey && SHAPES[shape] ? "chords from Live's scale again (" + intervals.length + " notes)"
+                                                       : "off, or poly: the fixed-shape notice is gone") + "\n");
+    outlet(3, "notice");
+  }
+}
 
 /** Stack scale tones on `key` (snapped down into Live's scale): steps are scale steps above it. */
 function chordInKey(key, st) {
@@ -206,7 +244,10 @@ function sentPitches() {
 }
 
 function list(pitch, vel) {
-  if (inlet === 1) return;
+  if (inlet === 1) {
+    error("2sl stab: the brain's control inlet got a bare list (" + arrayfromargs(arguments).join(" ") + "): ignored\n");
+    return;
+  }
   if (vel > 0) {
     var anyHeld = Object.keys(keys).length > 0;
     keys[pitch] = vel;
@@ -285,15 +326,22 @@ function panic() {
 }
 
 function anything() {
-  if (inlet !== 1) return;
+  if (inlet !== 1) {
+    error("2sl stab: the brain's note inlet got '" + messagename + "' (it takes pitch velocity lists): ignored\n");
+    return;
+  }
   var a = arrayfromargs(arguments);
   var v = a[0];
   switch (messagename) {
-    case "shape": panic(); shape = clampi(v, 0, SHAPES.length - 1); showSteps(); break;
-    case "inkey": inkey = v ? 1 : 0; showSteps(); break;
-    case "root": root = clampi(v, 0, 11); break;
-    case "intervals": intervals = a.map(function (x) { return Math.round(x); }); break;
-    case "drift": drift = clampf(v); break;
+    case "shape": panic(); shape = controlInt("Chord", v, 0, SHAPES.length - 1); updateInKeyNotice(); showSteps(); break;
+    case "inkey": inkey = v ? 1 : 0; updateInKeyNotice(); showSteps(); break;
+    case "root": root = controlInt("Live's scale root", v, 0, 11); break;
+    case "intervals":
+      intervals = a.map(function (x) { return Math.round(x); });
+      intervalsKnown = true;
+      updateInKeyNotice();
+      break;
+    case "drift": drift = controlUnit("Drift", v); break;
     case "machine":
       machine = v ? 1 : 0;
       panic();
@@ -310,22 +358,22 @@ function anything() {
       break;
     case "pattern":
       if (!ready) break; // while Live restores the set, the stored steps win
-      steps = parse(PATTERNS[clampi(v, 0, PATTERNS.length - 1)]);
+      steps = parse(PATTERNS[controlInt("Pattern", v, 0, PATTERNS.length - 1)]);
       showSteps();
       store();
       break;
     case "edit":
-      var i = storedIndexAt(clampi(v, 0, 15));   // v is the display position
+      var i = storedIndexAt(controlInt("the step display's edit", v, 0, 15));   // v is the display position
       steps[i] = (steps[i] + 1) % 3;
       showSteps();
       store();
       break;
-    case "stepbits": storedHits = clampi(v, 0, 65535); fromStore(); break;
-    case "accbits": storedAcc = clampi(v, 0, 65535); fromStore(); break;
-    case "shift": shift = clampi(v, 0, 15); showSteps(); break;
-    case "density": density = clampf(v); break;
-    case "throws": throws = clampf(v); break;
-    case "length": length = clampi(v, 1, 8); break;
+    case "stepbits": storedHits = controlInt("the stored Steps", v, 0, 65535); fromStore(); break;
+    case "accbits": storedAcc = controlInt("the stored Accents", v, 0, 65535); fromStore(); break;
+    case "shift": shift = controlInt("Shift", v, 0, 15); showSteps(); break;
+    case "density": density = controlUnit("Density", v); break;
+    case "throws": throws = controlUnit("Throws", v); break;
+    case "length": length = controlInt("Gate", v, 1, 8); break;
     case "playing": playing = v ? 1 : 0; updateClock(); break;
     case "tempo": tempo = v; updateClock(); break;
     case "ready": ready = 1; showSteps(); break;
@@ -336,5 +384,7 @@ function anything() {
       outlet(2, "pos", -1);
       showSteps();
       break;
+    default:
+      error("2sl stab: the brain doesn't know the message '" + messagename + "': ignored\n");
   }
 }

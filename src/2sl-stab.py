@@ -373,7 +373,8 @@ INFO = {
                    "that stab was thrown into the echo."),
     "Link view": ("2sl.to", "Opens 2sl.to in your browser."),
     "Chord view": ("Chord", "The chord sounding now: its name, its notes (top right), and two octaves of keys with "
-                   "those notes lit mint. With Machine on, the last stab the machine played."),
+                   "those notes lit mint. With Machine on, the last stab the machine played. In orange on top: "
+                   "In Key is on but Live's scale has under 5 notes, so chords use the fixed shapes."),
     "Echo view": ("Echo", "The stab (left) and its repeats, each lower by the feedback, mint fading as they go round "
                   "(slower with more Dub). Outlines only while the echo is silent. Frozen: every repeat full and mint. A throw flashes "
                   "an orange frame. The line along the bottom is the echo's level now."),
@@ -403,7 +404,8 @@ INFO = {
     "Chord": ("Chord", "What each key plays: poly plays your notes as they are; the others stack a chord on each key "
               "(minor, m7, m9, m11, sus4, fifths, dark = 0-5-8). Default minor."),
     "In Key": ("In Key", "Builds chords from the scale set in Live (its root and scale): each key snaps down into the "
-               "scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes."),
+               "scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes, "
+               "and the chord display says so."),
     "Tone": ("Tone", "Brighter or darker: moves the cutoff up to 2.5 octaves either way, and the filter envelope with it. "
              "-100 to +100, default 0."),
     "Length": ("Length", "Shorter or longer tails: scales Decay and Release from x0.25 (-100) to x4 (+100). Default 0."),

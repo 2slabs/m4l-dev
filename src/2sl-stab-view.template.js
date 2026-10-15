@@ -31,7 +31,7 @@ pickTheme();
 
 var S = {
   page: 0,
-  name: "", pitches: [],
+  name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
   dub: 0, freeze: 0, level: 0, throwAt: 0,
   depth: 0, rate: 1, phase: 0, curve: 0.5,
@@ -56,6 +56,7 @@ function anything() {
   if (m === "theme") pickTheme();
   else if (m === "chord") { S.name = String(a[0]); S.pitches = a.slice(1); }
   else if (m === "clear") { S.name = ""; S.pitches = []; }
+  else if (m === "notice") S.notice = a.join(" ");
   else if (m === "pattern") S.pattern = String(a[0]);
   else if (m === "held") S.held = String(a[0]);
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
@@ -197,13 +198,15 @@ function viewLabel(str, w) { text(str, 4, 12, T.label); }
 var NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 function chordView(w, h) {
-  viewLabel("chord");
+  // a notice from the brain (In Key falling back to the fixed shapes) takes the top line, in warm
+  if (S.notice) text(S.notice, 4, 12, T.warm);
+  else viewLabel("chord");
   if (!S.pitches.length) {
     text("play a key", 4, 36, T.unlit, 2);
   } else {
     text(S.name, 4, 38, T.ink, 2);
     var notes = S.pitches.slice().sort(function (a, b) { return a - b; }).map(function (p) { return NOTE[p % 12]; });
-    text(notes.join(" "), w - measure(notes.join(" ")) - 4, 12, T.label);
+    if (!S.notice) text(notes.join(" "), w - measure(notes.join(" ")) - 4, 12, T.label);
   }
   // two octaves of keys, from the C at or below the lowest note
   var lit = {};
