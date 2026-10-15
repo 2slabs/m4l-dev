@@ -18,7 +18,7 @@ Signal flow (from the research in devices/2sl-stab/README.md):
 import gzip, json, os, re, shutil, struct, subprocess, sys, zipfile
 import xml.etree.ElementTree as ElementTree
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
