@@ -368,7 +368,6 @@ INFO = {
                   "and pulse width. With PWM up, the pulse width moves with the LFO."),
     "DCO2 view": ("DCO 2", "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, "
                   "so Semi shows as more or fewer cycles. Top right: the wave, Semi and Fine."),
-    "Mixer view": ("Mixer", "The four mixer levels as faders: DCO 1, DCO 2, sub and noise, mint up to the cap."),
     "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint; its rate top right. Along the bottom, "
                  "where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off."),
     "Filter view": ("Filter", "The low-pass response from 20 Hz to 20 kHz in mint, with the resonance peak, at the "
@@ -866,11 +865,12 @@ tell(o2m, "oct2", voice)
 dial("Semi", "Semi", voice, "semi", -12, 12, 0, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
 dial("Fine", "Fine", voice, "fine", 0, 50, 10, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
 
-v_mix = view("mixer", O3, VIEW_Y, 204, VIEW_H, "osc", info="Mixer view")
-dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 80, 5, O3, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "lvl1")])
-dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 80, 5, O3 + 54, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "lvl2")])
-dial("Sub", "Sub", voice, "sublvl", 0, 100, 0, 5, O3 + 108, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "sub")])
-dial("Noise", "Noise", voice, "noiseamt", 0, 100, 8, 5, O3 + 160, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "noise")])
+# the mixer: four levels as a square of dials, on the left of its column. No display.
+MIX_TOP_Y, MIX_COL2 = 64, O3 + 52
+dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 80, 5, O3, MIX_TOP_Y, "osc", scale=0.01)
+dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 80, 5, MIX_COL2, MIX_TOP_Y, "osc", scale=0.01)
+dial("Sub", "Sub", voice, "sublvl", 0, 100, 0, 5, O3, DIAL_Y, "osc", scale=0.01)
+dial("Noise", "Noise", voice, "noiseamt", 0, 100, 8, 5, MIX_COL2, DIAL_Y, "osc", scale=0.01)
 
 v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
@@ -916,7 +916,8 @@ LAYOUT = {
         {"rules": [228, 456, 684],
          "labels": HEADER + [["pw: pulse width", O1 + 116, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 116, DIAL_Y + 38, "hint"],
                              ["semi 7:", O2 + 116, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 116, DIAL_Y + 38, "hint"],
-                             ["sub: square, 1 oct down", O3, ROW_Y + 12, "hint"],
+                             ["mixer", O3, VIEW_Y + 12, "label"],
+                             ["sub: square,", O3 + 108, DIAL_Y + 24, "hint"], ["1 oct down", O3 + 108, DIAL_Y + 38, "hint"],
                              ["one lfo for all voices", O4, ROW_Y + 12, "hint"]]},
         {"rules": [364, 668],
          "labels": HEADER + [["grey: where the envelope opens it", F, ROW_Y + 12, "hint"],

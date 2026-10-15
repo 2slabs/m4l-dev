@@ -7,7 +7,6 @@
 //   pump    the duck curve over a beat, with a moving playhead
 //   osc1    DCO 1: its waveform (saw, pulse, both), pulse width, PWM
 //   osc2    DCO 2: its waveform (saw, pulse, triangle), interval and detune
-//   mixer   the four mixer levels as faders
 //   lfo     the LFO and where it goes
 //   filter  the low-pass response, and how far the envelope opens it
 //   env     the envelope shape (Length macro applied)
@@ -42,7 +41,6 @@ var S = {
   dub: 0, freeze: 0, level: 0, throwAt: 0,
   depth: 0, rate: 1, phase: 0, curve: 0.5,
   wave1: 2, pw: 0.7, pwm: 0, wave2: 0, semi: 0, fine: 10,
-  lvl1: 0.8, lvl2: 0.8, sub: 0, noise: 0.08,
   lforate: 0.5, vib: 0, lfofilt: 0,
   atk: 2, dec: 260, sus: 0, rel: 240, len: 0,
   cutoff: 700, reso: 0.3, envamt: 0.5, tone: 0,
@@ -142,7 +140,6 @@ function paint() {
   else if (MODE === "filter") filterView(w, h);
   else if (MODE === "osc1") oscView(w, h, 1);
   else if (MODE === "osc2") oscView(w, h, 2);
-  else if (MODE === "mixer") mixerView(w, h);
   else if (MODE === "lfo") lfoView(w, h);
   else if (MODE === "drive") driveView(w, h);
 }
@@ -374,21 +371,6 @@ function oscView(w, h, n) {
     if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
   mgraphics.stroke();
-}
-
-/** The mixer as four faders: DCO 1, DCO 2, sub, noise. */
-function mixerView(w, h) {
-  viewLabel("mixer");
-  var levels = [S.lvl1, S.lvl2, S.sub, S.noise], names = ["dco1", "dco2", "sub", "noise"];
-  var top = 20, bot = h - 16, n = 4, cw = (w - 8) / n;
-  for (var i = 0; i < n; i++) {
-    var x = 4 + i * cw + cw / 2;
-    rect(x - 1, top, 2, bot - top, T.rest);                             // the slot
-    var y = bot - (bot - top) * Math.max(0, Math.min(1, levels[i]));
-    rect(x - 1, y, 2, bot - y, T.mint);                                  // the level
-    rect(x - 7, y - 2, 14, 4, T.ink);                                    // the cap
-    text(names[i], x - measure(names[i]) / 2, h - 3, T.label);
-  }
 }
 
 /** The LFO moving, and how much goes where. */

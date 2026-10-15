@@ -8,7 +8,7 @@ Drop `2sl-stab.amxd` on a MIDI track. Keep `2sl-stab.js`, `2sl-stab-ui.js` and `
 
 ## Controls
 
-Three pages: switch with **play / osc / shape** in the header. The header also has the **preset** menu, the output level (**out**, in dB) and **stop**. Each section has a display that shows what its controls are doing.
+Three pages: switch with **play / osc / shape** in the header. The header also has the **preset** menu, the output level (**out**, in dB) and **stop**. Each section but the mixer has a display that shows what its controls are doing.
 
 **Play**: start here.
 
@@ -25,7 +25,7 @@ Three pages: switch with **play / osc / shape** in the header. The header also h
 |---|---|---|
 | dco 1 | its waveform, moving with PWM | wave buttons **saw / pulse / both**, footage **16′ / 8′ / 4′**, **PW**, **PWM** (the LFO on pulse width, the Juno shimmer) |
 | dco 2 | its waveform | wave buttons **saw / pulse / tri**, footage, **Semi** (−12 to +12; 7 stacks a fifth), **Fine** (detune in cents) |
-| mixer | the four levels as faders | **OSC 1**, **OSC 2**, **Sub** (a square an octave below DCO 1), **Noise** |
+| mixer | none: four level dials in a square | **OSC 1**, **OSC 2**, **Sub** (a square an octave below DCO 1), **Noise** |
 | lfo | the LFO moving, and where it's going | **Rate**, **Vibrato** (LFO → pitch), **Filter** (LFO → cutoff). One LFO for all voices. |
 
 **Shape**
@@ -99,7 +99,7 @@ The 2sl-ui look, inside Live.
 - **Everything drawn is 2sl** (the displays, the header chip, the rules and the labels). Text is Cozette, drawn from its bitmaps: 13 px, and 26 px for the chord name. Colours are the 2sl-ui tokens.
 - **Light and dark.** It follows Live's theme, reading `live_surface_bg` through `max.getcolor`, and redraws when `live.colors` reports a change.
 - **Live's own controls** (dials, menus, toggles, tabs) stay Live controls, so automation, mapping and Push still work. They're recoloured from the same tokens: an ink arc on an unlit track, toggles as inverted chips, focus in "now" blue.
-- **Layout.** 960 × 169 on a 4 px grid. Every section has three bands (display, chips and menus, dials) aligned across the device.
+- **Layout.** 960 × 169 on a 4 px grid. Every section has three bands (display, chips and menus, dials) aligned across the device; the mixer has dials in a square instead.
 
 ## Source
 
