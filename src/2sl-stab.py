@@ -34,6 +34,8 @@ VOICE = GEN_SMOOTHING_FUNCTION + r"""
 // One voice. in1: frequency (Hz). in2: gate = velocity 0..1, 0 = release. in3: the LFO (-1..1, shared).
 // in4: the note-on count: a new number on every note-on (the patch counts them), so a note-on always starts the
 // envelope, even when it changes no other value (a voice stolen for its own pitch at the same velocity).
+// out1: the voice's sound. out2: busy, 1 from its note-on until its envelope has finished (its release, or Stop's
+// 20 ms ramp), 0 otherwise: mc.noteallocator~ reads it to know when a released voice is free again.
 // Two oscillators, a sub and noise into a mixer, like the Juno / Jupiter / Prophet voices of the time.
 // (gen requires functions before everything else, declarations included.)
 // polyBLEP: removes the aliasing from a saw's jump
@@ -195,6 +197,7 @@ s4 = s4 + g * (s3 - s4);
 y = s4 * (1 + k * 0.4);
 
 out1 = y * env * (0.35 + 0.65 * velo_smoothed) * level;
+out2 = (stage > 0 || fadeleft > 0) ? 1 : 0;
 """
 
 # The echo's longest time: 1/2 note at Live's slowest tempo, 20 BPM (Live Object Model, Song.tempo: "20.0 ...
@@ -685,8 +688,8 @@ wire(alloc, tgt_f, 5, 1)
 wire(alloc, tgt_g, 5, 1)
 wire(alloc, tgt_note_on, 5, 1)
 
-voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=4, outs=1, outtype=["multichannelsignal"],
-            patcher=gen_patcher(VOICE, 4, 1))
+voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=4, outs=2, outtype=["multichannelsignal"] * 2,
+            patcher=gen_patcher(VOICE, 4, 2))
 # the LFO: a cosine of a phasor~'s phase (cos~: "the cosine of 2pi times the input"), so the displays can read
 # the phase itself (snapshot~ below) and draw the LFO in step with the sound
 lfo_phase = box(f"phasor~ {BASE['LFO Rate']}", rect=(220, 300, 80, 22), ins=2, outs=1, outtype=["signal"])
@@ -696,7 +699,10 @@ wire(lfo, voice, 0, 2)
 wire(tgt_f, voice, 0, 0)
 wire(tgt_g, voice, 0, 1)
 wire(tgt_note_on, voice, 0, 3)
-wire(voice, alloc)  # busy state: a voice stays allocated until its release has faded
+# Busy: mc.noteallocator~ frees a voice when it has had its note-off and "the corresponding audio signal in the
+# multichannel input goes to zero" (Cycling '74, MC Managed Polyphony). Not the sound, which crosses zero while it
+# plays: the voice's own busy state, 1 until its envelope has finished.
+wire(voice, alloc, 1, 0)
 
 mix = box("mc.mixdown~ 1 @autogain 0", rect=(30, 390, 170, 22), ins=2, outs=1, outtype=["multichannelsignal"])
 fx = box("gen~", rect=(30, 430, 120, 22), ins=2, outs=FX_OUTLETS, outtype=["signal"] * FX_OUTLETS,

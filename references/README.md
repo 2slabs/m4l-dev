@@ -81,3 +81,11 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   optional multichannel signal to prevent mc.noteallocator~ from reallocating a voice". It "allocates and outputs
   a voice number out its right outlet" before the note. The page doesn't say whether a stolen voice gets a
   note-off first: so the voice can't rely on its gate falling; each note-on sends a new count (the voice's in4).
+  The signal message: "Connect an optional multichannel signal to prevent mc.noteallocator~ from reallocating a
+  voice until its audio level goes to zero."
+- **MC Managed Polyphony** (Max user guide): https://docs.cycling74.com/userguide/mc/mc_poly_without_polytilde/
+  The busy input is the left inlet: "when a note-off for an allocated voice has been received and the corresponding
+  audio signal in the multichannel input goes to zero, mc.noteallocator~ marks that channel as available".
+  Neither page says how "goes to zero" is read (per sample or per vector, exactly 0 or under a threshold), so a
+  sound crossing zero in its release could free a voice that is still sounding. The voices send an explicit busy
+  signal instead of their sound: 1 from note-on until the envelope has finished (release or Stop's ramp), else 0.
