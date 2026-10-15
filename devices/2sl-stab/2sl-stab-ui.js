@@ -1172,16 +1172,29 @@ function show() {
 }
 
 function page(i) {
-  current = Math.max(0, Math.min(2, Math.round(i)));
+  if (!(i >= 0 && i <= 2)) error("2sl stab: page " + i + " doesn't exist (0-2): showing the nearest\n");
+  current = Math.max(0, Math.min(2, Math.round(i))) || 0;
   show();
+}
+
+/** The patch object named `name` (its scripting name). The names come from the build, which checks them
+ *  against the patch, so a missing one is a broken build: say which. */
+function named(name, purpose) {
+  var obj = this.patcher.getnamed(name);
+  if (!obj) error("2sl stab: no object named '" + name + "' in the patch (" + purpose + ")\n");
+  return obj;
 }
 
 function msg_int(i) {
   // Ignore the Preset menu while Live restores the set, so saved tweaks win.
-  if (!ready || i < 0 || i >= PRESETS.length) return;
+  if (!ready) return;
+  if (i < 0 || i >= PRESETS.length) {
+    error("2sl stab: preset " + i + " doesn't exist (0-" + (PRESETS.length - 1) + "): nothing set\n");
+    return;
+  }
   var p = PRESETS[i];
   for (var name in p) {
-    var obj = this.patcher.getnamed(name);
+    var obj = named(name, "preset " + i + " sets it");
     if (obj) obj.message(p[name]);
   }
 }
@@ -1193,7 +1206,7 @@ function msg_float(v) {
 // ---- 2sl colours on Live's controls ---------------------------------------------------------
 
 function paint(name, attrs) {
-  var obj = this.patcher.getnamed(name);
+  var obj = named(name, "recolouring");
   if (!obj) return;
   for (var a in attrs) obj.message([a].concat(attrs[a]));
 }
@@ -1227,14 +1240,14 @@ function recolor() {
     activetricolor: t.ink, focusbordercolor: t.now
   });
   for (i = 0; i < VIEWS.length; i++) {
-    var v = this.patcher.getnamed(VIEWS[i]);
+    var v = named(VIEWS[i], "redrawing for the theme");
     if (v) v.message("theme");
   }
 }
 
 function anything() {
   if (messagename === "stop") {
-    var f = this.patcher.getnamed("freeze");
+    var f = named("freeze", "Stop turns Freeze off");
     if (f) f.message(0);
     return;
   }

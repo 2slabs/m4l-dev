@@ -1118,6 +1118,15 @@ ui_js = (ui_js.replace("/*PAGES*/", json.dumps(PAGES)).replace("/*PRESETS*/", js
          .replace("/*CONTROLS*/", json.dumps(CONTROLS)).replace("/*VIEWS*/", json.dumps(VIEWS)).replace("/*THEME_FROM_LIVE*/", THEME_FROM_LIVE_JS))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-ui.js"), "w").write(ui_js)
 
+# every name the UI script looks up must name exactly one box (it errors at run time otherwise)
+BOX_VARNAMES = [x["box"]["varname"] for x in boxes if "varname" in x["box"]]
+UI_LOOKUPS = ({n for p in presets_js for n in p} | {n for k in CONTROLS for n in CONTROLS[k]} | set(VIEWS)
+              | {n for k in PAGES for n in PAGES[k]} | {"freeze"})
+if UI_LOOKUPS - set(BOX_VARNAMES):
+    raise SystemExit(f"2sl-stab.py: the UI script looks up names no box has: {sorted(UI_LOOKUPS - set(BOX_VARNAMES))}")
+if len(BOX_VARNAMES) != len(set(BOX_VARNAMES)):
+    raise SystemExit(f"2sl-stab.py: varnames used twice: {sorted({n for n in BOX_VARNAMES if BOX_VARNAMES.count(n) > 1})}")
+
 patch = {"patcher": {
     "fileversion": 1,
     "appversion": {"major": 9, "minor": 1, "revision": 5, "architecture": "x64", "modernui": 1},

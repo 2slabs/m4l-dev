@@ -171,7 +171,12 @@ function paint() {
   else if (MODE === "osc2") oscView(w, h, 2);
   else if (MODE === "lfo") lfoView(w, h);
   else if (MODE === "drive") driveView(w, h);
+  else if (!unknownModeReported) {
+    unknownModeReported = true;
+    error("2sl stab: a display was given the unknown mode '" + MODE + "' (jsarguments): it draws nothing\n");
+  }
 }
+var unknownModeReported = false;
 
 var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [228, 456, 684], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 128, 143, "hint"], ["pwm: lfo on pw", 128, 157, "hint"], ["semi 7:", 356, 143, "hint"], ["a fifth up", 356, 157, "hint"], ["mixer", 468, 40, "label"], ["sub", 576, 40, "label"], ["as on the", 576, 143, "hint"], ["sh-101", 576, 157, "hint"], ["one lfo for all voices", 696, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 

@@ -150,7 +150,12 @@ function paint() {
   else if (MODE === "osc2") oscView(w, h, 2);
   else if (MODE === "lfo") lfoView(w, h);
   else if (MODE === "drive") driveView(w, h);
+  else if (!unknownModeReported) {
+    unknownModeReported = true;
+    error("2sl stab: a display was given the unknown mode '" + MODE + "' (jsarguments): it draws nothing\n");
+  }
 }
+var unknownModeReported = false;
 
 /*LAYOUT*/
 
