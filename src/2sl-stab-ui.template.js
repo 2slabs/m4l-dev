@@ -12,7 +12,7 @@ var PAGES = /*PAGES*/;
 var PRESETS = /*PRESETS*/;
 var CONTROLS = /*CONTROLS*/;
 var VIEWS = /*VIEWS*/;
-var THEMES = /*THEMES*/;
+/*THEME_FROM_LIVE*/
 var current = 0;
 var ready = 0;
 
@@ -45,13 +45,6 @@ function msg_float(v) {
 
 // ---- 2sl colours on Live's controls ---------------------------------------------------------
 
-function tokens() {
-  var bg = null;
-  try { bg = max.getcolor("live_surface_bg"); } catch (e) { bg = null; }
-  var lum = bg && bg.length >= 3 ? 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] : 0.15;
-  return lum > 0.5 ? THEMES.light : THEMES.dark;
-}
-
 function paint(name, attrs) {
   var obj = this.patcher.getnamed(name);
   if (!obj) return;
@@ -59,7 +52,7 @@ function paint(name, attrs) {
 }
 
 function recolor() {
-  var t = tokens();
+  var t = themeFromLive("controls");
   var clear = [0, 0, 0, 0];
   var i;
   // dials: an ink arc on an unlit track, labels in the label colour, focus in "now" blue

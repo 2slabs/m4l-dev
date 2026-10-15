@@ -24,14 +24,9 @@ var MODE = jsarguments.length > 1 ? String(jsarguments[1]) : "steps";
 /*COZETTE*/
 
 // ---- 2sl-ui tokens -----------------------------------------------------------------------------
-var THEMES = /*THEMES*/;
+/*THEME_FROM_LIVE*/
 var T = THEMES.dark;
-function pickTheme() {
-  var bg = null;
-  try { bg = max.getcolor("live_surface_bg"); } catch (e) { bg = null; }
-  var lum = bg && bg.length >= 3 ? 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] : 0.15;
-  T = lum > 0.5 ? THEMES.light : THEMES.dark;
-}
+function pickTheme() { T = themeFromLive("the " + MODE + " display"); }
 pickTheme();
 
 var S = {

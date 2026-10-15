@@ -98,7 +98,7 @@ Picking a preset sets every control, and you can tweak from there. When Live reo
 
 The 2sl-ui look, inside Live.
 - **Everything drawn is 2sl** (the displays, the header chip, the rules and the labels). Text is Cozette, drawn from its bitmaps: 13 px, and 26 px for the chord name. Colours are the 2sl-ui tokens.
-- **Light and dark.** It follows Live's theme, reading `live_surface_bg` through `max.getcolor`, and redraws when `live.colors` reports a change.
+- **Light and dark.** It follows Live's theme, reading `live_surface_bg` through `max.getcolor`, and redraws when `live.colors` reports a change. If Max can't give that colour, it draws dark and says so in the Max window.
 - **Live's own controls** (dials, menus, toggles, tabs) stay Live controls, so automation, mapping and Push still work. They're recoloured from the same tokens: an ink arc on an unlit track, toggles as inverted chips, focus in "now" blue.
 - **Layout.** 960 × 169 on a 4 px grid. Every section has three bands (display, chips and menus, dials) aligned across the device; the mixer has dials in a square instead.
 

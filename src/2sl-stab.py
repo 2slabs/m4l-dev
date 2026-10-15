@@ -1086,14 +1086,36 @@ THEMES = {
               "rest": [0.7, 0.71, 0.73, 1], "beat": [0.62, 0.63, 0.65, 1], "key": [0.97, 0.97, 0.97, 1],
               "keyBlack": [0.12, 0.12, 0.13, 1]},
 }
+# Light or dark, from Live's theme: shared by the displays and the UI script (both are generated with it).
+THEME_FROM_LIVE_JS = """
+var THEMES = %s;
+var liveColourMissingReported = false;
+/** The 2sl tokens for Live's theme: light when Live's surface colour (live_surface_bg) is light. If Max can't
+ *  give that colour, dark, and the Max window says which colour was missing (once, until it is back). */
+function themeFromLive(who) {
+  var surface = null, failure = "";
+  try { surface = max.getcolor("live_surface_bg"); } catch (e) { failure = String(e); }
+  var usable = surface && surface.length >= 3 && isFinite(surface[0]) && isFinite(surface[1]) && isFinite(surface[2]);
+  if (!usable) {
+    if (!liveColourMissingReported) {
+      liveColourMissingReported = true;
+      error("2sl stab (" + who + "): Live colour live_surface_bg is missing (max.getcolor gave " +
+            (failure || JSON.stringify(surface)) + "): drawing in the dark theme\\n");
+    }
+    return THEMES.dark;
+  }
+  liveColourMissingReported = false;
+  var luminance = 0.2126 * surface[0] + 0.7152 * surface[1] + 0.0722 * surface[2];
+  return luminance > 0.5 ? THEMES.light : THEMES.dark;
+}""".strip() % json.dumps(THEMES)
 view_js = open(os.path.join(HERE, "2sl-stab-view.template.js")).read()
 glyphs = open(os.path.join(HERE, "cozette-glyphs.js")).read()
-view_js = (view_js.replace("/*COZETTE*/", glyphs.strip()).replace("/*THEMES*/", json.dumps(THEMES))
+view_js = (view_js.replace("/*COZETTE*/", glyphs.strip()).replace("/*THEME_FROM_LIVE*/", THEME_FROM_LIVE_JS)
            .replace("/*LAYOUT*/", "var LAYOUT = " + json.dumps(LAYOUT) + ";"))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-view.js"), "w").write(view_js)
 ui_js = open(os.path.join(HERE, "2sl-stab-ui.template.js")).read()
 ui_js = (ui_js.replace("/*PAGES*/", json.dumps(PAGES)).replace("/*PRESETS*/", json.dumps(presets_js, indent=1))
-         .replace("/*CONTROLS*/", json.dumps(CONTROLS)).replace("/*VIEWS*/", json.dumps(VIEWS)).replace("/*THEMES*/", json.dumps(THEMES)))
+         .replace("/*CONTROLS*/", json.dumps(CONTROLS)).replace("/*VIEWS*/", json.dumps(VIEWS)).replace("/*THEME_FROM_LIVE*/", THEME_FROM_LIVE_JS))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-ui.js"), "w").write(ui_js)
 
 patch = {"patcher": {
