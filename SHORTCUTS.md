@@ -4,8 +4,8 @@ Things done the quick way, to come back to. Each with when it was taken.
 
 - 2026-10-15: `src/2sl_kit.py` and the kit JS templates are copied from `src/2sl-stab.py` and stab's
   templates, so the helpers exist twice. The user allowed this to stay past 24 h while someone else
-  works on stab. Stab 2.0.0 landed on main 2026-10-15, so this is now due: rebuild stab on the kit and
-  delete its copies.
+  works on stab. Stab 2.0.0 landed on main 2026-10-15; the user still wants to wait until the stab work is
+  done (2026-10-15), then rebuild stab on the kit (ask the refactor level) and delete its copies.
 - 2026-10-15: the kit (`src/2sl_kit.py`, `src/2sl-kit-*.template.js`) is taken from 2sl stab as it is on
   `origin/fix/stab-step-storage` (Info View text, loud failures, 16-bit stored steps, BASE checks), which is newer
   than the stab in this worktree. When stab is folded onto the kit, start from that branch.
