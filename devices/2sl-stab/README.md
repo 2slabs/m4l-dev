@@ -8,7 +8,7 @@ Drop `2sl-stab.amxd` on a MIDI track. Keep `2sl-stab.js`, `2sl-stab-ui.js` and `
 
 ## Controls
 
-Three pages: switch with **play / osc / shape** in the header. The header also has the **preset** menu, the output level (**out**, in dB) and **stop**. Each section but the mixer has a display that shows what its controls are doing.
+Three pages: switch with **play / osc / shape** in the header (the device opens on **play**; the page isn't saved, undone or automated). The header also has the output level (**out**, in dB) and **stop**. Each section but the mixer has a display that shows what its controls are doing.
 
 **Play**: start here.
 
@@ -45,7 +45,9 @@ The machine's steps are saved with the set, so an edited pattern comes back when
 
 ### Presets
 
-Picking a preset sets every control, and you can tweak from there. When Live reopens a set, your saved tweaks win. Volumes are matched, so switching presets doesn't jump in level. Each one was rendered through the DSP and its **out** level set from the measured peak and average.
+Presets are Live's own device presets: browse, hot-swap and load them from Live's browser (or Push), like any device's. Save your own with the **Save Preset** button in the device's title bar; Live puts it in the User Library. A preset holds every control, the machine's edited steps included, but not the page.
+
+The sounds below are kept in `src/2sl-stab-presets.json`. Volumes are matched, so switching presets doesn't jump in level. Each one was rendered through the DSP and its **out** level set from the measured peak and average.
 
 | | preset | idea |
 |---|---|---|
@@ -106,8 +108,9 @@ The 2sl-ui look, inside Live.
 ## Source
 
 The patch is generated. Edit these, then run `python3 src/2sl-stab.py`:
-- `src/2sl-stab.py`: the gen~ voice and echo code, the layout, the presets and the theme tokens.
-- `src/2sl-stab-ui.template.js`: pages, presets and recolouring.
+- `src/2sl-stab.py`: the gen~ voice and echo code, the layout and the theme tokens.
+- `src/2sl-stab-presets.json`: every control's Init value (a fresh device) and the presets, in each control's own units (a dial's number, a menu's item). The build checks them against the controls and fails on an unknown control, a missing Init value or a value out of range.
+- `src/2sl-stab-ui.template.js`: pages and recolouring.
 - `src/2sl-stab-view.template.js`: the displays.
 
 It writes `src/2sl-stab.maxpat`, this `.amxd`, `2sl-stab-ui.js` and `2sl-stab-view.js`. `src/cozette-glyphs.js` comes from `tools/bdf2js.py` and `cozette.bdf` (Cozette v1.30.0).

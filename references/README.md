@@ -65,8 +65,20 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
 - **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
-  this value to any connected objects." The build sets every control's initial value from BASE (the
-  Init preset), and also starts the gen~ Params and the displays there.
+  this value to any connected objects." The build sets every control's initial value from the Init
+  values (`src/2sl-stab-presets.json`), and also starts the gen~ Params and the displays there.
+- **Parameter Visibility** (Max user guide, Parameter Mode; and the live.tab / live.dial references:
+  https://docs.cycling74.com/reference/live.tab): "Stored Only: Use for parameters that are part of the device's
+  persistent state but should not be automated or exposed to control surfaces." "Hidden: ... Not stored in the Live
+  Set or presets, not visible to control surfaces, and not recorded in Live's undo history." live.tab: "'Hidden'
+  causes the parameter's value to be ignored when storing and recalling data." The Max for Live Production
+  Guidelines (https://github.com/Ableton/maxdevtools, m4l-production-guidelines.md, "Undo History") recommend Hidden
+  for a control driven from inside the patch and for a live.text in Button mode. The page switch is Hidden (no undo,
+  no automation, not in presets: it was a stored parameter, so undo, automation and presets could turn the page).
+  The machine's Steps / Accents are Stored Only. The attribute is `parameter_invisible`; no page gives its numbers.
+  1 = Stored Only is confirmed by a real preset (the example below has Steps / Accents in its blob, not in its
+  automatable parameter list). 2 = Hidden is the inspector's order (Automated and Stored, Stored Only, Hidden),
+  not yet seen in a saved file: a preset saved from this build should have no "Page" anywhere.
 - **cos~** (Max reference): https://docs.cycling74.com/reference/cos~
   "Signal cosine function (0-1 range)"; output: "The cosine of 2π times the input". The LFO is
   [phasor~] -> [cos~], the same cosine as the [cycle~] it replaces ("The default waveform is one cycle of a

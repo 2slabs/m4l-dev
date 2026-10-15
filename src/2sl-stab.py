@@ -508,9 +508,7 @@ INFO = {
                    "the same scale. More Drive bends it into a steeper middle and flatter ends, and turns the output "
                    "down to keep the level about even."),
     # header
-    "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working."),
-    "Preset": ("Preset", "Sets every control (and the machine's pattern) to a preset; tweak from there. "
-               "When Live reopens a set, your saved tweaks win."),
+    "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working. The device opens on play."),
     "Volume": ("Volume", "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs. "
                "Presets set it to match their loudness."),
     "Stop": ("Stop", "Panic: releases every note, clears a latched chord, ramps the voices to silence in 20 ms, "
@@ -590,37 +588,65 @@ INFO = {
 INFO_USED = set()
 
 
-# ---- BASE: the Init preset, and every control's initial value -----------------------------
-# A fresh device and the Init preset are the same sound: each control's initial value is read from here,
-# and so are the gen~ Param defaults and the displays' starting values (checked or written at build time).
-BASE = {"Chord": 1, "In Key": 0, "Tone": 0, "Length": 0, "Drift": 0, "Machine": 0, "Latch": 0, "Pattern": 0,
-        "Density": 80, "Throws": 0, "Gate": 1, "Shift": 0, "Dub": 0, "Freeze": 0, "Echo Time": 2,
-        "Pump": 0, "Pump Rate": 0, "Pump Attack": 6, "Pump Release": 55, "Pump Curve": 50,
-        "DCO1 Wave": 2, "DCO1 Octave": 1, "PW": 70, "PWM": 0, "DCO2 Wave": 0, "DCO2 Octave": 1, "Semi": 0, "Fine": 10,
-        "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Sub Mode": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
-        "Cutoff": 700, "Resonance": 30, "Env Amount": 50, "Key Track": 50, "Velocity Filter": 50,
-        "Attack": 2, "Decay": 260, "Sustain": 0, "Release": 240, "Drive": 25, "Volume": 0}
-# Pattern: 0 dub dotted, 1 one & three+, 2 offbeat chops, 3 skank, 4 deep stab, 5 3-3-2
-# Echo Time: 0 1/16, 1 1/8, 2 1/8d, 3 1/4, 4 1/4d, 5 1/2.  Chord: 0 poly, 1 minor, 2 m7, 3 m9, 4 m11, 5 sus4, 6 fifths, 7 dark
-# DCO1 Wave: 0 saw, 1 pulse, 2 both.  DCO2 Wave: 0 saw, 1 pulse, 2 tri.  Octave: 0 16', 1 8', 2 4'.  Pump Rate: 0 1/4, 1 1/8, 2 1/16
-# Volume is set afterwards from measured loudness (see LOUDNESS below).
+# ---- the Init values and the presets: src/2sl-stab-presets.json -----------------------------
+# "init": every saved control's initial value. A fresh device is the Init sound: each control's initial value is
+# read from here, and so are the gen~ Param defaults and the displays' starting values (checked or written at
+# build time). "presets": the sounds, each the Init values with some changed; the build writes each as a Live
+# preset (see LIVE PRESETS below). Values are in each control's own units: a dial's number, a menu's or tab's item
+# name, a toggle's "off" / "on". The build fails on an unknown control, a control without an Init value, or a
+# value out of its control's range.
+PRESET_DATA_PATH = os.path.join(HERE, "2sl-stab-presets.json")
+PRESET_DATA_NAME = os.path.relpath(PRESET_DATA_PATH, ROOT)   # for the build's messages
+with open(PRESET_DATA_PATH) as preset_data_file:
+    PRESET_DATA = json.load(preset_data_file)
+if set(PRESET_DATA) != {"init", "presets"}:
+    raise SystemExit(f"2sl-stab.py: {PRESET_DATA_NAME} must hold exactly 'init' and 'presets', not {sorted(PRESET_DATA)}")
+INIT_IN_OWN_UNITS = PRESET_DATA["init"]
+SAVED_CONTROLS = {}   # control (parameter long name) -> {"varname", "items" (None for a number), "minimum", "maximum"}
+INIT_VALUE = {}       # control -> its initial value as the control holds it (a number; a menu, tab or toggle's index)
 
 
-def initial(name, initial_outside_presets=None):
-    """A control's initial value: BASE's. Only controls presets don't set (Preset, Page) give their own."""
-    if name in BASE:
-        if initial_outside_presets is not None:
-            raise SystemExit(f"2sl-stab.py: {name!r} is in BASE, so its initial value comes from there")
-        return BASE[name]
-    if initial_outside_presets is None:
-        raise SystemExit(f"2sl-stab.py: {name!r} has no BASE value (the Init preset): add it to BASE")
-    return initial_outside_presets
+def value_as_held(control_name, value_in_own_units, where):
+    """`value_in_own_units` as control `control_name` holds it (an item name becomes its index), or fail the build."""
+    spec = SAVED_CONTROLS[control_name]
+    if spec["items"] is not None:
+        if value_in_own_units not in spec["items"]:
+            raise SystemExit(f"2sl-stab.py: {where}: {control_name} is {value_in_own_units!r}, not one of {spec['items']}")
+        return spec["items"].index(value_in_own_units)
+    if isinstance(value_in_own_units, bool) or not isinstance(value_in_own_units, (int, float)):
+        raise SystemExit(f"2sl-stab.py: {where}: {control_name} is {value_in_own_units!r}, not a number")
+    if not spec["minimum"] <= value_in_own_units <= spec["maximum"]:
+        raise SystemExit(f"2sl-stab.py: {where}: {control_name} is {value_in_own_units}, outside "
+                         f"{spec['minimum']:g} to {spec['maximum']:g}")
+    return value_in_own_units
+
+
+def saved_control(name, varname, items=None, minimum=None, maximum=None):
+    """Registers a control Live saves with the set and in presets; returns its initial value (from the Init values)."""
+    if name in SAVED_CONTROLS:
+        raise SystemExit(f"2sl-stab.py: two saved controls are called {name!r}")
+    if items is not None:
+        minimum, maximum = 0, len(items) - 1
+    SAVED_CONTROLS[name] = {"varname": varname, "items": items, "minimum": minimum, "maximum": maximum}
+    if name not in INIT_IN_OWN_UNITS:
+        raise SystemExit(f"2sl-stab.py: {name!r} has no Init value: add it to 'init' in {PRESET_DATA_NAME}")
+    INIT_VALUE[name] = value_as_held(name, INIT_IN_OWN_UNITS[name], "init")
+    return INIT_VALUE[name]
 
 
 CONTROL_BY_BOX = {}       # box id -> (control name, how its value is transformed on the way: v -> v)
 VIEW_MODE_BY_BOX = {}     # jsui box id -> its view mode
-VIEW_DEFAULTS = {}        # view mode -> {message: the value it gets for BASE}
-GEN_PARAM_FROM_BASE = []  # (gen box id, Param name, the value BASE sends it, control name)
+VIEW_DEFAULTS = {}        # view mode -> {message: the value it gets from the Init values}
+GEN_PARAM_FROM_INIT = []  # (gen box id, Param name, the value the Init values send it, control name)
+
+# Parameter Visibility (the parameter_invisible attribute; Cycling '74, Parameter Mode / live.* references):
+# "Stored Only" is stored with the set and in presets but not automatable; "Hidden" is "Not stored in the Live Set
+# or presets, not visible to control surfaces, and not recorded in Live's undo history". The docs give no numbers:
+# 1 is Stored Only (a Live preset of this device has the Steps / Accents values in its blob and not among the
+# automatable parameters: references/ableton/example-2sl-stab-preset.xml); 2 for Hidden is the inspector's order,
+# not yet seen in a saved file (see references/README.md).
+PARAMETER_VISIBILITY_STORED_ONLY = 1
+PARAMETER_VISIBILITY_HIDDEN = 2
 
 
 def param(cls, name, short, rect, kind, prect, **v):
@@ -641,7 +667,7 @@ def param(cls, name, short, rect, kind, prect, **v):
     if cls == "live.text":
         extra = {"text": short.lower(), "texton": short.lower(), "mode": v.pop("_mode", 1)}
         vals = {k: x for k, x in vals.items() if k != "_mode"}
-        vals.update(parameter_enum=["off", "on"], parameter_mmax=1)
+        vals.update(parameter_enum=TOGGLE_ITEMS, parameter_mmax=1)
     b_id = box(cls=cls, rect=rect, ins=1, outs=outs[0], outtype=outs[1], varname=name.lower().replace(" ", "_"),
                parameter_enable=1, presentation=1, presentation_rect=[float(x) for x in prect],
                saved_attribute_attributes={"valueof": vals}, **annotation, **extra)
@@ -692,7 +718,7 @@ voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=4, outs=2, outtype
             patcher=gen_patcher(VOICE, 4, 2))
 # the LFO: a cosine of a phasor~'s phase (cos~: "the cosine of 2pi times the input"), so the displays can read
 # the phase itself (snapshot~ below) and draw the LFO in step with the sound
-lfo_phase = box(f"phasor~ {BASE['LFO Rate']}", rect=(220, 300, 80, 22), ins=2, outs=1, outtype=["signal"])
+lfo_phase = box(f"phasor~ {INIT_IN_OWN_UNITS['LFO Rate']}", rect=(220, 300, 80, 22), ins=2, outs=1, outtype=["signal"])
 lfo = box("cos~", rect=(220, 325, 40, 22), ins=1, outs=1, outtype=["signal"])
 wire(lfo_phase, lfo)
 wire(lfo, voice, 0, 2)
@@ -797,7 +823,6 @@ DW, DH = 44, 48
 VIEW_Y, VIEW_H, ROW_Y, DIAL_Y = 28, 64, 98, 119
 PAGE_NAMES = ["play", "osc", "shape"]
 PAGES = {n: [] for n in PAGE_NAMES}
-VALUES = {}                                   # parameter long name -> varname (for presets)
 CONTROLS = {"dial": [], "text": [], "menu": [], "tab": [], "numbox": []}
 VIEWS = []
 
@@ -844,12 +869,12 @@ def derived(b_id, control_name, transform):
 def tell(src, msg, dst, inlet=0, scale=None):
     if src in CONTROL_BY_BOX and msg is not None:
         control_name, transform = CONTROL_BY_BOX[src]
-        if control_name in BASE:
-            sent = transform(BASE[control_name]) * (scale if scale is not None else 1)
+        if control_name in INIT_VALUE:
+            sent = transform(INIT_VALUE[control_name]) * (scale if scale is not None else 1)
             if dst in VIEW_MODE_BY_BOX:
                 VIEW_DEFAULTS.setdefault(VIEW_MODE_BY_BOX[dst], {})[msg] = sent
             elif dst in (voice, fx):
-                GEN_PARAM_FROM_BASE.append((dst, msg, sent, control_name))
+                GEN_PARAM_FROM_INIT.append((dst, msg, sent, control_name))
     chain = src
     if scale is not None:
         sc = box(f"* {scale}", rect=(1300, 900 + 2 * len(boxes), 50, 22), ins=2, outtype=["float"])
@@ -864,12 +889,12 @@ def tell(src, msg, dst, inlet=0, scale=None):
 
 
 def dial(name, short, target, msg, mmin, mmax, unit, x, y, page, exp=1.0, scale=1.0, inlet=0, views=()):
+    vn = name.lower().replace(" ", "_")
+    initial_value = saved_control(name, vn, minimum=mmin, maximum=mmax)
     pid = param("live.dial", name, short, (1500 + x, 700 + y, DW, DH), 0, (x, y, DW, DH),
                 parameter_mmin=float(mmin), parameter_mmax=float(mmax), parameter_initial_enable=1,
-                parameter_initial=[float(initial(name))], parameter_unitstyle=unit, parameter_exponent=float(exp))
-    vn = name.lower().replace(" ", "_")
+                parameter_initial=[float(initial_value)], parameter_unitstyle=unit, parameter_exponent=float(exp))
     on_page(page, pid, vn)
-    VALUES[name] = vn
     CONTROLS["dial"].append(vn)
     if target is not None:
         tell(pid, msg, target, inlet, scale if scale != 1.0 else None)
@@ -878,12 +903,11 @@ def dial(name, short, target, msg, mmin, mmax, unit, x, y, page, exp=1.0, scale=
     return pid
 
 
-def menu(name, short, items, x, y, w, page, initial_outside_presets=None):
+def menu(name, short, items, x, y, w, page):
+    vn = name.lower().replace(" ", "_")
     pid = param("live.menu", name, short, (1500 + x, 640 + y, w, 15), 2, (x, y, w, 15),
                 parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1,
-                parameter_initial=[initial(name, initial_outside_presets)])
-    vn = name.lower().replace(" ", "_")
-    VALUES[name] = vn
+                parameter_initial=[saved_control(name, vn, items=items)])
     CONTROLS["menu"].append(vn)
     return on_page(page, pid, vn)
 
@@ -891,22 +915,24 @@ def menu(name, short, items, x, y, w, page, initial_outside_presets=None):
 def tabs(name, short, items, x, y, w, page, h=15, lines=1):
     """Selector buttons (a live.tab), like the waveform and footage switches on a Jupiter or Juno.
     lines = len(items) stacks them vertically, like a slide switch."""
+    vn = name.lower().replace(" ", "_")
     pid = param("live.tab", name, short, (1500 + x, 600 + y, w, h), 2, (x, y, w, h),
                 parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1,
-                parameter_initial=[initial(name)])
-    vn = name.lower().replace(" ", "_")
+                parameter_initial=[saved_control(name, vn, items=items)])
     find(pid).update(num_lines_patching=lines, num_lines_presentation=lines)
-    VALUES[name] = vn
     CONTROLS["tab"].append(vn)
     return on_page(page, pid, vn)
 
 
+TOGGLE_ITEMS = ["off", "on"]      # a live.text's parameter_enum (param() sets it)
+
+
 def toggle(name, short, x, y, w, h, page, mode=1):
-    kw = {"parameter_initial_enable": 1, "parameter_initial": [initial(name)]} if mode == 1 else {}
-    pid = param("live.text", name, short, (1500 + x, 660 + y, w, h), 2, (x, y, w, h), _mode=mode, **kw)
+    """A live.text: a toggle (mode 1, saved, with an Init value) or a button (mode 0)."""
     vn = name.lower().replace(" ", "_")
-    if mode == 1:
-        VALUES[name] = vn
+    kw = ({"parameter_initial_enable": 1, "parameter_initial": [saved_control(name, vn, items=TOGGLE_ITEMS)]}
+          if mode == 1 else {})
+    pid = param("live.text", name, short, (1500 + x, 660 + y, w, h), 2, (x, y, w, h), _mode=mode, **kw)
     CONTROLS["text"].append(vn)
     return on_page(page, pid, vn)
 
@@ -918,7 +944,7 @@ def stored(name, init):
     bit mask down to its first 8 steps. Cycling '74's param reference gives this pattern for bigger integers."""
     pid = param("live.numbox", name, name, (1500, 1400 + (30 * len(boxes)) % 300, 60, 15), 0, (0, 0, 60, 15),
                 parameter_mmin=0.0, parameter_mmax=65535.0, parameter_initial_enable=1, parameter_initial=[float(init)],
-                parameter_unitstyle=0, parameter_invisible=1)
+                parameter_unitstyle=0, parameter_invisible=PARAMETER_VISIBILITY_STORED_ONLY)
     b = find(pid)
     b["presentation"] = 0
     del b["presentation_rect"]
@@ -945,18 +971,19 @@ wire(thememsg, ui)
 # ---- header (all pages) ----
 # the 2sl wordmark chip, a link back to 2sl.to (hover shows it, click opens it)
 link = view("link", 12, 3, 56, 15, None, info="Link view")
+# The page switch is Hidden (Parameter Visibility): not saved with the set or in presets, not in Live's undo history,
+# not automatable, so only a click turns the page. The device always opens on the play page (its initial value).
 page_tabs = param("live.tab", "Page", "Page", (1500, 560, 144, 15), 2, (80.0, 3.0, 144.0, 15.0),
-                  parameter_enum=PAGE_NAMES, parameter_mmax=2, parameter_initial_enable=1, parameter_initial=[0])
+                  parameter_enum=PAGE_NAMES, parameter_mmax=2, parameter_initial_enable=1, parameter_initial=[0],
+                  parameter_invisible=PARAMETER_VISIBILITY_HIDDEN)
 find(page_tabs).update(num_lines_patching=1, num_lines_presentation=1, varname="page")
 CONTROLS["tab"].append("page")
 tell(page_tabs, "page", ui)
-preset = menu("Preset", "Preset", ["-"], 284, 3, 200, None, initial_outside_presets=0)  # items set with the presets below
-wire(preset, ui)
 vol = param("live.numbox", "Volume", "Volume", (1500, 520, 64, 15), 0, (824.0, 3.0, 64.0, 15.0),
-            parameter_mmin=-36.0, parameter_mmax=12.0, parameter_initial_enable=1, parameter_initial=[float(initial("Volume"))],
+            parameter_mmin=-36.0, parameter_mmax=12.0, parameter_initial_enable=1,
+            parameter_initial=[float(saved_control("Volume", "volume", minimum=-36.0, maximum=12.0))],
             parameter_unitstyle=4)
 find(vol).update(varname="volume")
-VALUES["Volume"] = "volume"
 CONTROLS["numbox"].append("volume")
 tell(vol, "volume", fx)
 stop_btn = param("live.text", "Stop", "Stop", (1500, 540, 48, 15), 2, (900.0, 3.0, 48.0, 15.0), _mode=0)
@@ -1000,15 +1027,47 @@ mach = toggle("Machine", "Machine", C2, ROW_Y, 72, 15, "play")
 tell(mach, "machine", memory, 1)
 lat = toggle("Latch", "Latch", C2 + 76, ROW_Y, 56, 15, "play")
 tell(lat, "latch", memory, 1)
-pat = menu("Pattern", "Pattern", ["dub dotted", "one & three+", "offbeat chops", "skank", "deep stab", "3-3-2"], C2 + 136, ROW_Y, 144, "play")
+BRAIN_PATH = os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab.js")
+
+
+def brain_patterns():
+    """The machine's patterns as the brain defines them (its PATTERNS, one `"X..x...", // name` line each):
+    [(name, steps)], steps 16 of 0 rest, 1 hit, 2 accent. The Pattern menu and the presets' stored steps use them."""
+    with open(BRAIN_PATH) as brain_file:
+        found = re.search(r"var PATTERNS = \[\n(.*?)\n\];", brain_file.read(), re.S)
+    if not found:
+        raise SystemExit(f"2sl-stab.py: no `var PATTERNS = [ ... ];` block in {BRAIN_PATH}")
+    patterns = []
+    for line in found.group(1).split("\n"):
+        pattern_line = re.fullmatch(r'\s*"([Xx.]{16})",?\s*//\s*(\S.*?)(?:\s*\(.*\))?\s*', line)
+        if not pattern_line:
+            raise SystemExit(f"2sl-stab.py: can't read this PATTERNS line in {BRAIN_PATH}: {line!r}")
+        patterns.append((pattern_line.group(2), [{"X": 2, "x": 1, ".": 0}[c] for c in pattern_line.group(1)]))
+    return patterns
+
+
+MACHINE_PATTERNS = brain_patterns()
+pat = menu("Pattern", "Pattern", [name for name, _ in MACHINE_PATTERNS], C2 + 136, ROW_Y, 144, "play")
 tell(pat, "pattern", memory, 1)
 dial("Density", "Density", memory, "density", 0, 100, 5, C2, DIAL_Y, "play", scale=0.01, inlet=1)
 dial("Throws", "Throws", memory, "throws", 0, 100, 5, C2 + 56, DIAL_Y, "play", scale=0.01, inlet=1)
 dial("Gate", "Gate", memory, "length", 1, 4, 0, C2 + 112, DIAL_Y, "play", inlet=1)
 dial("Shift", "Shift", memory, "shift", 0, 15, 0, C2 + 168, DIAL_Y, "play", inlet=1)
 
-sbits = stored("Steps", 73)      # dub dotted: hits on 1, 4, 7
-abits = stored("Accents", 1)
+
+
+def pattern_bits(steps):
+    """A pattern as the brain stores it (its store()): bit i of the hits for a hit or accent on step i, of the
+    accents for an accent."""
+    hit_bits = sum(1 << i for i, step in enumerate(steps) if step >= 1)
+    accent_bits = sum(1 << i for i, step in enumerate(steps) if step == 2)
+    return hit_bits, accent_bits
+
+
+# the machine's steps as saved with the set (Stored Only): they start as the Init pattern
+init_hit_bits, init_accent_bits = pattern_bits(MACHINE_PATTERNS[INIT_VALUE["Pattern"]][1])
+sbits = stored("Steps", init_hit_bits)
+abits = stored("Accents", init_accent_bits)
 tell(sbits, "stepbits", memory, 1)
 tell(abits, "accbits", memory, 1)
 bitroute = box("route stepbits accbits", rect=(1100, 120, 140, 22), ins=1, outs=3)
@@ -1153,13 +1212,13 @@ width = W
 
 # Play-page macros also drive the shape-page displays
 for name, v, m in [("Tone", v_filter, "tone"), ("Length", v_env, "len")]:
-    src = next(x["box"]["id"] for x in boxes if x["box"].get("varname") == VALUES[name])
+    src = next(x["box"]["id"] for x in boxes if x["box"].get("varname") == SAVED_CONTROLS[name]["varname"])
     tell(src, m, v, 0, 0.01)
 # the page tab also tells the chrome which rules and labels to draw
 tell(page_tabs, "page", chrome)
 
 # what the chrome draws per page: rules between sections, labels and hints (text, x, baseline, kind)
-HEADER = [["preset", 240, 15, "label"], ["out", 800, 15, "label"]]
+HEADER = [["out", 800, 15, "label"]]
 LAYOUT = {
     "subtitle": 500,
     "version": VERSION,
@@ -1179,134 +1238,45 @@ LAYOUT = {
     ],
 }
 
-# ---- presets: values in each control's own units (BASE, the Init sound, is defined above the controls) --
-PRESETS = [
-    ("init", {}),
+# ---- presets: src/2sl-stab-presets.json, checked against the controls --------------------------
+unknown_init_controls = set(INIT_IN_OWN_UNITS) - set(SAVED_CONTROLS)
+if unknown_init_controls:
+    raise SystemExit(f"2sl-stab.py: 'init' in {PRESET_DATA_NAME} names no saved control: {sorted(unknown_init_controls)}")
+PRESET_FIELDS = {"name", "group", "idea", "values"}
+PRESETS = []              # (name, group, idea, {control: value as the control holds it}), every control set
+for preset_number, preset in enumerate(PRESET_DATA["presets"]):
+    where = f"{PRESET_DATA_NAME}, preset {preset_number + 1} ({preset.get('name')!r})"
+    if set(preset) != PRESET_FIELDS:
+        raise SystemExit(f"2sl-stab.py: {where} must have exactly {sorted(PRESET_FIELDS)}, not {sorted(preset)}")
+    if not all(isinstance(preset[field], str) and preset[field] for field in ("name", "group", "idea")):
+        raise SystemExit(f"2sl-stab.py: {where}: name, group and idea must be non-empty text")
+    unknown_controls = set(preset["values"]) - set(SAVED_CONTROLS)
+    if unknown_controls:
+        raise SystemExit(f"2sl-stab.py: {where} sets controls the device doesn't have: {sorted(unknown_controls)}")
+    values_as_held = dict(INIT_VALUE)
+    for control_name, value in preset["values"].items():
+        values_as_held[control_name] = value_as_held(control_name, value, where)
+    PRESETS.append((preset["name"], preset["group"], preset["idea"], values_as_held))
+preset_names = [name for name, _, _, _ in PRESETS]
+if len(set(preset_names)) != len(preset_names):
+    raise SystemExit(f"2sl-stab.py: preset names used twice in {PRESET_DATA_NAME}: "
+                     f"{sorted({n for n in preset_names if preset_names.count(n) > 1})}")
 
-    # ---- dub ----
-    # Basic Channel-style: saw + pulse with a detuned saw, noise chuff, dark filter opened by a short envelope
-    ("chain stab", {"DCO1 Wave": 2, "Fine": 12, "Noise": 10, "Cutoff": 650, "Resonance": 35, "Env Amount": 55,
-                    "Decay": 220, "Release": 300, "Drift": 15, "Dub": 45, "Pump": 25, "Pump Attack": 8,
-                    "Pump Release": 60, "Drive": 30, "Volume": 0.0}),
-    # Maurizio-style: punchier m7, brighter attack, a little sub under it, wetter echo
-    ("m-stab", {"Chord": 2, "DCO1 Wave": 2, "Fine": 9, "Sub": 20, "Noise": 12, "Cutoff": 900, "Resonance": 30,
-                "Env Amount": 65, "Decay": 160, "Release": 220, "Dub": 50, "Pump": 30, "Pump Attack": 6,
-                "Pump Curve": 60, "Drive": 35, "Volume": -1.5}),
-    # Deepchord / Echospace-style haze: soft pulses shimmering with PWM, slow attack, long tail, slow filter drift
-    ("deep haze", {"Chord": 3, "DCO1 Wave": 1, "PW": 60, "PWM": 45, "DCO2 Wave": 0, "Fine": 20, "OSC 2": 60,
-                   "Noise": 18, "LFO Rate": 0.25, "LFO Filter": 15, "Key Track": 40, "Cutoff": 420, "Resonance": 20,
-                   "Env Amount": 30, "Velocity Filter": 40, "Attack": 25, "Decay": 900, "Sustain": 30,
-                   "Release": 1400, "Drift": 30, "Dub": 70, "Echo Time": 4, "Pump": 30, "Pump Attack": 12,
-                   "Pump Release": 70, "Pump Curve": 30, "Drive": 35, "Volume": -6.0}),
-    # Echospace-style fog: darker still, triangle body an octave down, noisy, dissolving into the echo
-    ("fog", {"Chord": 3, "Tone": -20, "DCO1 Wave": 0, "DCO2 Wave": 2, "DCO2 Octave": 0, "Fine": 22, "OSC 2": 70,
-             "Noise": 25, "LFO Rate": 0.12, "LFO Filter": 25, "Cutoff": 350, "Resonance": 20, "Env Amount": 20,
-             "Attack": 60, "Decay": 1200, "Sustain": 40, "Release": 2000, "Drift": 40, "Dub": 80, "Echo Time": 4,
-             "Pump": 20, "Pump Attack": 15, "Pump Release": 75, "Pump Curve": 25, "Drive": 40, "Volume": -4.0}),
-    # Chain Reaction-style wash: an m7 swelling into a long echo, the filter breathing with the LFO
-    ("wash", {"Chord": 2, "DCO1 Wave": 2, "Fine": 15, "Noise": 15, "LFO Rate": 0.3, "LFO Filter": 30,
-              "Cutoff": 500, "Resonance": 40, "Env Amount": 45, "Attack": 15, "Decay": 700, "Sustain": 20,
-              "Release": 900, "Drift": 20, "Dub": 65, "Pump": 35, "Pump Attack": 10, "Pump Release": 65,
-              "Pump Curve": 40, "Volume": -5.0}),
-    # Rhythm & Sound-style skank: pulse-heavy offbeat chops from the latched machine
-    ("skank", {"Machine": 1, "Latch": 1, "Pattern": 3, "Density": 90, "DCO1 Wave": 1, "PW": 55, "Fine": 8,
-               "Noise": 6, "Cutoff": 900, "Resonance": 25, "Env Amount": 60, "Decay": 120, "Release": 140,
-               "Dub": 35, "Pump": 15, "Drive": 20, "Volume": 1.0}),
-    # Rhythm & Sound-style roots: two chops a bar, quarter-note echo, the odd throw, a touch of sub
-    ("roots chop", {"Machine": 1, "Latch": 1, "Pattern": 2, "Density": 100, "Throws": 20, "DCO1 Wave": 2,
-                    "Sub": 25, "Cutoff": 750, "Resonance": 25, "Env Amount": 60, "Decay": 100, "Release": 120,
-                    "Dub": 55, "Echo Time": 3, "Drive": 25, "Volume": 1.0}),
-    # Low and warm: the sub carrying it, triangle on top, more key tracking
-    ("sub stab", {"DCO1 Wave": 0, "OSC 1": 50, "DCO2 Wave": 2, "Fine": 6, "OSC 2": 70, "Sub": 70, "Noise": 4,
-                  "Key Track": 70, "Cutoff": 300, "Resonance": 15, "Env Amount": 35, "Decay": 300, "Release": 400,
-                  "Dub": 40, "Pump": 25, "Pump Attack": 8, "Drive": 30, "Volume": 0.5}),
-    # Worn tape: m9 through heavy drive and hiss, a little wobble in the pitch
-    ("tape chord", {"Chord": 3, "DCO1 Wave": 2, "Fine": 16, "Noise": 30, "LFO Rate": 0.6, "Vibrato": 12,
-                    "Cutoff": 700, "Resonance": 25, "Env Amount": 45, "Decay": 400, "Release": 500, "Drift": 15,
-                    "Dub": 50, "Echo Time": 4, "Drive": 70, "Volume": -2.5}),
-    # Breakdown pad: an m11 blooming slowly into a half-note echo, PWM shimmer
-    ("ambient dub", {"Chord": 4, "DCO1 Wave": 1, "PWM": 40, "LFO Rate": 0.2, "LFO Filter": 15, "Fine": 25,
-                     "Noise": 20, "Cutoff": 600, "Resonance": 20, "Env Amount": 15, "Attack": 800, "Decay": 3000,
-                     "Sustain": 60, "Release": 3000, "Drift": 25, "Dub": 60, "Echo Time": 5, "Volume": -3.0}),
-    # No echo until it throws: sparse latched stabs, every other one thrown
-    ("throw dub", {"Machine": 1, "Latch": 1, "Pattern": 1, "Density": 100, "Throws": 50, "DCO1 Wave": 2,
-                   "Cutoff": 800, "Env Amount": 55, "Decay": 200, "Release": 260, "Dub": 0, "Echo Time": 4,
-                   "Pump": 20, "Volume": 0.5}),
-
-    # ---- techno ----
-    # Hypnotic: a sus4 stab off the kick, resonant, a slow filter sweep, pumping, latched
-    ("hypnotic loop", {"Chord": 5, "Machine": 1, "Latch": 1, "Pattern": 4, "Density": 85, "Throws": 10,
-                       "DCO1 Wave": 0, "DCO2 Wave": 1, "Fine": 12, "Noise": 10, "LFO Rate": 0.15, "LFO Filter": 20,
-                       "Cutoff": 650, "Resonance": 45, "Env Amount": 55, "Decay": 130, "Release": 160, "Dub": 25,
-                       "Pump": 40, "Pump Attack": 5, "Pump Release": 55, "Pump Curve": 60, "Volume": 0.0}),
-    # The dark shape, resonant and short, 3-3-2, a triangle an octave down for weight
-    ("dark machine", {"Chord": 7, "Machine": 1, "Latch": 1, "Pattern": 5, "Density": 70, "Throws": 15,
-                      "DCO1 Wave": 2, "DCO2 Wave": 2, "DCO2 Octave": 0, "Fine": 14, "Noise": 12, "Cutoff": 480,
-                      "Resonance": 50, "Env Amount": 70, "Velocity Filter": 60, "Decay": 150, "Release": 180,
-                      "Dub": 30, "Pump": 35, "Pump Attack": 5, "Pump Curve": 65, "Volume": 3.0}),
-    # UR-style chord memory: a bright m7 stab with DCO 2 a fifth up for that stacked sound
-    ("chord memory", {"Chord": 2, "DCO1 Wave": 2, "DCO2 Wave": 0, "Semi": 7, "Fine": 6, "OSC 2": 50, "Noise": 5,
-                      "Cutoff": 1800, "Resonance": 20, "Env Amount": 40, "Decay": 250, "Release": 300, "Dub": 20,
-                      "Pump": 20, "Drive": 25, "Volume": -0.5}),
-    # Warehouse: harder, brighter, driven, 16th echo, a fast snappy pump
-    ("warehouse", {"Chord": 1, "DCO1 Wave": 1, "PW": 60, "DCO2 Wave": 0, "Fine": 18, "Sub": 30, "Noise": 18,
-                   "Cutoff": 1400, "Resonance": 35, "Env Amount": 60, "Decay": 110, "Release": 140, "Dub": 30,
-                   "Echo Time": 0, "Pump": 45, "Pump Attack": 3, "Pump Release": 45, "Pump Curve": 80, "Drive": 65, "Volume": 0.0}),
-    # Chain Reaction-style minimal dub pulse: harsh pulse fifths, 3-3-2, throws
-    ("pulse", {"Chord": 6, "Machine": 1, "Latch": 1, "Pattern": 5, "Density": 75, "Throws": 25, "DCO1 Wave": 1,
-               "PW": 80, "PWM": 20, "LFO Rate": 2, "Noise": 20, "Cutoff": 1100, "Resonance": 55, "Env Amount": 50,
-               "Decay": 90, "Release": 150, "Dub": 45, "Drive": 55, "Volume": 1.0}),
-    # Rolling: every step and the extras, very short, pumping on 8ths
-    ("rolling", {"Machine": 1, "Latch": 1, "Pattern": 5, "Density": 100, "DCO1 Wave": 2, "Cutoff": 800,
-                 "Env Amount": 50, "Decay": 80, "Release": 100, "Dub": 20, "Pump": 50, "Pump Rate": 1,
-                 "Pump Attack": 4, "Pump Release": 50, "Pump Curve": 70, "Volume": 3.0}),
-    # Dark fifths: low, resonant, held like a drone, with the sub and a slow filter breath
-    ("dark fifths", {"Chord": 6, "DCO1 Wave": 0, "DCO1 Octave": 0, "Fine": 8, "Sub": 40, "Noise": 10,
-                     "LFO Rate": 0.1, "LFO Filter": 25, "Cutoff": 380, "Resonance": 60, "Env Amount": 40,
-                     "Attack": 5, "Decay": 600, "Sustain": 30, "Release": 700, "Dub": 35, "Pump": 30, "Volume": -3.0}),
-    # The machine throwing its own dubs
-    ("throw machine", {"Machine": 1, "Latch": 1, "Pattern": 0, "Density": 60, "Throws": 35, "DCO1 Wave": 2,
-                       "Cutoff": 700, "Env Amount": 55, "Decay": 200, "Release": 260, "Dub": 20, "Pump": 20, "Volume": 0.5}),
-
-    # ---- other ----
-    # Strings: two saws wide apart, PWM-free, a little vibrato
-    ("detroit strings", {"Chord": 3, "DCO1 Wave": 0, "DCO2 Wave": 0, "Fine": 24, "Noise": 4, "LFO Rate": 5,
-                         "Vibrato": 8, "Key Track": 60, "Cutoff": 1600, "Resonance": 15, "Env Amount": 15,
-                         "Velocity Filter": 30, "Attack": 450, "Decay": 2000, "Sustain": 70, "Release": 1800,
-                         "Drive": 15, "Volume": -1.5}),
-    # For chord progressions' clips (poly): pulse keys, velocity opens the filter
-    ("deep house keys", {"Chord": 0, "DCO1 Wave": 1, "PW": 55, "DCO2 Wave": 2, "Fine": 6, "OSC 2": 50, "Noise": 3,
-                         "Cutoff": 1200, "Resonance": 20, "Env Amount": 40, "Velocity Filter": 70, "Decay": 350,
-                         "Sustain": 10, "Release": 350, "Dub": 15, "Pump": 20, "Drive": 20, "Volume": 0.0}),
-    # A sustained m7 pad breathing with the beat: long, soft pump on 8ths
-    ("pump pad", {"Chord": 2, "DCO1 Wave": 1, "PWM": 35, "LFO Rate": 0.4, "Fine": 18, "Cutoff": 900,
-                  "Env Amount": 20, "Attack": 10, "Decay": 1500, "Sustain": 80, "Release": 600, "Pump": 70,
-                  "Pump Rate": 1, "Pump Attack": 10, "Pump Release": 80, "Pump Curve": 30, "Volume": -6.5}),
-]
-# the Preset menu's items
-pbox = next(x["box"] for x in boxes if x["box"]["id"] == preset)
-pbox["saved_attribute_attributes"]["valueof"].update(parameter_enum=[n for n, _ in PRESETS], parameter_mmax=len(PRESETS) - 1)
-
-# the gen~ Param defaults must be what BASE sends them (the sound before Live recalls the controls)
+# the gen~ Param defaults must be what the Init values send them (the sound before Live recalls the controls)
 GEN_CODE = {voice: VOICE, fx: FX}
 gen_param_mismatches = []
-for gen_box, param_name, sent, control_name in GEN_PARAM_FROM_BASE:
+for gen_box, param_name, sent, control_name in GEN_PARAM_FROM_INIT:
     declared = re.search(r"Param " + param_name + r"\(([^,)]+)", GEN_CODE[gen_box])
     if not declared:
         gen_param_mismatches.append(f"{control_name} -> {param_name}: no such Param")
     elif abs(float(declared.group(1)) - sent) > 1e-9:
-        gen_param_mismatches.append(f"{control_name} -> Param {param_name}({declared.group(1)}), BASE sends {sent:g}")
+        gen_param_mismatches.append(f"{control_name} -> Param {param_name}({declared.group(1)}), the Init values send {sent:g}")
 if gen_param_mismatches:
-    raise SystemExit("2sl-stab.py: gen~ Param defaults disagree with BASE (the Init sound):\n  "
+    raise SystemExit("2sl-stab.py: gen~ Param defaults disagree with the Init values:\n  "
                      + "\n  ".join(gen_param_mismatches))
 
 if set(INFO) - INFO_USED:
     raise SystemExit(f"2sl-stab.py: INFO has text for no parameter or view: {sorted(set(INFO) - INFO_USED)}")
-
-# a preset sets every control: every saved control but the Preset menu itself needs a BASE value
-if set(VALUES) - {"Preset"} - set(BASE):
-    raise SystemExit(f"2sl-stab.py: BASE has no preset value for: {sorted(set(VALUES) - {'Preset'} - set(BASE))}")
-presets_js = [{VALUES[k]: v for k, v in {**BASE, **p}.items()} for _, p in PRESETS]
 
 # 2sl-ui tokens, dark and light (2sl-ui/max/2sl-colors.json), plus the few this device needs
 THEMES = {
@@ -1349,13 +1319,13 @@ view_js = (view_js.replace("/*COZETTE*/", glyphs.strip()).replace("/*THEME_FROM_
            .replace("/*VIEW_DEFAULTS*/", json.dumps(VIEW_DEFAULTS)).replace("/*LAYOUT*/", "var LAYOUT = " + json.dumps(LAYOUT) + ";"))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-view.js"), "w").write(view_js)
 ui_js = open(os.path.join(HERE, "2sl-stab-ui.template.js")).read()
-ui_js = (ui_js.replace("/*PAGES*/", json.dumps(PAGES)).replace("/*PRESETS*/", json.dumps(presets_js, indent=1))
+ui_js = (ui_js.replace("/*PAGES*/", json.dumps(PAGES))
          .replace("/*CONTROLS*/", json.dumps(CONTROLS)).replace("/*VIEWS*/", json.dumps(VIEWS)).replace("/*THEME_FROM_LIVE*/", THEME_FROM_LIVE_JS))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-ui.js"), "w").write(ui_js)
 
 # every name the UI script looks up must name exactly one box (it errors at run time otherwise)
 BOX_VARNAMES = [x["box"]["varname"] for x in boxes if "varname" in x["box"]]
-UI_LOOKUPS = ({n for p in presets_js for n in p} | {n for k in CONTROLS for n in CONTROLS[k]} | set(VIEWS)
+UI_LOOKUPS = ({n for k in CONTROLS for n in CONTROLS[k]} | set(VIEWS)
               | {n for k in PAGES for n in PAGES[k]} | {"freeze"})
 if UI_LOOKUPS - set(BOX_VARNAMES):
     raise SystemExit(f"2sl-stab.py: the UI script looks up names no box has: {sorted(UI_LOOKUPS - set(BOX_VARNAMES))}")

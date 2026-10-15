@@ -30,7 +30,7 @@ var T = THEMES.dark;
 function pickTheme() { T = themeFromLive("the " + MODE + " display"); }
 pickTheme();
 
-// What this display draws from. The controls' values start as the Init preset (BASE) sends them, written
+// What this display draws from. The controls' values start as the Init values send them, written
 // in by the build per display, so a display is right before Live recalls the controls (and they agree after).
 var S = {
   page: 0,

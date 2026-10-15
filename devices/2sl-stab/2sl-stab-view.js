@@ -51,7 +51,7 @@ var T = THEMES.dark;
 function pickTheme() { T = themeFromLive("the " + MODE + " display"); }
 pickTheme();
 
-// What this display draws from. The controls' values start as the Init preset (BASE) sends them, written
+// What this display draws from. The controls' values start as the Init values send them, written
 // in by the build per display, so a display is right before Live recalls the controls (and they agree after).
 var S = {
   page: 0,
@@ -186,7 +186,7 @@ function paint() {
 }
 var unknownModeReported = false;
 
-var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [136, 356, 576, 696], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["dco 1 divided down", 12, 143, "hint"], ["pw: pulse width", 256, 143, "hint"], ["pwm: lfo on pw", 256, 157, "hint"], ["semi 7:", 476, 143, "hint"], ["a fifth up", 476, 157, "hint"], ["mixer", 588, 40, "label"], ["one lfo for all voices", 708, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
+var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [136, 356, 576, 696], "labels": [["out", 800, 15, "label"], ["dco 1 divided down", 12, 143, "hint"], ["pw: pulse width", 256, 143, "hint"], ["pwm: lfo on pw", 256, 157, "hint"], ["semi 7:", 476, 143, "hint"], ["a fifth up", 476, 157, "hint"], ["mixer", 588, 40, "label"], ["one lfo for all voices", 708, 110, "hint"]]}, {"rules": [364, 668], "labels": [["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 
 var hover = 0;
 var SITE = "https://2sl.to";

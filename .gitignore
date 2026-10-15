@@ -2,3 +2,7 @@
 *.amxd.bak
 dist/
 __pycache__/
+# Live makes a Live Project (and copies the device into it) when a preset or set is saved inside the repo;
+# Finder adds Icon\r files to folders with custom icons
+* Project/
+Icon?

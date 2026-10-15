@@ -1,7 +1,6 @@
-// 2sl stab: pages, presets and theme. Generated from src/2sl-stab-ui.template.js by src/2sl-stab.py; edit there.
+// 2sl stab: pages and theme. Generated from src/2sl-stab-ui.template.js by src/2sl-stab.py; edit there.
 //   page i      show the play (0), osc (1) or shape (2) page
-//   int i       Preset menu: set every control to preset i
-//   ready       sent once the device has loaded (Live has restored the saved values by then)
+//   ready       sent once the device has loaded: show the page, colour the controls
 //   theme       Live's colour theme changed (from live.colors): recolour controls, redraw displays
 //   stop        turn Freeze off (part of the Stop action)
 // out 0: messages for [thispatcher]
@@ -9,12 +8,10 @@ inlets = 1;
 outlets = 1;
 
 var PAGES = /*PAGES*/;
-var PRESETS = /*PRESETS*/;
 var CONTROLS = /*CONTROLS*/;
 var VIEWS = /*VIEWS*/;
 /*THEME_FROM_LIVE*/
 var current = 0;
-var ready = 0;
 
 function show() {
   var names = ["play", "osc", "shape"];
@@ -36,24 +33,6 @@ function named(name, purpose) {
   var obj = this.patcher.getnamed(name);
   if (!obj) error("2sl stab: no object named '" + name + "' in the patch (" + purpose + ")\n");
   return obj;
-}
-
-function msg_int(i) {
-  // Ignore the Preset menu while Live restores the set, so saved tweaks win.
-  if (!ready) return;
-  if (i < 0 || i >= PRESETS.length) {
-    error("2sl stab: preset " + i + " doesn't exist (0-" + (PRESETS.length - 1) + "): nothing set\n");
-    return;
-  }
-  var p = PRESETS[i];
-  for (var name in p) {
-    var obj = named(name, "preset " + i + " sets it");
-    if (obj) obj.message(p[name]);
-  }
-}
-
-function msg_float(v) {
-  msg_int(Math.round(v));
 }
 
 // ---- 2sl colours on Live's controls ---------------------------------------------------------
@@ -109,7 +88,6 @@ function anything() {
     return;
   }
   if (messagename === "ready") {
-    ready = 1;
     show();
     recolor();
   }
