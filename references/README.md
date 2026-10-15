@@ -74,7 +74,7 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
 - **snapshot~** (Max reference): https://docs.cycling74.com/reference/snapshot~
   bang: "Reports the sample value in the most recently received signal vector at the offset specified by the
   offset attribute." int in the left inlet: "Any non-zero value turns on interval-based reporting, 0 turns it off"
-  (float: the same). So the Echo display's round peak is read with a bang, never a number.
+  (float: the same). So the Echo display's round snapshot~s are read with a bang, never a number.
 - **mc.noteallocator~** (Max reference): https://docs.cycling74.com/reference/mc.noteallocator~
   "When steal is enabled, mc.noteallocator~ will re-allocate ("steal") a busy voice if it runs out of non-busy
   voices." "The stolen voice number used will be the one least recently allocated." Busy input: "Connect an
