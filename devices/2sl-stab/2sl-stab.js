@@ -14,7 +14,7 @@
 //     tick bar beat units       from [transport], once per 16th while Live plays
 //     playing i / tempo f       Live's transport; stopped, the machine runs on its own clock
 //     ready         Live has finished restoring the set
-//     stop          release everything and clear the latch (Stop button, or Live's transport stopping)
+//     stop          release everything and clear the latch (the Stop button only; Live stopping lets tails ring out)
 // out 0: note lists for midiformat
 // out 1: bang = throw
 // out 2: to the step display     out 3: to the chord display     out 4: stepbits/accbits to store
