@@ -199,11 +199,17 @@ out1 = y * env * (0.35 + 0.65 * velo_smoothed) * level;
 
 # The echo's longest time: 1/2 note at Live's slowest tempo, 20 BPM (Live Object Model, Song.tempo: "20.0 ...
 # 999.0"), is 6000 ms. The left side runs 3.1% long and wow adds up to 0.12%: 6193 ms, plus the cubic read's
-# 3 samples. The buffers hold 6.25 s at whatever the sample rate is.
+# 3 samples. The gen docs give a Delay's size in samples but don't say it may be an expression of samplerate, so
+# the sizes are fixed numbers of samples, enough at the highest sample rate Live runs at: 192 kHz (Ableton, Live
+# editions: "Multitrack recording up to 32-bit/192 kHz"). At lower rates the buffers are just longer than needed.
+HIGHEST_SAMPLE_RATE = 192000
+ECHO_BUFFER_SAMPLES = int(HIGHEST_SAMPLE_RATE * 6.25)
+DIFFUSION_BUFFER_SAMPLES = int(HIGHEST_SAMPLE_RATE * 0.02)   # the diffusion allpasses read up to 14 ms
 ECHO_LONGEST_MS = 60000.0 / 20.0 * 2.0
-ECHO_BUFFER_SECONDS = 6.25
-if ECHO_LONGEST_MS * 1.031 * 1.0012 / 1000.0 >= ECHO_BUFFER_SECONDS - 0.01:
-    raise SystemExit("2sl-stab.py: the echo buffer is shorter than the longest echo time")
+if HIGHEST_SAMPLE_RATE * ECHO_LONGEST_MS * 1.031 * 1.0012 / 1000.0 + 4 >= ECHO_BUFFER_SAMPLES:
+    raise SystemExit("2sl-stab.py: the echo buffer is shorter than the longest echo time at the highest sample rate")
+if HIGHEST_SAMPLE_RATE * 13.900 / 1000.0 >= DIFFUSION_BUFFER_SAMPLES:
+    raise SystemExit("2sl-stab.py: the diffusion buffers are shorter than the longest allpass at the highest sample rate")
 
 FX = GEN_SMOOTHING_FUNCTION + r"""
 // in1: the voices, mono. in2: Live's beat ramp (plugphasor~). out1/out2: left/right. out3: the echo's level (a
@@ -246,12 +252,12 @@ Param transport(0, min=0, max=1);       // 1 while Live plays: lock to its beat
 Param volume(0, min=-60, max=12);       // output, dB
 Param panic(0);                         // Stop: every new number empties the echo
 
-Delay dl(samplerate * ECHO_BUFFER_SECONDS);   // samplerate is a constant to gen~, so the size follows it
-Delay dr(samplerate * ECHO_BUFFER_SECONDS);
-Delay al1(samplerate * 0.02);           // the diffusion allpasses: up to 14 ms
-Delay al2(samplerate * 0.02);
-Delay ar1(samplerate * 0.02);
-Delay ar2(samplerate * 0.02);
+Delay dl(ECHO_BUFFER_SAMPLES);          // samples: the longest echo at the highest sample rate (see the build)
+Delay dr(ECHO_BUFFER_SAMPLES);
+Delay al1(DIFFUSION_BUFFER_SAMPLES);    // the diffusion allpasses: up to 14 ms
+Delay al2(DIFFUSION_BUFFER_SAMPLES);
+Delay ar1(DIFFUSION_BUFFER_SAMPLES);
+Delay ar2(DIFFUSION_BUFFER_SAMPLES);
 History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
 History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
 History lastpanic(0), elapsed(1e9), pressfade(0);
@@ -287,9 +293,8 @@ ts = ts + (dtime - ts) * echo_time_glide;
 wph = wrap(wph + 0.53 / sr, 0, 1);
 wph2 = wrap(wph2 + 0.137 / sr, 0, 1);
 wow = (sin(twopi * wph) * 0.6 + sin(twopi * wph2) * 0.4) * 0.0012;
-echo_buffer_samples = samplerate * ECHO_BUFFER_SECONDS;
-tl = clamp(mstosamps(ts * 1.031 * (1 + wow)), 2, echo_buffer_samples - 4);   // -4: room for the cubic read
-tr = clamp(mstosamps(ts * 0.979 * (1 - 0.8 * wow)), 2, echo_buffer_samples - 4);
+tl = clamp(mstosamps(ts * 1.031 * (1 + wow)), 2, ECHO_BUFFER_SAMPLES - 4);   // -4: room for the cubic read
+tr = clamp(mstosamps(ts * 0.979 * (1 - 0.8 * wow)), 2, ECHO_BUFFER_SAMPLES - 4);
 
 // Stop: everything in the buffers is from before it. `clean` is a gain by where the longest read lands:
 // 0 on audio from before Stop, rising to 1 over the 2 ms of audio written after it. It is a position, not
@@ -382,7 +387,8 @@ out1 = sclip((x + rl * 1.2) * gsm * gain);
 out2 = sclip((x + rr * 1.2) * gsm * gain);
 """
 
-FX = FX.replace("ECHO_LONGEST_MS", repr(ECHO_LONGEST_MS)).replace("ECHO_BUFFER_SECONDS", repr(ECHO_BUFFER_SECONDS))
+FX = (FX.replace("ECHO_LONGEST_MS", repr(ECHO_LONGEST_MS)).replace("DIFFUSION_BUFFER_SAMPLES", str(DIFFUSION_BUFFER_SAMPLES))
+      .replace("ECHO_BUFFER_SAMPLES", str(ECHO_BUFFER_SAMPLES)))
 
 # ---- patch building ----------------------------------------------------------------
 

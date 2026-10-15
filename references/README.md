@@ -54,11 +54,14 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   `current_song_time` "The playing position in the Live Set, in beats."
 - **gen~ Delay** (Max reference): https://docs.cycling74.com/reference/gen_dsp_delay/
   "The first argument specifies the maximum delay time (in samples, default samplerate)."
-  It must be a constant expression; Graham Wakefield (Cycling '74): "this argument must be a constant
-  expression (and for gen~, "samplerate" functions pretty much like a constant)"
-  (https://cycling74.com/forums/gen-parameter-is-not-defined). `samplerate` is listed under Constants in
-  https://docs.cycling74.com/userguide/gen/gen~_operators/. So the echo sizes its buffers as
-  `samplerate * seconds`. (The same thread: samplerate updates on a gen~ reset/restart.)
+  The gen~ Operators page (https://docs.cycling74.com/userguide/gen/gen~_operators/) says the same under Feedback
+  and lists `samplerate` under Constants ("The DSP samplerate"); the GenExpr page
+  (https://docs.cycling74.com/userguide/gen/gen_genexpr/) doesn't cover the Delay declaration at all. No official
+  page says the size may be an expression of `samplerate` (that was only a forum post:
+  https://cycling74.com/forums/gen-parameter-is-not-defined). So the echo's buffers are a fixed number of samples,
+  sized for the highest sample rate Live runs at (below), checked at build time against the longest echo.
+- **Live's highest sample rate** (Ableton, Live editions): https://www.ableton.com/en/live/compare-editions/
+  "Multitrack recording up to 32-bit/192 kHz", in every edition. So 192 kHz is the rate the buffers are sized for.
 - **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
