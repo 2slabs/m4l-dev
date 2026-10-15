@@ -45,9 +45,17 @@ The machine's steps are saved with the set, so an edited pattern comes back when
 
 ### Presets
 
-Presets are Live's own device presets: browse, hot-swap and load them from Live's browser (or Push), like any device's. Save your own with the **Save Preset** button in the device's title bar; Live puts it in the User Library. A preset holds every control, the machine's edited steps included, but not the page.
+Presets are Live's own device presets (`.adv` files): browse, hot-swap and load them from Live's browser (or Push), like any device's. A preset holds every control, the machine's steps included, but not the page.
 
-The sounds below are kept in `src/2sl-stab-presets.json`. Volumes are matched, so switching presets doesn't jump in level. Each one was rendered through the DSP and its **out** level set from the measured peak and average.
+The sounds below sit next to the device in this folder, one `.adv` each (`dub - chain stab.adv`, ...). Each finds the device by its file name in its own folder, so keep them with `2sl-stab.amxd`:
+- **In place:** add `devices/` to Live's browser (Places → Add Folder) and open `2sl-stab`.
+- **In the User Library:** copy this whole folder (the `.amxd`, the three `.js` and the `.adv` files) into `User Library/Presets/Instruments/Max Instrument/`, where Live keeps Max Instruments.
+
+The presets are written for the `.amxd` built with them (they hold its size and checksum), so rebuild both together and copy them together.
+
+**Your own:** set the device up and click **Save Preset** in its title bar. Live saves the preset in your User Library (and copies the device there for it). Don't save presets or sets inside this repo: Live turns the folder into a Live Project and copies the device into it.
+
+The sounds are kept in `src/2sl-stab-presets.json`. Volumes are matched, so switching presets doesn't jump in level. Each one was rendered through the DSP and its **out** level set from the measured peak and average.
 
 | | preset | idea |
 |---|---|---|
@@ -113,7 +121,7 @@ The patch is generated. Edit these, then run `python3 src/2sl-stab.py`:
 - `src/2sl-stab-ui.template.js`: pages and recolouring.
 - `src/2sl-stab-view.template.js`: the displays.
 
-It writes `src/2sl-stab.maxpat`, this `.amxd`, `2sl-stab-ui.js` and `2sl-stab-view.js`. `src/cozette-glyphs.js` comes from `tools/bdf2js.py` and `cozette.bdf` (Cozette v1.30.0).
+It writes `src/2sl-stab.maxpat`, this `.amxd`, `2sl-stab-ui.js`, `2sl-stab-view.js` and the `.adv` presets (Live's preset format, from the preset Live saved in `references/ableton/`). `src/cozette-glyphs.js` comes from `tools/bdf2js.py` and `cozette.bdf` (Cozette v1.30.0).
 
 ## Credits
 

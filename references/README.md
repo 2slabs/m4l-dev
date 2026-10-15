@@ -101,3 +101,61 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   Neither page says how "goes to zero" is read (per sample or per vector, exactly 0 or under a threshold), so a
   sound crossing zero in its release could free a voice that is still sounding. The voices send an explicit busy
   signal instead of their sound: 1 from note-on until the envelope has finished (release or Stop's ramp), else 0.
+
+## Live presets (2sl stab: the .adv files)
+
+- **The example** (`ableton/example-2sl-stab-preset.adv`, and `.xml`, the same gunzipped): a preset of 2sl stab saved by
+  Live 12.4.6 (`<Ableton MajorVersion="5" MinorVersion="12.0_12402" Creator="Ableton Live 12.4.6">`). The build uses it
+  as the template for its presets. What it shows:
+  - An `.adv` is gzipped XML (`gzip compressed data`): `<Ableton>` > `<MxDeviceInstrument>`, no other wrapper.
+  - The device isn't in it: `PatchSlot/Value/MxPatchRef/FileRef` refers to the `.amxd` (`RelativePathType`,
+    `RelativePath`, an absolute `Path`, `Type` 2, `LivePackName`, `LivePackId`, `OriginalFileSize`, `OriginalCrc`).
+    Saved inside the repo, Live made the folder a Live Project, copied the device to
+    `2sl-stab Project/Presets/Instruments/Max Instrument/Imported/2sl-stab.amxd` and referred to that copy
+    (RelativePathType 3).
+  - `ParameterList/ParameterList`: one `MxDFloatParameter` (Type 0) or `MxDEnumParameter` (Type 2) per automatable
+    parameter, ordered by name: `Index`, `Name` (the long name), `ShortName`, `MinValue`, `MaxValue`, `Default`,
+    `IsUndoable`, `IsStored`, and the value in `Timeable/Manual` (an enum's index). Enums list their item `Names`;
+    Live listed every live.text's items as `val1` / `val2` (live.text's default), not the `off` / `on` the patch saves.
+  - `Default` is the initial value mapped linearly through the exponent (min + (max - min) * normalised^(1/exponent));
+    a float's `MidiControllerRange` is [max(min, 0), max(min, 1)]. Both hold for all 51 parameters in the file.
+  - Stored Only parameters aren't in the list: `BlobSlot/Value/MxDBlob/Blob` holds them as hex of JSON plus a NUL:
+    `{"Accents": [ 1 ], "Steps": [ 73 ]}` (the dub dotted pattern).
+  - `OriginalCrc` is CRC-16 (poly 0x8005, init 0, not reflected: "CRC-16/BUYPASS") of the `.amxd`'s first 16384 bytes.
+    Found by trying CRC variants against this file (19576), and confirmed on a second, independent one: Ableton's
+    m4l-connection-kit `OSC Leap Motion Example.adg` (Live 9.6) gives Crc 63076, `MaxCrcSize` 16384, FileSize 234834
+    for `OSC Leap Motion.amxd` at commit 551c28a, and that file's first 16 KB give 63076.
+    https://github.com/Ableton/m4l-connection-kit
+- **Ableton, Live 12 manual, Working with Instruments and Effects** (23.2.5):
+  https://www.ableton.com/en/manual/working-with-instruments-and-effects/
+  "Click the Save Preset button in the device title bar ... the preset is highlighted in its corresponding folder in
+  the Presets folder of the User Library." "Each device appears in the content pane of the browser as a folder that
+  can be opened to reveal its presets." Live-specific device files ".adg, .adv, and .amxd" can be dragged into a set.
+- **Ableton, Live 12 manual, Max for Live** (32.2): https://www.ableton.com/en/manual/max-for-live/
+  "Max devices are saved separately as AMXD files rather than as part of a Live Set. Moving or renaming a referenced
+  AMXD file later can break the associated file path in Live." "By default, a Max device is saved to the relevant
+  folder in the User Library based on its device type: an audio effect is stored in the Max Audio Effect folder, a
+  MIDI effect in the Max MIDI Effect folder, and so on."
+- **Ableton, Live 11 manual, Max for Live**: https://www.ableton.com/en/live-manual/11/max-for-live/
+  "If you save a preset for a Max device, Live will try to maintain the necessary file references by copying the Max
+  device into your User Library and saving the preset based on this copy. If the referenced Max file is then moved or
+  renamed, however, these file associations may be broken." "we recommend always storing Max devices and their
+  presets in your User Library."
+- **Max for Live Production Guidelines** (https://github.com/Ableton/maxdevtools, m4l-production-guidelines.md,
+  "Updates"): "Live stores parameter values for each [live.*] parameter that is set to Automated and Stored or Stored
+  Only. Live identifies the [live.*] parameter in a Max for Live device by its Long Name." So the presets name each
+  parameter by its long name, and renaming a control breaks its value in every preset.
+- **How a shipped preset finds its device** (community, not Ableton documentation): Cycling '74 forum,
+  https://cycling74.com/forums/embedding-adv-presets-with-a-max-for-live-amxd-or-how-to-send-device-to-someone-else-with-presets
+  Mattijs Kneppers: in the `<FileRef>`, set `RelativePath` to "just the file name of the device", "change Value to 1"
+  in `RelativePathType`, "Remove any <Path> and <Type> tags. The presets should now load correctly when placed next to
+  the device." and the RelativePathType values: "Invalid = -1, Unknown = 0, RelativeToDocument = 1,
+  RelativeToOldLibrary = 2, RelativeToProject = 3, Reserved = 4, RelativeToFactoryPack = 5, RelativeToUserLibrary = 6,
+  RelativeToBuiltinContent = 7". The Ableton forum says the same for `PatchSlot`
+  (https://forum.ableton.com/viewtopic.php?t=197223). The build follows this (type 1, the file name, no `Path`) but
+  keeps `Type` 2, which Live 12 wrote in both real files seen (the example, and a Live 12 set's Max device in
+  https://github.com/mattypie/alsdiff, test/data/m4l_device.xml). Not yet tried in Live.
+- **Not yet seen in a saved file** (a preset saved from the current build would show them): whether Live 12 loads a
+  preset with type 1 and no `Path`; whether it checks `OriginalFileSize` / `OriginalCrc` against the file it finds
+  (the build writes the real ones for the `.amxd` built with the presets); `LastModDate` (the build writes 0, so the
+  files are the same every build); that Hidden (parameter_invisible 2) leaves "Page" out of the file.

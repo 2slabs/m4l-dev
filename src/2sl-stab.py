@@ -13,7 +13,8 @@ Signal flow (from the research in devices/2sl-stab/README.md):
           saturation and diffusion in the loop, wow/flutter, slightly offset L/R times
        -> plugout~
 """
-import json, os, re, subprocess, sys
+import gzip, json, os, re, struct, subprocess, sys
+import xml.etree.ElementTree as ElementTree
 
 VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1353,3 +1354,165 @@ scripts = [os.path.join(ROOT, "devices", "2sl-stab", n) for n in ("2sl-stab.js",
 subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "freeze", maxpat, frozen, "--type", "instrument",
                 "--embed", *scripts], check=True)
 print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024} KB, scripts embedded)")
+
+# ---- LIVE PRESETS: one Live device preset (.adv) per sound, next to the device ------------------------------
+# A Live preset of a Max device is gzipped XML: the device's file reference and every parameter's value, not the
+# device itself. The schema here is the one Live 12.4.6 wrote for this device (references/ableton/
+# example-2sl-stab-preset.xml), used as the template: everything but the file reference, the parameter list and
+# the stored-only blob is kept as Live wrote it. See references/README.md, "Live presets", for each choice below.
+
+LIVE_PRESET_TEMPLATE_PATH = os.path.join(ROOT, "references", "ableton", "example-2sl-stab-preset.xml")
+LIVE_PRESET_FOLDER = os.path.dirname(amxd)                  # next to the device: the reference is relative to it
+PARAMETER_TYPE_FLOAT, PARAMETER_TYPE_ENUM = 0, 2            # Max's parameter_type (live.* references)
+# Live listed every live.text's items as val1 / val2 (live.text's default enum), not the off / on the patch saves:
+# the presets say what Live says. (So Live's automation and Push may show val1 / val2 for the toggles: unchecked.)
+LIVE_TEXT_ITEMS_AS_LIVE_LISTS_THEM = ["val1", "val2"]
+AMXD_CRC_BYTES = 16384                                      # OriginalCrc covers the file's first 16 KB
+
+
+def amxd_crc(path):
+    """Live's OriginalCrc of a device file: CRC-16 (poly 0x8005, init 0, not reflected, the "BUYPASS" variant) of
+    its first 16384 bytes. Matches Live's own value for this device (19576) and for Ableton's OSC Leap Motion.amxd."""
+    with open(path, "rb") as device_file:
+        crc = 0
+        for byte in device_file.read(AMXD_CRC_BYTES):
+            crc ^= byte << 8
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0x8005) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
+def live_number(value):
+    """A number as Live writes it: whole numbers bare, others as a 32-bit float to 9 significant digits."""
+    if float(value).is_integer():
+        return str(int(value))
+    return "%.9g" % struct.unpack("f", struct.pack("f", value))[0]
+
+
+def set_value(element, path, value):
+    found = element.find(path)
+    if found is None:
+        raise SystemExit(f"2sl-stab.py: the Live preset template has no {path} in <{element.tag}>")
+    found.set("Value", value)
+
+
+# Every parameter in the patch: automated-and-stored ones go in the parameter list, Stored Only ones in the blob,
+# Hidden ones nowhere (as in Live's own file). The list is ordered by name, as Live wrote it.
+listed_parameters, stored_only_parameter_names = [], []
+for patch_box in (x["box"] for x in boxes):
+    valueof = patch_box.get("saved_attribute_attributes", {}).get("valueof")
+    if not patch_box.get("parameter_enable") or not valueof:
+        continue
+    visibility = valueof.get("parameter_invisible", 0)
+    if visibility == PARAMETER_VISIBILITY_HIDDEN:
+        continue
+    if visibility == PARAMETER_VISIBILITY_STORED_ONLY:
+        stored_only_parameter_names.append(valueof["parameter_longname"])
+    elif visibility == 0:
+        if valueof["parameter_type"] not in (PARAMETER_TYPE_FLOAT, PARAMETER_TYPE_ENUM):
+            raise SystemExit(f"2sl-stab.py: Live presets: {valueof['parameter_longname']!r} has parameter_type "
+                             f"{valueof['parameter_type']}; only float (0) and enum (2) have a known preset form")
+        listed_parameters.append(dict(valueof, maxclass=patch_box["maxclass"]))
+    else:
+        raise SystemExit(f"2sl-stab.py: Live presets: {valueof['parameter_longname']!r} has Parameter Visibility "
+                         f"{visibility}, with no known preset form")
+listed_parameters.sort(key=lambda valueof: valueof["parameter_longname"])
+if sorted(stored_only_parameter_names) != ["Accents", "Steps"]:
+    raise SystemExit(f"2sl-stab.py: Live presets know how to fill Steps and Accents, not {stored_only_parameter_names}")
+unlisted_controls = set(SAVED_CONTROLS) - {valueof["parameter_longname"] for valueof in listed_parameters}
+if unlisted_controls:
+    raise SystemExit(f"2sl-stab.py: Live presets: saved controls missing from the parameter list: {sorted(unlisted_controls)}")
+
+template_root = ElementTree.parse(LIVE_PRESET_TEMPLATE_PATH).getroot()
+template_device = template_root.find("MxDeviceInstrument")
+template_parameter_list = template_device.find("ParameterList/ParameterList")
+PARAMETER_PROTOTYPE = {tag: template_parameter_list.find(tag) for tag in ("MxDFloatParameter", "MxDEnumParameter")}
+if None in PARAMETER_PROTOTYPE.values():
+    raise SystemExit(f"2sl-stab.py: {LIVE_PRESET_TEMPLATE_PATH} needs a float and an enum parameter to copy")
+FIRST_PARAMETER_ID = min(int(p.get("Id")) for p in template_parameter_list)
+amxd_size, amxd_crc_value = os.path.getsize(amxd), amxd_crc(amxd)
+
+
+def live_parameter_element(parameter_id, index, valueof, value):
+    """One parameter as Live lists it, copied from the template's element of its type. Default is the initial value
+    mapped linearly through its exponent's position (min + (max - min) * normalised^(1/exponent)), and a float's
+    MIDI controller range is [max(min, 0), max(min, 1)]: both as Live wrote them for all 51 of this device's."""
+    is_enum = valueof["parameter_type"] == PARAMETER_TYPE_ENUM
+    element = ElementTree.fromstring(ElementTree.tostring(PARAMETER_PROTOTYPE["MxDEnumParameter" if is_enum else "MxDFloatParameter"]))
+    element.set("Id", str(parameter_id))
+    minimum = float(valueof.get("parameter_mmin", 0.0))
+    maximum = float(len(valueof["parameter_enum"]) - 1) if is_enum else float(valueof.get("parameter_mmax", 127.0))
+    initial_value = float((valueof.get("parameter_initial") or [minimum])[0])
+    exponent = float(valueof.get("parameter_exponent", 1.0))
+    default = initial_value if is_enum else minimum + (maximum - minimum) * ((initial_value - minimum) / (maximum - minimum)) ** (1.0 / exponent)
+    for path, text in [("Index", str(index)), ("Type", str(valueof["parameter_type"])), ("Name", valueof["parameter_longname"]),
+                       ("ShortName", valueof["parameter_shortname"]), ("MinValue", live_number(minimum)),
+                       ("MaxValue", live_number(maximum)), ("Default", live_number(default)), ("Timeable/Manual", live_number(value))]:
+        set_value(element, path, text)
+    if is_enum:
+        names = element.find("Names")
+        for old_name in list(names):
+            names.remove(old_name)
+        items = LIVE_TEXT_ITEMS_AS_LIVE_LISTS_THEM if valueof["maxclass"] == "live.text" else valueof["parameter_enum"]
+        for item_index, item in enumerate(items):
+            name_element = ElementTree.SubElement(names, "Name", Id=str(item_index))
+            ElementTree.SubElement(name_element, "Name", Value=item)
+    else:
+        set_value(element, "Timeable/MidiControllerRange/Min", live_number(max(minimum, 0.0)))
+        set_value(element, "Timeable/MidiControllerRange/Max", live_number(max(minimum, 1.0)))
+    return element
+
+
+def stored_only_blob_text(values):
+    """The Stored Only parameters as Live keeps them: JSON (4-space indent, names sorted), a NUL, as hex in lines of
+    80 digits (decoded from Live's file: {"Accents": [ 1 ], "Steps": [ 73 ]})."""
+    json_text = "{\n" + ",\n".join(f'    "{name}": [ {live_number(values[name])} ]' for name in sorted(values)) + "\n}"
+    hex_digits = (json_text.encode() + b"\0").hex().upper()
+    blob_indent = "\t" * 6
+    return "\n" + "".join(blob_indent + hex_digits[i:i + 80] + "\n" for i in range(0, len(hex_digits), 80)) + "\t" * 5
+
+
+def live_preset_file_name(name, group):
+    file_name = (name if group == "init" else f"{group} - {name}") + ".adv"
+    if re.search(r'[/\\:*?"<>|]', file_name):
+        raise SystemExit(f"2sl-stab.py: preset {name!r} makes a file name with a character macOS or Windows refuses")
+    return file_name
+
+
+written_presets = []
+for preset_name, preset_group, preset_idea, preset_values in PRESETS:
+    root = ElementTree.fromstring(ElementTree.tostring(template_root))
+    device = root.find("MxDeviceInstrument")
+    # the device file: relative to the preset (RelativePathType 1), so the presets work wherever the folder goes;
+    # no absolute Path (the template's is a path on one Mac)
+    file_ref = device.find("PatchSlot/Value/MxPatchRef/FileRef")
+    set_value(file_ref, "RelativePathType", "1")
+    set_value(file_ref, "RelativePath", os.path.basename(amxd))
+    file_ref.remove(file_ref.find("Path"))
+    set_value(file_ref, "OriginalFileSize", str(amxd_size))
+    set_value(file_ref, "OriginalCrc", str(amxd_crc_value))
+    set_value(device, "PatchSlot/Value/MxPatchRef/LastModDate", "0")      # a fixed date: the build is repeatable
+    set_value(device, "LastSelectedTimeableIndex", "0")
+    set_value(device, "LastSelectedClipEnvelopeIndex", "0")
+    parameter_list = device.find("ParameterList/ParameterList")
+    for old_parameter in list(parameter_list):
+        parameter_list.remove(old_parameter)
+    for index, valueof in enumerate(listed_parameters):
+        value = preset_values.get(valueof["parameter_longname"], 0)         # Stop and Throw: buttons, at rest
+        parameter_list.append(live_parameter_element(FIRST_PARAMETER_ID + index, index, valueof, value))
+    hit_bits, accent_bits = pattern_bits(MACHINE_PATTERNS[preset_values["Pattern"]][1])
+    blob = device.find("BlobSlot/Value/MxDBlob/Blob")
+    if blob is None:
+        raise SystemExit(f"2sl-stab.py: {LIVE_PRESET_TEMPLATE_PATH} has no stored-only blob")
+    ElementTree.indent(root, space="\t")
+    blob.text = stored_only_blob_text({"Steps": hit_bits, "Accents": accent_bits})   # after indent(): its own layout
+    xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ElementTree.tostring(root, encoding="unicode") + "\n"
+    file_name = live_preset_file_name(preset_name, preset_group)
+    with open(os.path.join(LIVE_PRESET_FOLDER, file_name), "wb") as preset_file:
+        preset_file.write(gzip.compress(xml_text.encode(), mtime=0))       # mtime 0: the same bytes every build
+    written_presets.append(file_name)
+for stale in sorted(set(f for f in os.listdir(LIVE_PRESET_FOLDER) if f.endswith(".adv")) - set(written_presets)):
+    os.remove(os.path.join(LIVE_PRESET_FOLDER, stale))
+    print(f"removed {stale}: no preset of that name in {PRESET_DATA_NAME}")
+print(f"wrote {len(written_presets)} Live presets next to {os.path.relpath(amxd, ROOT)} "
+      f"({len(listed_parameters)} parameters each; device {amxd_size} bytes, CRC {amxd_crc_value})")
