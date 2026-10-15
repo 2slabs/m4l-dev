@@ -16,7 +16,7 @@ Three pages: switch with **play / osc / shape** in the header. The header also h
 |---|---|---|
 | chord | the chord you're playing: name, notes, a lit keyboard | **Chord** (poly, minor, m7, m9, m11, sus4, fifths, dark), **In Key** (chords from Live's Scale Mode), **Tone** (brighter or darker), **Length** (shorter or longer tails), **Drift** (voicing varies stab to stab) |
 | machine | the 16-step pattern: **click a step** to cycle rest → hit → accent; the playhead, hits flashing, throws flashing orange; a status line | **Machine**, **Latch** (tap a chord and it keeps playing), **Pattern** (starting points), **Density**, **Throws**, **Gate**, **Shift** (moves every trigger 0–15 16ths later, wrapping; the display shows the shifted pattern, the saved pattern doesn't change, and picking a Pattern keeps it) |
-| dub | the echo: the stab and its repeats (more and darker as Dub goes up), throws, freeze, a live tape level | **Dub** (0 = no echo), **Throw**, **Freeze**, echo **Time** |
+| dub | the echo: the stab and its repeats (more and darker as Dub goes up), throws, a live tape level; frozen, the loop's last ten rounds as it played them | **Dub** (0 = no echo), **Throw**, **Freeze**, echo **Time** |
 | pump | the duck over two beats at Live's tempo, with the playhead | **Depth**, **Attack** (ms to full duck: a ramp, never a jump), **Release** (how much of the beat it takes to recover), **Curve** (linear to snappy), pump **Rate** |
 
 **Osc**: laid out like the voice sections of a Juno, Jupiter or Prophet.

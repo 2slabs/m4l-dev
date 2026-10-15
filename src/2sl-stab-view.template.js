@@ -65,6 +65,7 @@ function anything() {
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
   else if (m === "lfophase") recordLfoReading(a[0]);
+  else if (m === "roundpeak") recordEchoRound(a[0]);
   else if (m in S) S[m] = a[0];
   else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
@@ -266,13 +267,27 @@ function onclick(x, y) {
   outlet(0, "edit", Math.max(0, Math.min(15, Math.floor((x - 4) / ((w - 8) / 16)))));
 }
 
-// Frozen, the loop feeds back at 105% through tape saturation, tanh(1.05 x 1.1 a) / 1.1 per time round: it
-// swells until it holds where that equals a. The level the loop settles at, in the echo's own units:
-var FROZEN_LOOP_HOLD = (function () {
-  var a = 1;
-  for (var i = 0; i < 200; i++) a = tanh(1.05 * 1.1 * a) / 1.1;
-  return a;
-})();
+// The echo's peak over each time round it completes (from the FX: |left| + |right|, the level line's measure), the
+// newest last. Frozen, the display draws these: what the loop really did, round by round, its filters and
+// saturation and all, so a swell rises at the rate it really has and flattens where the loop holds.
+var ECHO_ROUNDS_SHOWN = 10;
+var echoRoundPeaks = [];
+function recordEchoRound(peak) {
+  if (!(peak >= 0)) {
+    error("2sl stab: the echo display got a round peak of " + peak + " (a wiring error): ignored\n");
+    return;
+  }
+  echoRoundPeaks.push(peak);
+  if (echoRoundPeaks.length > ECHO_ROUNDS_SHOWN) echoRoundPeaks.shift();
+}
+// Frozen, heights are in dB below the most the loop can carry: each side writes tanh(...) / 1.1 back, under 1 / 1.1,
+// so |left| + |right| stays under 2 / 1.1. ECHO_FROZEN_RANGE_DB below that is the bottom.
+var ECHO_LOOP_CEILING = 2 / 1.1;
+var ECHO_FROZEN_RANGE_DB = 48;
+function frozenRoundHeight(peak) {
+  var db = 20 * Math.log(Math.max(peak, 1e-9) / ECHO_LOOP_CEILING) / Math.LN10;
+  return Math.max(0, Math.min(1, 1 + db / ECHO_FROZEN_RANGE_DB));
+}
 
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
@@ -281,14 +296,16 @@ function echoView(w, h) {
   viewLabel("echo");
   var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
-  var top = 18, base = h - 8, n = 10, gap = (w - 20) / n;
+  var top = 18, base = h - 8, n = ECHO_ROUNDS_SHOWN, gap = (w - 20) / n;
   rect(6, top, 6, base - top, T.ink);                          // the stab
-  // frozen: the repeats from the loop's level now (the level line: both sides, so 2 x the loop's amplitude),
-  // each time round a little louder, to full height where saturation holds it
-  var amp = S.freeze ? Math.max(0.05, Math.min(1, S.level / (2 * FROZEN_LOOP_HOLD))) : 1;
+  // frozen: the loop's last rounds as the audio had them, oldest first, the round just finished on the right
+  var firstRound = n - echoRoundPeaks.length;                   // rounds not heard yet (just loaded) aren't drawn
+  var amp = 1;
   for (var i = 1; i <= n; i++) {                                // its repeats, darker each time round
-    if (S.freeze) amp = tanh(1.05 * 1.1 * amp * FROZEN_LOOP_HOLD) / 1.1 / FROZEN_LOOP_HOLD;
-    else amp *= fb;
+    if (S.freeze) {
+      if (i - 1 < firstRound) continue;
+      amp = frozenRoundHeight(echoRoundPeaks[i - 1 - firstRound]);
+    } else amp *= fb;
     var x = 6 + i * gap, bh = Math.max(1, (base - top) * amp);
     var col = S.freeze ? T.mint : mix(T.mint, T.rest, Math.min(1, i / (2 + S.dub * 8)));
     if (on) rect(x, base - bh, 6, bh, col);

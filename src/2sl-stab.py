@@ -206,7 +206,9 @@ if ECHO_LONGEST_MS * 1.031 * 1.0012 / 1000.0 >= ECHO_BUFFER_SECONDS - 0.01:
     raise SystemExit("2sl-stab.py: the echo buffer is shorter than the longest echo time")
 
 FX = GEN_SMOOTHING_FUNCTION + r"""
-// in1: the voices, mono. in2: Live's beat ramp (plugphasor~). out1/out2: left/right.
+// in1: the voices, mono. in2: Live's beat ramp (plugphasor~). out1/out2: left/right. out3: the echo's level (a
+// meter). out4: the echo's peak over its last whole time round, out5: how many rounds it has completed (the Echo
+// display draws the frozen loop from these).
 // soft clip: clean below 0.8, rounding off above (gen needs functions first)
 sclip(v) {
 	a = abs(v);
@@ -254,6 +256,7 @@ History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
 History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
 History lastpanic(0), elapsed(1e9), pressfade(0);
 History live_clock_weight(0);           // 0 = the pump runs on its own clock, 1 = on Live's beat
+History echo_round_elapsed(0), echo_round_peak_so_far(0), echo_round_peak(0), echo_rounds_completed(0);
 
 sr = samplerate;
 // Smoothing time constants in ms (each was a per-sample coefficient; the times are what it gave at 44.1 kHz).
@@ -362,6 +365,18 @@ gsm = gsm + (target_g - gsm) * pump_gain_glide;   // ~1 ms to 90%: no steps, eve
 
 lvl = max(abs(rl) + abs(rr), lvl * (1 - level_meter_fall));
 out3 = lvl;
+// The echo's peak over each time round (the left side's time, the longer, so a round holds both sides' repeat):
+// what the frozen loop really does round by round, filters, saturation and all, for the Echo display.
+echo_round_peak_so_far = max(echo_round_peak_so_far, abs(rl) + abs(rr));
+echo_round_elapsed = echo_round_elapsed + 1;
+if (echo_round_elapsed >= tl) {
+	echo_round_peak = echo_round_peak_so_far;
+	echo_round_peak_so_far = 0;
+	echo_round_elapsed = 0;
+	echo_rounds_completed = echo_rounds_completed + 1;
+}
+out4 = echo_round_peak;
+out5 = echo_rounds_completed;
 gain = dbtoa(volume) * 2;              // +6 dB over the old level; the soft clip catches overs
 out1 = sclip((x + rl * 1.2) * gsm * gain);
 out2 = sclip((x + rr * 1.2) * gsm * gain);
@@ -431,9 +446,9 @@ INFO = {
                    "those notes lit mint. With Machine on, the last stab the machine played. In orange on top: "
                    "In Key is on but Live's scale has under 5 notes, so chords use the fixed shapes."),
     "Echo view": ("Echo", "The stab (left) and its repeats, each lower by the feedback, mint fading as they go round "
-                  "(slower with more Dub). Outlines only while the echo is silent. Frozen: the loop swelling, each repeat "
-                  "a little louder (105% feedback, less what the loop's filters take) from its level now up to full "
-                  "height, where tape saturation holds it. "
+                  "(slower with more Dub). Outlines only while the echo is silent. Frozen: the loop's last ten time "
+                  "rounds as it really played them, the newest on the right: each round's peak, on a 48 dB scale up to "
+                  "the most the loop can carry. Rising while it swells, flat where tape saturation holds it. "
                   "A throw flashes an orange frame. The line along the bottom is the echo's level now."),
     "Pump view": ("Pump", "The output level over two beats at Live's tempo: each dip is a duck, mint while Depth "
                   "is above 0. The blue line is Live's position in the beat. Top right: Depth."),
@@ -651,7 +666,7 @@ wire(tgt_note_on, voice, 0, 3)
 wire(voice, alloc)  # busy state: a voice stays allocated until its release has faded
 
 mix = box("mc.mixdown~ 1 @autogain 0", rect=(30, 390, 170, 22), ins=2, outs=1, outtype=["multichannelsignal"])
-fx = box("gen~", rect=(30, 430, 120, 22), ins=2, outs=3, outtype=["signal", "signal", "signal"], patcher=gen_patcher(FX, 2, 3))
+fx = box("gen~", rect=(30, 430, 120, 22), ins=2, outs=5, outtype=["signal"] * 5, patcher=gen_patcher(FX, 2, 5))
 beat = box("plugphasor~", rect=(160, 400, 80, 22), ins=1, outs=2, outtype=["signal", ""])
 wire(beat, fx, 0, 1)
 out = box("plugout~", rect=(30, 470, 70, 22), ins=2, outs=2, outtype=["signal", "signal"])
@@ -965,6 +980,17 @@ v_echo = view("echo", C3, VIEW_Y, 184, VIEW_H, "play", info="Echo view")
 lvl_snap = box("snapshot~ 33", rect=(160, 470, 80, 22), ins=2, outs=1, outtype=["float"])
 wire(fx, lvl_snap, 2, 0)
 tell(lvl_snap, "level", v_echo)
+# each time round the echo completes (its count read every 33 ms), that round's peak: the frozen loop as it is
+rounds_snap = box("snapshot~ 33", rect=(160, 500, 80, 22), ins=2, outs=1, outtype=["float"])
+rounds_change = box("change", rect=(160, 525, 50, 22), ins=1, outs=3, outtype=["", "int", "int"])
+round_peak_snap = box("snapshot~", rect=(160, 575, 70, 22), ins=2, outs=1, outtype=["float"])
+wire(fx, rounds_snap, 4, 0)
+round_bang = box("t b", rect=(160, 550, 30, 22), ins=1, outs=1, outtype=["bang"])
+wire(rounds_snap, rounds_change)
+wire(rounds_change, round_bang)            # a number into snapshot~'s left inlet would switch its clock: a bang
+wire(round_bang, round_peak_snap)          # reads the newest vector, the one the count was read from
+wire(fx, round_peak_snap, 3, 0)
+tell(round_peak_snap, "roundpeak", v_echo)
 throw_btn = toggle("Throw", "Throw", C3, ROW_Y, 88, 15, "play", mode=0)
 wire(throw_btn, tthrow)
 throwmsg = box(cls="message", text="throw", rect=(300, 520, 45, 22), ins=2, outs=1)

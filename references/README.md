@@ -68,3 +68,7 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   "Signal cosine function (0-1 range)"; output: "The cosine of 2π times the input". The LFO is
   [phasor~] -> [cos~], the same cosine as the [cycle~] it replaces ("The default waveform is one cycle of a
   cosine wave", https://docs.cycling74.com/reference/cycle~), with the phase readable for the displays.
+- **snapshot~** (Max reference): https://docs.cycling74.com/reference/snapshot~
+  bang: "Reports the sample value in the most recently received signal vector at the offset specified by the
+  offset attribute." int in the left inlet: "Any non-zero value turns on interval-based reporting, 0 turns it off"
+  (float: the same). So the Echo display's round peak is read with a bang, never a number.
