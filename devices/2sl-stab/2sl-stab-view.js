@@ -58,8 +58,7 @@ var S = {
   name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
   level: 0, throwAt: 0, phase: 0,
-  tempo: 120,                       // Live's tempo (the pump), until Live reports it
-  lfophase: 0, lfophaseAt: 0        // the LFO's phase (0..1) as last read from the audio, and when
+  tempo: 120                        // Live's tempo (the pump), until Live reports it
 };
 var VIEW_DEFAULTS = {"echo": {"freeze": 0, "dub": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "sub": {"submode": 0}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
 (function () {
@@ -86,7 +85,7 @@ function anything() {
   else if (m === "held") S.held = String(a[0]);
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
-  else if (m === "lfophase") { S.lfophase = a[0]; S.lfophaseAt = now(); }
+  else if (m === "lfophase") recordLfoReading(a[0]);
   else if (m in S) S[m] = a[0];
   else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
@@ -400,14 +399,63 @@ function filterView(w, h) {
   curve(fc, T.mint, 2, false);
 }
 
-/** The LFO's phase `secondsAgo` before now: its phase as last read from the audio (snapshot~ of the LFO's
- *  phasor~, every 33 ms), carried on at its rate. The LFO itself is cos~ of that phase. */
-function lfoPhase(secondsAgo) {
-  var since = (now() - S.lfophaseAt) / 1000 - (secondsAgo || 0);
-  var phase = S.lfophase + S.lforate * since;
-  return phase - Math.floor(phase);
+// The LFO's phase as read from the audio (snapshot~ of its phasor~, every 33 ms), with when each reading came,
+// kept for the last few seconds: the LFO display draws its history from these, so a Rate change shows from where
+// it happened. Phases are stored unwrapped (whole cycles counted), so the phase between two readings is a straight
+// line between them, as the phasor~ runs at a steady rate. A ring of fixed arrays: nothing allocated per frame.
+var LFO_READINGS_KEPT = 128;              // 4.2 s of readings at one per 33 ms: the display shows 2 s
+var LFO_READINGS_STALE_MS = 250;          // no reading for this long: the audio is off, so the LFO is not running
+var lfoReadingPhase = new Array(LFO_READINGS_KEPT);   // unwrapped, in cycles
+var lfoReadingTime = new Array(LFO_READINGS_KEPT);    // ms (now())
+var lfoReadingsCount = 0, lfoNewestReading = -1;
+
+function recordLfoReading(phase) {
+  if (!(phase >= 0 && phase <= 1)) {
+    error("2sl stab: the " + MODE + " display got an LFO phase of " + phase + ", outside 0..1 (a wiring error): ignored\n");
+    return;
+  }
+  var time = now(), unwrapped = phase;
+  if (lfoReadingsCount > 0) {
+    var previousPhase = lfoReadingPhase[lfoNewestReading], previousTime = lfoReadingTime[lfoNewestReading];
+    var forward = phase - (previousPhase - Math.floor(previousPhase));
+    forward -= Math.floor(forward);                       // 0..1: how far the phasor moved, less whole cycles
+    // Whole cycles between readings: none at 33 ms and up to 12 Hz (0.4 of a cycle). After a longer gap (the UI
+    // held up), the current Rate says how many went by.
+    var wholeCycles = Math.max(0, Math.round(S.lforate * (time - previousTime) / 1000 - forward));
+    unwrapped = previousPhase + forward + wholeCycles;
+  }
+  lfoNewestReading = (lfoNewestReading + 1) % LFO_READINGS_KEPT;
+  lfoReadingPhase[lfoNewestReading] = unwrapped;
+  lfoReadingTime[lfoNewestReading] = time;
+  lfoReadingsCount = Math.min(lfoReadingsCount + 1, LFO_READINGS_KEPT);
 }
-function lfoNow() { return Math.cos(2 * Math.PI * lfoPhase(0)); }
+
+/** The LFO's unwrapped phase at `time` (ms), from the readings: between two readings, the line between them;
+ *  after the newest, carried on at the current Rate (it is at most a reading old), and held where it was if the
+ *  readings stopped (the audio is off and the phasor~ with it). Before the oldest reading: null, nothing known. */
+function lfoPhaseAt(time) {
+  if (lfoReadingsCount === 0) return null;
+  var newestTime = lfoReadingTime[lfoNewestReading];
+  if (time >= newestTime) {
+    var carried = Math.min(time, newestTime + LFO_READINGS_STALE_MS) - newestTime;
+    return lfoReadingPhase[lfoNewestReading] + S.lforate * carried / 1000;
+  }
+  // newest to oldest: the first reading at or before `time`, and the one after it
+  for (var back = 1; back < lfoReadingsCount; back++) {
+    var earlier = (lfoNewestReading - back + LFO_READINGS_KEPT) % LFO_READINGS_KEPT;
+    if (lfoReadingTime[earlier] > time) continue;
+    var later = (earlier + 1) % LFO_READINGS_KEPT;
+    var span = lfoReadingTime[later] - lfoReadingTime[earlier];
+    var along = span > 0 ? (time - lfoReadingTime[earlier]) / span : 1;
+    return lfoReadingPhase[earlier] + (lfoReadingPhase[later] - lfoReadingPhase[earlier]) * along;
+  }
+  return null;
+}
+/** The LFO now, as cos~ makes it from the phase (the DCO displays' PWM). Before any reading: phase 0. */
+function lfoNow() {
+  var phase = lfoPhaseAt(now());
+  return Math.cos(2 * Math.PI * (phase === null ? 0 : phase));
+}
 
 /** DCO 1 or 2 as the voice makes it (without its anti-aliasing): two cycles of DCO 1, and DCO 2 over the same
  *  time, so Semi shows as more or fewer cycles. Pulse is the voice's saw minus a saw shifted by the pulse width
@@ -472,12 +520,15 @@ function lfoView(w, h) {
   var top = 20, bot = h - 18, mid = (top + bot) / 2, amp = (bot - top) / 2;
   rgba(T.mint);
   mgraphics.set_line_width(2);
+  var drawingNow = now(), lineStarted = false;
   for (var x = 4; x <= w - 4; x++) {
     var secondsAgo = (w - 4 - x) / (w - 8) * 2;                      // the last two seconds, scrolling
-    var y = mid - amp * Math.cos(2 * Math.PI * lfoPhase(secondsAgo));
-    if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
+    var phase = lfoPhaseAt(drawingNow - secondsAgo * 1000);
+    if (phase === null) continue;                                     // before the first reading: nothing known
+    var y = mid - amp * Math.cos(2 * Math.PI * phase);
+    if (!lineStarted) { mgraphics.move_to(x, y); lineStarted = true; } else mgraphics.line_to(x, y);
   }
-  mgraphics.stroke();
+  if (lineStarted) mgraphics.stroke();
   var targets = [["pwm", S.pwm], ["vibrato", S.vib], ["filter", S.lfofilt]];
   var x0 = 4;
   for (var i = 0; i < targets.length; i++) {

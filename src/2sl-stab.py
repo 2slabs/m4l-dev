@@ -446,8 +446,8 @@ INFO = {
     "DCO2 view": ("DCO 2", "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, "
                   "so Semi shows as more or fewer cycles. Its pulse has PW's width and moves with PWM, as DCO 1's. "
                   "Top right: the wave, pulse width (on pulse), Semi and Fine."),
-    "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint, in step with the sound (read from the LFO "
-                 "itself) and drawn at its current rate; its rate top right. Along the bottom, where it goes: pwm, "
+    "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint, as the sound had it (drawn from readings of "
+                 "the LFO itself, so a Rate change shows where it happened); its rate top right. Along the bottom, where it goes: pwm, "
                  "vibrato, filter, bright with the amount when on, dim when off."),
     "Filter view": ("Filter", "The low-pass response from 20 Hz to 20 kHz in mint, with the resonance peak, at the "
                     "cutoff (top right, Tone included). Grey: how far the envelope opens it at full velocity."),

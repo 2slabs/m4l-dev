@@ -5266,7 +5266,7 @@
 					],
 					"border": 0,
 					"annotation_name": "LFO",
-					"annotation": "The LFO's last two seconds, scrolling, in mint, in step with the sound (read from the LFO itself) and drawn at its current rate; its rate top right. Along the bottom, where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off.",
+					"annotation": "The LFO's last two seconds, scrolling, in mint, as the sound had it (drawn from readings of the LFO itself, so a Rate change shows where it happened); its rate top right. Along the bottom, where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off.",
 					"varname": "view_lfo",
 					"hidden": 1
 				}
