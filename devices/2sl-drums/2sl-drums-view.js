@@ -119,15 +119,15 @@ function viewLabel(str) { text(str, 4, 12, T.label); }
 /** Right-aligned text on a display's top line. */
 function viewInfo(str, w, c) { text(str, w - measure(str) - 4, 12, c || T.label); }
 
-var LAYOUT = {"subtitle": 420, "pages": [{"rules": [304], "labels": [["preset", 204, 15, "label"], ["out", 760, 15, "label"], ["kit", 316, 55, "label"], ["from", 316, 82, "label"], ["x", 370, 55, "label"], ["y", 370, 82, "label"], ["density", 370, 109, "label"], ["hits", 424, 55, "label"], ["rotation", 424, 82, "label"], ["steps", 424, 109, "label"], ["density", 478, 55, "label"], ["accent", 478, 82, "label"], ["seed", 478, 109, "label"], ["steps", 532, 55, "label"], ["no", 586, 55, "hint"], ["settings", 586, 68, "hint"], ["amount", 640, 55, "label"], ["amount", 694, 55, "label"], ["steps", 748, 55, "label"], ["density", 748, 82, "label"], ["amount", 802, 55, "label"], ["every", 856, 55, "label"], ["offset", 856, 82, "label"], ["swing", 836, 144, "label"]]}, {"rules": [348, 704], "labels": [["preset", 204, 15, "label"], ["out", 760, 15, "label"]]}], "subtitle_text": "909-style drum machine", "version": "0.2.0", "link_chip_text": "2sl drums"};
+var LAYOUT = {"subtitle": 420, "pages": [{"rules": [304, 488], "labels": [["preset", 204, 15, "label"], ["out", 612, 15, "label"], ["swing", 652, 110, "label"]]}, {"rules": [348, 704], "labels": [["preset", 204, 15, "label"], ["out", 612, 15, "label"]]}], "subtitle_text": "909-style drum machine", "version": "0.3.0", "link_chip_text": "2sl drums"};
 
 // ---- the device's displays --------------------------------------------------------------------
 // The device code defines: DEVICE_STATE (what its displays draw from, merged into S), deviceMessage(m, args)
 // -> true when it took the message, VIEW_PAINTERS {mode: function (w, h)}, VIEW_CLICKS {mode: function (x, y,
 // modifiers)} and ANIMATED_MODES (modes redrawn every 33 ms).
 // 2sl drums' displays (inserted into the kit view template by src/2sl-drums.py):
-//   grid    the pattern: a row per voice, 16 steps; click a step to edit it, a voice's name to select its row
-//   status  what Run will do, and where the history is
+//   grid    the pattern: a row per voice, 16 steps, the rows Voice picks lit; click a step to edit it
+//   status  voice, function, Seed; the settings; what is shown (or a warning); where the history is
 //   mix     each voice's level, flashing on its hits, dimmed when the mixer's mute / solo silence it
 //   bd sd rs cp hats rd   each voice's envelope as the voice makes it (src/2sl_drums_dsp.py), flashing on hits
 var VOICE_NAMES = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];
@@ -138,7 +138,8 @@ var GRADE_CHARACTERS = ".oxX";
 var VOICE_OF_MODE = {"bd": [0], "sd": [1], "rs": [2], "cp": [3], "hats": [4, 5], "rd": [6]};         // a voice display's mode -> the voices (VOICES order) it flashes for
 
 var DEVICE_STATE = {
-  rows: [], selected: [], pos: -1, flash: {}, next: "", historyAt: 0, historyLength: 0, historyLabel: "",
+  rows: [], chosen: VOICE_NAMES.length, pos: -1, flash: {}, head: "", settings: "", note: "", noteLoud: 0,
+  historyAt: 0, historyLength: 0, historyLabel: "",
   hitAt: {}, hitVelocity: {}
 };
 (function () {
@@ -151,9 +152,11 @@ var ANIMATED_MODES = ["grid", "mix", "bd", "sd", "rs", "cp", "hats", "rd"];
 
 function deviceMessage(m, a) {
   if (m === "rows") { S.rows = a.map(String); return true; }
-  if (m === "selected") { S.selected = a; return true; }
+  if (m === "chosen") { S.chosen = a[0]; return true; }                // a voice, or VOICE_NAMES.length: all
   if (m === "pos") { S.pos = a[0]; return true; }
-  if (m === "next") { S.next = a.join(" "); return true; }
+  if (m === "head") { S.head = a.join(" "); return true; }
+  if (m === "settings") { S.settings = a.join(" "); return true; }
+  if (m === "note") { S.note = String(a[0]); S.noteLoud = a[1] ? 1 : 0; return true; }
   if (m === "history") { S.historyAt = a[0]; S.historyLength = a[1]; S.historyLabel = a.slice(2).join(" "); return true; }
   if (m === "hit") {
     if (MODE === "grid") S.flash[a[0] * STEPS + a[1]] = now();    // hit voice step
@@ -174,8 +177,8 @@ function gridGeometry(w, h) {
 function gridView(w, h) {
   var g = gridGeometry(w, h);
   for (var v = 0; v < VOICE_NAMES.length; v++) {
-    var y = 1 + v * g.rowH, row = S.rows[v] || "", chosen = S.selected[v] > 0;
-    // a selected row's name is a lit chip: Run changes it
+    var y = 1 + v * g.rowH, row = S.rows[v] || "", chosen = S.chosen === v || S.chosen === VOICE_NAMES.length;
+    // the rows Voice picks: their names are lit chips
     if (chosen) chip(VOICE_NAMES[v], 1, y + Math.floor((g.rowH - 2 - 15) / 2), T.inverse, T.ink);
     else text(VOICE_NAMES[v], 5, y + Math.floor((g.rowH - 2 - 15) / 2) + 12, T.label);
     for (var s = 0; s < STEPS; s++) {
@@ -195,8 +198,7 @@ function gridClick(x, y, modifiers) {
   var g = gridGeometry(mgraphics.size[0], mgraphics.size[1]);
   var v = Math.floor((y - 1) / g.rowH);
   if (v < 0 || v >= VOICE_NAMES.length) return;
-  if (x < g.stepsX) outlet(0, "select", v, modifiers.shift ? 1 : 0);
-  else if (x < g.stepsX + STEPS * g.cellW) {
+  if (x >= g.stepsX && x < g.stepsX + STEPS * g.cellW) {
     var s = Math.max(0, Math.min(STEPS - 1, Math.floor((x - g.stepsX) / g.cellW)));
     if (modifiers.shift) outlet(0, "edit", v, s, 1);                     // shift-click: a ghost
     else outlet(0, "edit", v, s);
@@ -212,9 +214,11 @@ function fitted(str, w) {
   return str + "..";
 }
 function statusView(w, h) {
-  text(fitted("run: " + S.next, w - 8), 4, 13, T.ink);
-  var where = S.historyLength ? S.historyAt + "/" + S.historyLength + "  " : "";
-  text(fitted(where + S.historyLabel, w - 8), 4, 28, T.label);
+  text(fitted(S.head, w - 8), 4, 13, T.ink);
+  text(fitted(S.settings, w - 8), 4, 28, T.ink);
+  text(fitted(S.note, w - 8), 4, 43, S.noteLoud ? T.now : T.label);
+  var where = S.historyLength ? "history " + S.historyAt + "/" + S.historyLength + "  " : "";
+  text(fitted(where + S.historyLabel, w - 8), 4, 58, T.label);
 }
 
 // ---- mix -------------------------------------------------------------------------------------------------------

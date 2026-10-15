@@ -8,8 +8,8 @@ Needs references/drums/mirror/patterns/grids_resources.cc (run references/drums/
 pattern map is read from it at build time and embedded in the device's brain.
 
 Signal flow:
-  Live's transport (16th clock) -> js 2sl-drums.js (the pattern engine: the functions, Run / Undo and the history,
-  playback with the 909's shuffle) -> gen~ (seven voices: BD SD RS CP CH/OH RD, and the mixer's mute / solo)
+  Live's transport (16th clock) -> js 2sl-drums.js (the pattern engine: the functions on Voice / Function / Seed,
+  applied live, Undo and the history, playback with the 909's shuffle) -> gen~ (seven voices: BD SD RS CP CH/OH RD, and the mixer's mute / solo)
   -> plugout~. MIDI notes on the track also play the voices (GM drum notes).
 
 The functions (generators and modifiers) are written once, in src/2sl-drums-functions.js: this script reads their
@@ -37,7 +37,7 @@ except genexpr.GenExprError as problem:
     raise kit.BuildError(f"2sl-drums.py: the gen~ voices (src/2sl_drums_dsp.py KIT): {problem}")
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DEVICE_DIRECTORY = os.path.join(ROOT, "devices", "2sl-drums")
 FUNCTIONS_SOURCE = os.path.join(HERE, "2sl-drums-functions.js")
 GRIDS_RESOURCES = os.path.join(ROOT, "references", "drums", "mirror", "patterns", "grids_resources.cc")
@@ -154,12 +154,14 @@ FUNCTIONS_CODE = open(FUNCTIONS_SOURCE, encoding="utf-8").read()
 
 
 def read_function_registry():
-    """FUNCTIONS' entries without their code: [{name, kind, info, needs, params: [{name, min, max, initial, unit,
-    info, roll}]}]. Evaluated as ES5 (Duktape) with the data the registry refers to; the script checks itself."""
+    """FUNCTIONS' entries without their code: [{name, kind, info, params: [{name, min, max, initial, unit, info}],
+    order, variants (how many Seed walks), initial_seed (Seed for the initial settings)}]. Evaluated as ES5
+    (Duktape) with the data the registry refers to; the script checks itself."""
     prefix = (f"var DEVICE_NAME = {json.dumps('2sl drums')}; var VOICES = {json.dumps(VOICES)}; "
               f"var CANNED_KITS = {json.dumps(CANNED_KITS)}; var GRIDS_NODES = []; var GRIDS_DRUM_MAP = [];\n")
     extract = ("\nJSON.stringify(FUNCTIONS.map(function (f) { return { name: f.name, kind: f.kind, info: f.info, "
-               "needs: f.needs || [], params: f.params }; }))")
+               "params: f.params, order: f.order, variants: variantCount(f), initial_seed: seedOfPosition(f, "
+               "variantPosition(f, f.params.map(function (p) { return p.initial; }))) }; }))")
     try:
         return json.loads(es5.evaluate(prefix + FUNCTIONS_CODE + extract))
     except es5.EvaluationError as problem:
@@ -169,6 +171,9 @@ def read_function_registry():
 FUNCTION_REGISTRY = read_function_registry()
 FUNCTION_NAMES = [entry["name"] for entry in FUNCTION_REGISTRY]
 UNIT_STYLES = {"int": 0, "%": 5}               # Live's parameter_unitstyle: Int, Percent
+VOICE_CHOICES = [v["name"] for v in VOICES] + ["all"]     # Voice: one row, or all (the last)
+INITIAL_VOICE = len(VOICES)                      # all
+INITIAL_FUNCTION = 0
 
 
 def function_parameter_name(entry, param):
@@ -181,11 +186,12 @@ INFO = {
     # views
     "Link view": ("2sl.to", "Opens 2sl.to in your browser."),
     "Grid view": ("Pattern", "The pattern: a row per voice, 16 steps. Click a step: rest, hit, accent (bright, with a "
-                  "bar on top); shift-click: a ghost (dim). Click a voice's name to select its row (Run changes only "
-                  "the selected rows); shift-click to select several; click the only selected row again to select "
-                  "every row. Blue outline: the step playing."),
-    "Status view": ("Status", "Top: what Run will do (the lit function, its settings, the selected rows). Bottom: "
-                    "where you are in the history (Undo steps back) and what made this pattern."),
+                  "bar on top); shift-click: a ghost (dim). The lit names are the rows Voice picks. Blue outline: the "
+                  "step playing. While Seed or a setting is being turned, this is the live result."),
+    "Status view": ("Status", "Line 1: Voice, Function and where Seed is in the function's variants. Line 2: the "
+                    "function's settings. Line 3: what is shown (the base, or live), or a warning in blue (open hh "
+                    "on a row other than oh, a row grids has nothing for). Line 4: where you are in the history "
+                    "(Undo steps back) and what made the pattern."),
     "Mix view": ("Mix", "Each voice's level as a bar, flashing as it plays; dimmed when it doesn't sound (muted, or "
                  "another voice is soloed)."),
     "BD view": ("BD", "The kick's level (mint) and pitch (grey) over its decay, as the voice makes them. Top right: "
@@ -203,19 +209,25 @@ INFO = {
     "Volume": ("Volume", "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs."),
     "Stop": ("Stop", "Panic: fades every voice out in 20 ms. Live's transport stopping doesn't run it."),
     # pattern
-    "Function": ("Function", "The function Run applies, one at a time. Generators make new rows: " +
+    "Voice": ("Voice", "The row the function changes: " + ", ".join(v["name"] for v in VOICES) + ", or all (the "
+              "last). On all, generators make the whole kit and modifiers change every row. Moving Voice commits "
+              "what is shown as one history step."),
+    "Function": ("Function", "The function Seed and the settings walk, applied live. Generators make new rows: " +
                  ", ".join(e["name"] for e in FUNCTION_REGISTRY if e["kind"] == "generator") + ". Modifiers change "
                  "the rows there are: " + ", ".join(e["name"] for e in FUNCTION_REGISTRY if e["kind"] == "modifier") +
-                 ". Its settings are under its name; their Info says what it does. " +
-                 " ".join(f"{e['name'].capitalize()}: {e['info']}" for e in FUNCTION_REGISTRY if not e["params"])),
-    "Run": ("Run", "Applies the lit function to the selected rows (the others stay) and makes the next pattern in "
-            "the history. Run after Undo drops the patterns undone."),
-    "Undo": ("Undo", f"Steps back to the pattern before. The last {HISTORY_LIMIT} patterns are kept; the history isn't "
-             "saved with the set (the pattern playing is)."),
+                 ". Only its own settings show; each remembers its own. Moving Function commits what is shown as one "
+                 "history step."),
+    "Seed": ("Seed", "Walks every combination of the function's settings (its variants), the finest setting changing "
+             "fastest, neighbours one step apart; turning it moves the settings, turning a setting moves it. Shown at "
+             "once: the first turn after a commit takes the pattern as it is as the base; Undo brings the base back. "
+             "0-100% of the way through this function's variants (the status line shows which)."),
+    "Undo": ("Undo", f"Drops what Seed and the settings show that isn't committed (back to the base, the settings "
+             f"back where they were). Else steps back one commit (a Voice or Function move, or a hand edit). The last "
+             f"{HISTORY_LIMIT} patterns are kept; the history isn't saved with the set (the pattern playing is)."),
     "Swing": ("Swing", "The 909's shuffle, 1 (none) to 7: every second 16th later, 50% to 75% of the 8th. "
               "Sample-accurate in the voices."),
     # kit
-    "Voice": ("Voice", "Which voice's sound controls show: bd, sd, rs, cp, the hats (ch and oh) or rd."),
+    "Kit Voice": ("Kit Voice", "Which voice's sound controls show: bd, sd, rs, cp, the hats (ch and oh) or rd."),
     "Accent": ("Accent", "How much quieter a normal hit (and a ghost) is than an accent, like the 909's Total Accent. "
                "0 = all the same. Default 70%."),
 }
@@ -262,37 +274,45 @@ BASE = {"Accent": 70, "Volume": 0,
         "SD Tune": 180, "SD Tone": 160, "SD Snappy": 60, "SD Bits": 16, "RS Bits": 16, "CP Bits": 16,
         "Hat Tune": 1, "Hat Bits": 6, "CH Decay": 60, "OH Decay": 500, "RD Tune": 1, "RD Bits": 6}
 
-# ---- layout: 169 px high on a 4 px grid, as wide as the pattern page needs --------------------------------------
+# ---- layout: 169 px high on a 4 px grid, as wide as the widest page (and the header) needs --------------------
 PAGE_NAMES = ["pattern", "kit"]
+DIAL_STEP = 56
+SETTINGS_SHOWN = 3                              # setting dials a function can show (one row of them)
 STEP_W, LABEL_W = 16, 24                        # the grid: a 16 px column per step after the voice names
 P_GRID, P_GRID_W = 12, LABEL_W + 16 * STEP_W + 2
-P_FUNCTIONS = P_GRID + P_GRID_W + 20            # the functions: a column per function under the Function tab
-FUNCTION_COLUMN_W = 54                          # the kit's live.tab rule: 6 px a character + 12 ("open hh", "reverse")
-P_FUNCTIONS_W = FUNCTION_COLUMN_W * len(FUNCTION_REGISTRY)
-W = P_FUNCTIONS + P_FUNCTIONS_W + 12
-SLOT_LABEL_BASELINE, SLOT_NUMBOX_Y, SLOT_PITCH = 55, 58, 27     # a setting: its label, then its number box
-NUMBOX_W = 50
-BOTTOM_Y = 132                                  # Run, Undo, the status line, Swing
-longest_function_name = max(len(n) for n in FUNCTION_NAMES)
-if 6 * longest_function_name + 12 > FUNCTION_COLUMN_W:
-    raise kit.BuildError(f"2sl-drums.py: a function name of {longest_function_name} characters doesn't fit the "
-                         f"Function tab's {FUNCTION_COLUMN_W} px columns: shorten it or widen them")
+P_KNOBS = P_GRID + P_GRID_W + 20                # Voice, Function, Seed; then the function's settings
+P_SETTINGS = P_KNOBS + 3 * DIAL_STEP + 12
+PATTERN_PAGE_W = P_SETTINGS + (SETTINGS_SHOWN - 1) * DIAL_STEP + kit.DIAL_WIDTH + 12
 for entry in FUNCTION_REGISTRY:
-    if len(entry["params"]) > 3:
-        raise kit.BuildError(f"2sl-drums.py: {entry['name']} has {len(entry['params'])} settings; a column holds 3")
+    if len(entry["params"]) > SETTINGS_SHOWN:
+        raise kit.BuildError(f"2sl-drums.py: {entry['name']} has {len(entry['params'])} settings; the pattern page "
+                             f"shows {SETTINGS_SHOWN}")
     for param in entry["params"]:
-        if 6 * len(param["name"]) > FUNCTION_COLUMN_W - 4:
-            raise kit.BuildError(f"2sl-drums.py: {entry['name']}'s setting name {param['name']!r} is too long for its column")
+        if 6 * len(param["name"]) > kit.DIAL_WIDTH + 8:
+            raise kit.BuildError(f"2sl-drums.py: {entry['name']}'s setting name {param['name']!r} is too long for a dial")
+# the kit page: a voice's sound (room for the BD's six dials) | the mixer | Accent
+K_VOICE, K_VOICE_W = 12, 5 * DIAL_STEP + kit.DIAL_WIDTH
+K_MIX = K_VOICE + K_VOICE_W + 24
+STRIP_W = 48
+K_MIX_W = (len(VOICES) - 1) * STRIP_W + kit.DIAL_WIDTH
+K_ACCENT = K_MIX + K_MIX_W + 24
+KIT_PAGE_W = K_ACCENT + kit.DIAL_WIDTH + 12
+# the header: the subtitle (drawn by the chrome, from x 420) must end before "out", 160 px from the right edge
+SUBTITLE = "909-style drum machine"
+SUBTITLE_X = 420
+HEADER_W = SUBTITLE_X + 6 * len(f"{SUBTITLE}  v{VERSION}") + 12 + 160
+W = max(PATTERN_PAGE_W, KIT_PAGE_W, HEADER_W)
+W += (-W) % 4
 
 patch = kit.DevicePatchBuilder(device_name="2sl drums", script_name="2sl-drums", version=VERSION,
-                               subtitle="909-style drum machine", page_names=PAGE_NAMES, info=INFO, base=BASE,
+                               subtitle=SUBTITLE, page_names=PAGE_NAMES, info=INFO, base=BASE,
                                link_chip_text="2sl drums", device_width=W)
 VIEW_Y, VIEW_H, ROW_Y, DIAL_Y = kit.VIEW_Y, kit.VIEW_H, kit.ROW_Y, kit.DIAL_Y
 
 # ---- the engine, the voices, the output ----------------------------------------------------------------------
 midi_in = patch.box("midiin", rect=(30, 30, 50, 22), ins=1, outs=1, outtype=["int"])
 midi_parse = patch.box("midiparse", rect=(30, 60, 90, 22), ins=1, outs=8)
-brain = patch.box("js 2sl-drums.js", rect=(30, 120, 110, 22), ins=2, outs=5)
+brain = patch.box("js 2sl-drums.js", rect=(30, 120, 110, 22), ins=2, outs=6)
 patch.wire(midi_in, midi_parse)
 patch.wire(midi_parse, brain)
 voices = patch.gen_box(dsp.KIT, 1, 2, rect=(30, 350, 160, 22))
@@ -317,7 +337,7 @@ patch.wire(stop_order, panic_counter, 0, 0)
 patch.wire(panic_counter, panic_message)
 patch.wire(panic_message, voices)
 
-# ---- stored with the set: two hidden values per voice (steps 1-8, 9-16; 2 bits a step) and the row selection ----
+# ---- stored with the set: two hidden values per voice (steps 1-8, 9-16; 2 bits a step) ---------------------------
 store_route_names = []
 for voice_id, row in zip(VOICE_IDS, INITIAL_PATTERN):
     grades = [GRADE_CHARACTERS.index(c) for c in row]
@@ -326,61 +346,64 @@ for voice_id, row in zip(VOICE_IDS, INITIAL_PATTERN):
         stored = patch.stored(f"steps_{voice_id}_{name}", value)
         patch.tell(stored, f"steps_{voice_id}_{name}", brain, 1)
         store_route_names.append((f"steps_{voice_id}_{name}", stored))
-stored_selection = patch.stored("selected", (1 << len(VOICES)) - 1)      # every row selected
-patch.tell(stored_selection, "selected", brain, 1)
-store_route_names.append(("selected", stored_selection))
 store_route = patch.box("route " + " ".join(n for n, _ in store_route_names), rect=(1100, 120, 600, 22), ins=1,
                         outs=len(store_route_names) + 1)
 patch.wire(brain, store_route, 4, 0)
 for outlet_index, (_, stored) in enumerate(store_route_names):
     patch.wire(store_route, stored, outlet_index, 0)
 
-# ================= PATTERN: the grid | the functions, Run, Undo, the status line, Swing =================
+# ================= PATTERN: the grid | the status line, Undo, Swing; Voice, Function, Seed, the settings ============
 v_grid = patch.view("grid", P_GRID, VIEW_Y, P_GRID_W, kit.DEVICE_HEIGHT - 4 - VIEW_Y, "pattern", info="Grid view")
 patch.wire(brain, v_grid, 1, 0)
-patch.wire(v_grid, brain, 0, 1)                 # clicks: edit, select
-
-function_tab = patch.tabs("Function", "Function", FUNCTION_NAMES, P_FUNCTIONS, VIEW_Y, P_FUNCTIONS_W, "pattern",
-                          initial_outside_presets=0)
-patch.tell(function_tab, "function", brain, 1)
-setting_labels = []
-for function_index, entry in enumerate(FUNCTION_REGISTRY):
-    column_x = P_FUNCTIONS + function_index * FUNCTION_COLUMN_W + (FUNCTION_COLUMN_W - NUMBOX_W) // 2
-    for param_index, param in enumerate(entry["params"]):
-        integer = param["max"] - param["min"] <= 255
-        patch.numbox(function_parameter_name(entry, param), param["name"].capitalize(), brain,
-                     f"param {function_index} {param_index}", param["min"], param["max"], UNIT_STYLES[param["unit"]],
-                     column_x, SLOT_NUMBOX_Y + param_index * SLOT_PITCH, NUMBOX_W, "pattern", integer=integer,
-                     inlet=1, initial_outside_presets=param["initial"])
-        setting_labels.append([param["name"], column_x, SLOT_LABEL_BASELINE + param_index * SLOT_PITCH, "label"])
-    if not entry["params"]:
-        setting_labels.append(["no", column_x, SLOT_LABEL_BASELINE, "hint"])
-        setting_labels.append(["settings", column_x, SLOT_LABEL_BASELINE + 13, "hint"])
-
-run_button = patch.toggle("Run", "Run", P_FUNCTIONS, BOTTOM_Y, 48, 15, "pattern", mode=0)
-undo_button = patch.toggle("Undo", "Undo", P_FUNCTIONS, BOTTOM_Y + 18, 48, 15, "pattern", mode=0)
-# a press goes straight to its message (as 2sl stab's buttons do)
-for button, message in ((run_button, "run"), (undo_button, "undo")):
-    button_message = patch.box(cls="message", text=message, rect=(1100, 300 + 2 * len(patch.boxes), 70, 22), ins=2, outs=1)
-    patch.wire(button, button_message)
-    patch.wire(button_message, brain, 0, 1)
-SWING_W = 72
-swing_x = P_FUNCTIONS + P_FUNCTIONS_W - SWING_W
-swing_items = [f"{level + 1}: {percent:.0f}%" for level, percent in enumerate(SWING_PERCENT)]
-swing_menu = patch.menu("Swing", "Swing", swing_items, swing_x, BOTTOM_Y + 18, SWING_W, "pattern",
-                        initial_outside_presets=0)
-patch.tell(swing_menu, "swing", brain, 1)
-status_x = P_FUNCTIONS + 56
-v_status = patch.view("status", status_x, BOTTOM_Y, swing_x - 8 - status_x, 33, "pattern", info="Status view")
+patch.wire(v_grid, brain, 0, 1)                 # clicks: edit
+v_status = patch.view("status", P_KNOBS, VIEW_Y, W - 12 - P_KNOBS, VIEW_H, "pattern", info="Status view")
 patch.wire(brain, v_status, 2, 0)
 
+
+patch.dial("Voice", "Voice", brain, "voice", 0, 0, 0, P_KNOBS, DIAL_Y, "pattern", items=VOICE_CHOICES, inlet=1,
+           initial_outside_presets=INITIAL_VOICE)
+function_dial = patch.dial("Function", "Function", brain, "function", 0, 0, 0, P_KNOBS + DIAL_STEP, DIAL_Y, "pattern",
+                           items=FUNCTION_NAMES, inlet=1, initial_outside_presets=INITIAL_FUNCTION)
+patch.groups_selected_by(function_dial, len(FUNCTION_REGISTRY), "pattern")
+# Seed: a float, 0-100% of the way through the active function's variants (Live's Int type holds 256 values; the
+# functions have up to millions, and one parameter serves every function: the brain scales it)
+seed_dial = patch.dial("Seed", "Seed", brain, "seed", 0, 100, UNIT_STYLES["%"], P_KNOBS + 2 * DIAL_STEP, DIAL_Y,
+                       "pattern", inlet=1,
+                       initial_outside_presets=FUNCTION_REGISTRY[INITIAL_FUNCTION]["initial_seed"])
+# the brain sets Seed and the settings (outlet 5: `<scripting name> value`); each echoes back, which it ignores
+parameter_targets = [(kit.varname_for("Seed"), seed_dial)]
+setting_parameters = []
+for function_index, entry in enumerate(FUNCTION_REGISTRY):
+    varnames = []
+    for param_index, param in enumerate(entry["params"]):
+        name = function_parameter_name(entry, param)
+        setting_dial = patch.dial(name, param["name"].capitalize(), brain, f"param {function_index} {param_index}",
+                                  param["min"], param["max"], UNIT_STYLES[param["unit"]],
+                                  P_SETTINGS + param_index * DIAL_STEP, DIAL_Y, "pattern",
+                                  integer=param["max"] - param["min"] <= 255, inlet=1,
+                                  initial_outside_presets=param["initial"], group=("function", function_index))
+        varnames.append(kit.varname_for(name))
+        parameter_targets.append((kit.varname_for(name), setting_dial))
+    setting_parameters.append(varnames)
+parameter_route = patch.box("route " + " ".join(n for n, _ in parameter_targets), rect=(1100, 160, 900, 22), ins=1,
+                            outs=len(parameter_targets) + 1)
+patch.wire(brain, parameter_route, 5, 0)
+for outlet_index, (_, target_dial) in enumerate(parameter_targets):
+    patch.wire(parameter_route, target_dial, outlet_index, 0)
+
+undo_button = patch.toggle("Undo", "Undo", P_KNOBS, ROW_Y, 48, 15, "pattern", mode=0)
+# a press goes straight to its message (as 2sl stab's buttons do)
+undo_message = patch.box(cls="message", text="undo", rect=(1100, 300, 70, 22), ins=2, outs=1)
+patch.wire(undo_button, undo_message)
+patch.wire(undo_message, brain, 0, 1)
+SWING_W = 72
+swing_x = W - 12 - SWING_W
+swing_items = [f"{level + 1}: {percent:.0f}%" for level, percent in enumerate(SWING_PERCENT)]
+swing_menu = patch.menu("Swing", "Swing", swing_items, swing_x, ROW_Y, SWING_W, "pattern",
+                        initial_outside_presets=0)
+patch.tell(swing_menu, "swing", brain, 1)
+
 # ================= KIT: a voice's sound (picked by Voice) | the mixer =================
-DIAL_STEP = 56
-K_VOICE, K_VOICE_W = 12, 5 * DIAL_STEP + kit.DIAL_WIDTH          # room for the BD's six dials
-K_MIX = K_VOICE + K_VOICE_W + 24
-STRIP_W = 48
-K_MIX_W = (len(VOICES) - 1) * STRIP_W + kit.DIAL_WIDTH
-K_ACCENT = K_MIX + K_MIX_W + 24
 VOICE_SECTIONS = [  # (Voice button, display mode, Info key, dials: (name, short, message, min, max, unit, exponent, scale))
     ("bd", "bd", "BD view", [("BD Tune", "Tune", "bd_tune", 30, 90, 3, 1.0, 1.0),
                              ("BD Sweep", "Sweep", "bd_sweep", 0, 100, 5, 1.0, 0.01),
@@ -403,11 +426,11 @@ VOICE_SECTIONS = [  # (Voice button, display mode, Info key, dials: (name, short
 ]
 # the voices each section's display flashes for (the hats section is CH and OH, one voice on the 909)
 VOICES_OF_SECTION = {mode: (["ch", "oh"] if mode == "hats" else [mode]) for _, mode, _, _ in VOICE_SECTIONS}
-voice_selector = patch.group_selector("Voice", "Voice", [section[0] for section in VOICE_SECTIONS], K_VOICE, ROW_Y,
+voice_selector = patch.group_selector("Kit Voice", "Voice", [section[0] for section in VOICE_SECTIONS], K_VOICE, ROW_Y,
                                       K_VOICE_W, "kit")
 voice_views = []
 for group_index, (button, mode, info_key, dials) in enumerate(VOICE_SECTIONS):
-    group = ("voice", group_index)
+    group = ("kit_voice", group_index)
     voice_view = patch.view(mode, K_VOICE, VIEW_Y, K_VOICE_W, VIEW_H, "kit", info=info_key, group=group)
     voice_views.append(voice_view)
     for index, (name, short, message, minimum, maximum, unit, exponent, scale) in enumerate(dials):
@@ -432,10 +455,10 @@ for flashing_view in voice_views + [v_mix]:
 # the chrome: rules between sections, labels and hints (text, x, baseline, kind)
 HEADER_LABELS = [["preset", patch.header_preset_x - 40, 15, "label"], ["out", patch.header_volume_x - 24, 15, "label"]]
 LAYOUT = {
-    "subtitle": 420,
+    "subtitle": SUBTITLE_X,
     "pages": [
-        {"rules": [P_FUNCTIONS - 10],
-         "labels": HEADER_LABELS + setting_labels + [["swing", swing_x, BOTTOM_Y + 12, "label"]]},
+        {"rules": [P_KNOBS - 10, P_SETTINGS - 6],
+         "labels": HEADER_LABELS + [["swing", swing_x - 36, ROW_Y + 12, "label"]]},
         {"rules": [K_MIX - 12, K_ACCENT - 12],
          "labels": HEADER_LABELS},
     ],
@@ -454,6 +477,8 @@ brain_js = patch.fill_template(brain_template, {
     "/*GRIDS_NODES*/": json.dumps(GRIDS_NODES, separators=(",", ":")), "/*GRIDS_DRUM_MAP*/": json.dumps(GRIDS_DRUM_MAP),
     "/*SWING_PERCENT*/": json.dumps(SWING_PERCENT), "/*GRADE_VELOCITY*/": json.dumps(GRADE_VELOCITY),
     "/*INITIAL_PATTERN*/": json.dumps(INITIAL_PATTERN), "/*HISTORY_LIMIT*/": str(HISTORY_LIMIT),
+    "/*INITIAL_VOICE*/": str(INITIAL_VOICE), "/*INITIAL_FUNCTION*/": str(INITIAL_FUNCTION),
+    "/*SEED_PARAMETER*/": json.dumps(kit.varname_for("Seed")), "/*SETTING_PARAMETERS*/": json.dumps(setting_parameters),
     "/*FUNCTIONS*/": FUNCTIONS_CODE.strip(), "/*KIT_CLOCK*/": clock_snippet.strip()}, "the brain template")
 VIEW_CODE = open(os.path.join(HERE, "2sl-drums-view.template.js")).read()
 VIEW_CODE = patch.fill_template(VIEW_CODE, {"/*VOICE_NAMES*/": json.dumps([v["name"] for v in VOICES]),

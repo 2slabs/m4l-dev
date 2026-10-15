@@ -16,7 +16,7 @@
 			900.0
 		],
 		"openinpresentation": 1,
-		"devicewidth": 920.0,
+		"devicewidth": 772.0,
 		"boxes": [
 			{
 				"box": {
@@ -66,7 +66,7 @@
 					"id": "obj-3",
 					"maxclass": "newobj",
 					"numinlets": 2,
-					"numoutlets": 5,
+					"numoutlets": 6,
 					"patching_rect": [
 						30.0,
 						120.0,
@@ -75,6 +75,7 @@
 					],
 					"text": "js 2sl-drums.js",
 					"outlettype": [
+						"",
 						"",
 						"",
 						"",
@@ -226,7 +227,7 @@
 					"patching_rect": [
 						1500.0,
 						1000.0,
-						920.0,
+						772.0,
 						169.0
 					],
 					"outlettype": [
@@ -240,7 +241,7 @@
 					"presentation_rect": [
 						0.0,
 						0.0,
-						920.0,
+						772.0,
 						169.0
 					],
 					"border": 0,
@@ -570,7 +571,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						784.0,
+						636.0,
 						3.0,
 						64.0,
 						15.0
@@ -634,7 +635,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						860.0,
+						712.0,
 						3.0,
 						48.0,
 						15.0
@@ -1742,72 +1743,17 @@
 			{
 				"box": {
 					"id": "obj-67",
-					"maxclass": "live.numbox",
-					"numinlets": 1,
-					"numoutlets": 2,
-					"patching_rect": [
-						1500.0,
-						1580.0,
-						60.0,
-						15.0
-					],
-					"outlettype": [
-						"",
-						"float"
-					],
-					"varname": "selected",
-					"parameter_enable": 1,
-					"presentation": 0,
-					"saved_attribute_attributes": {
-						"valueof": {
-							"parameter_longname": "selected",
-							"parameter_shortname": "selected",
-							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 65535.0,
-							"parameter_initial_enable": 1,
-							"parameter_initial": [
-								127.0
-							],
-							"parameter_unitstyle": 0,
-							"parameter_invisible": 1
-						}
-					}
-				}
-			},
-			{
-				"box": {
-					"id": "obj-68",
 					"maxclass": "newobj",
 					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1034.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend selected",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-69",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 16,
+					"numoutlets": 15,
 					"patching_rect": [
 						1100.0,
 						120.0,
 						600.0,
 						22.0
 					],
-					"text": "route steps_bd_a steps_bd_b steps_sd_a steps_sd_b steps_rs_a steps_rs_b steps_cp_a steps_cp_b steps_ch_a steps_ch_b steps_oh_a steps_oh_b steps_rd_a steps_rd_b selected",
+					"text": "route steps_bd_a steps_bd_b steps_sd_a steps_sd_b steps_rs_a steps_rs_b steps_cp_a steps_cp_b steps_ch_a steps_ch_b steps_oh_a steps_oh_b steps_rd_a steps_rd_b",
 					"outlettype": [
-						"",
 						"",
 						"",
 						"",
@@ -1828,7 +1774,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-70",
+					"id": "obj-68",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -1854,24 +1800,126 @@
 					],
 					"border": 0,
 					"annotation_name": "Pattern",
-					"annotation": "The pattern: a row per voice, 16 steps. Click a step: rest, hit, accent (bright, with a bar on top); shift-click: a ghost (dim). Click a voice's name to select its row (Run changes only the selected rows); shift-click to select several; click the only selected row again to select every row. Blue outline: the step playing.",
+					"annotation": "The pattern: a row per voice, 16 steps. Click a step: rest, hit, accent (bright, with a bar on top); shift-click: a ghost (dim). The lit names are the rows Voice picks. Blue outline: the step playing. While Seed or a setting is being turned, this is the live result.",
 					"varname": "view_grid"
 				}
 			},
 			{
 				"box": {
-					"id": "obj-71",
-					"maxclass": "live.tab",
+					"id": "obj-69",
+					"maxclass": "jsui",
 					"numinlets": 1,
-					"numoutlets": 3,
+					"numoutlets": 1,
 					"patching_rect": [
 						1814.0,
-						628.0,
-						594.0,
-						15.0
+						1028.0,
+						446.0,
+						64.0
+					],
+					"outlettype": [
+						""
+					],
+					"filename": "2sl-drums-view.js",
+					"jsarguments": [
+						"status"
+					],
+					"presentation": 1,
+					"presentation_rect": [
+						314.0,
+						28.0,
+						446.0,
+						64.0
+					],
+					"border": 0,
+					"annotation_name": "Status",
+					"annotation": "Line 1: Voice, Function and where Seed is in the function's variants. Line 2: the function's settings. Line 3: what is shown (the base, or live), or a warning in blue (open hh on a row other than oh, a row grids has nothing for). Line 4: where you are in the history (Undo steps back) and what made the pattern.",
+					"varname": "view_status"
+				}
+			},
+			{
+				"box": {
+					"id": "obj-70",
+					"maxclass": "live.dial",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"patching_rect": [
+						1814.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
+						"float"
+					],
+					"varname": "voice",
+					"parameter_enable": 1,
+					"presentation": 1,
+					"presentation_rect": [
+						314.0,
+						119.0,
+						44.0,
+						48.0
+					],
+					"saved_attribute_attributes": {
+						"valueof": {
+							"parameter_longname": "Voice",
+							"parameter_shortname": "Voice",
+							"parameter_type": 2,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								7
+							],
+							"parameter_enum": [
+								"bd",
+								"sd",
+								"rs",
+								"cp",
+								"ch",
+								"oh",
+								"rd",
+								"all"
+							],
+							"parameter_mmax": 7,
+							"parameter_annotation_name": "Voice",
+							"parameter_info": "The row the function changes: bd, sd, rs, cp, ch, oh, rd, or all (the last). On all, generators make the whole kit and modifiers change every row. Moving Voice commits what is shown as one history step."
+						}
+					},
+					"annotation_name": "Voice",
+					"annotation": "The row the function changes: bd, sd, rs, cp, ch, oh, rd, or all (the last). On all, generators make the whole kit and modifiers change every row. Moving Voice commits what is shown as one history step."
+				}
+			},
+			{
+				"box": {
+					"id": "obj-71",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1040.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend voice",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-72",
+					"maxclass": "live.dial",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"patching_rect": [
+						1870.0,
+						819.0,
+						44.0,
+						48.0
+					],
+					"outlettype": [
 						"",
 						"float"
 					],
@@ -1879,16 +1927,20 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						314.0,
-						28.0,
-						594.0,
-						15.0
+						370.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
 							"parameter_longname": "Function",
 							"parameter_shortname": "Function",
 							"parameter_type": 2,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								0
+							],
 							"parameter_enum": [
 								"canned",
 								"grids",
@@ -1903,29 +1955,23 @@
 								"accent"
 							],
 							"parameter_mmax": 10,
-							"parameter_initial_enable": 1,
-							"parameter_initial": [
-								0
-							],
 							"parameter_annotation_name": "Function",
-							"parameter_info": "The function Run applies, one at a time. Generators make new rows: canned, grids, euclid, random. Modifiers change the rows there are: shift, reverse, thin, ghosts, fill, open hh, accent. Its settings are under its name; their Info says what it does. Reverse: Plays the rows backwards from the downbeat: step 1 stays, step 2 swaps with 16, 3 with 15, ... (unsourced), so four on the floor and offbeats stay where they are."
+							"parameter_info": "The function Seed and the settings walk, applied live. Generators make new rows: canned, grids, euclid, random. Modifiers change the rows there are: shift, reverse, thin, ghosts, fill, open hh, accent. Only its own settings show; each remembers its own. Moving Function commits what is shown as one history step."
 						}
 					},
 					"annotation_name": "Function",
-					"annotation": "The function Run applies, one at a time. Generators make new rows: canned, grids, euclid, random. Modifiers change the rows there are: shift, reverse, thin, ghosts, fill, open hh, accent. Its settings are under its name; their Info says what it does. Reverse: Plays the rows backwards from the downbeat: step 1 stays, step 2 swaps with 16, 3 with 15, ... (unsourced), so four on the floor and offbeats stay where they are.",
-					"num_lines_patching": 1,
-					"num_lines_presentation": 1
+					"annotation": "The function Seed and the settings walk, applied live. Generators make new rows: canned, grids, euclid, random. Modifiers change the rows there are: shift, reverse, thin, ghosts, fill, open hh, accent. Only its own settings show; each remembers its own. Moving Function commits what is shown as one history step."
 				}
 			},
 			{
 				"box": {
-					"id": "obj-72",
+					"id": "obj-73",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1042.0,
+						1044.0,
 						100.0,
 						22.0
 					],
@@ -1933,51 +1979,6 @@
 					"outlettype": [
 						""
 					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-73",
-					"maxclass": "live.numbox",
-					"numinlets": 1,
-					"numoutlets": 2,
-					"patching_rect": [
-						1816.0,
-						738.0,
-						50.0,
-						15.0
-					],
-					"outlettype": [
-						"",
-						"float"
-					],
-					"varname": "canned_kit",
-					"parameter_enable": 1,
-					"presentation": 1,
-					"presentation_rect": [
-						316.0,
-						58.0,
-						50.0,
-						15.0
-					],
-					"saved_attribute_attributes": {
-						"valueof": {
-							"parameter_longname": "Canned Kit",
-							"parameter_shortname": "Kit",
-							"parameter_type": 1,
-							"parameter_mmin": 1.0,
-							"parameter_mmax": 15.0,
-							"parameter_initial_enable": 1,
-							"parameter_initial": [
-								1.0
-							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Canned Kit",
-							"parameter_info": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). Kit: Which kit: 1 P1 basic channel, 2 P8 4 ingredients, 3 P1 + rim 16ths, 4 P3 minimal house, 5 P7 house 124, 6 P4 deep house, 7 P2 motor city, 8 P2 rim answer, 9 P7 techno 130, 10 P9 mills 137, 11 P5 dark rumble, 12 P6 rolling, 13 P11 tresillo, 14 P11 bossa, 15 P11 son clave."
-						}
-					},
-					"annotation_name": "Canned Kit",
-					"annotation": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). Kit: Which kit: 1 P1 basic channel, 2 P8 4 ingredients, 3 P1 + rim 16ths, 4 P3 minimal house, 5 P7 house 124, 6 P4 deep house, 7 P2 motor city, 8 P2 rim answer, 9 P7 techno 130, 10 P9 mills 137, 11 P5 dark rumble, 12 P6 rolling, 13 P11 tresillo, 14 P11 bossa, 15 P11 son clave."
 				}
 			},
 			{
@@ -1992,7 +1993,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 0 0",
+					"text": "prepend group function",
 					"outlettype": [
 						""
 					]
@@ -2001,46 +2002,47 @@
 			{
 				"box": {
 					"id": "obj-75",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1816.0,
-						765.0,
-						50.0,
-						15.0
+						1926.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "canned_from",
+					"varname": "seed",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						316.0,
-						85.0,
-						50.0,
-						15.0
+						426.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Canned From",
-							"parameter_shortname": "From",
-							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 7.0,
+							"parameter_longname": "Seed",
+							"parameter_shortname": "Seed",
+							"parameter_type": 0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0.0
 							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Canned From",
-							"parameter_info": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). From: 0: each row gets its own voice's row from the kit. Else every selected row gets this voice's row: 1 bd, 2 sd, 3 rs, 4 cp, 5 ch, 6 oh, 7 rd."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Seed",
+							"parameter_info": "Walks every combination of the function's settings (its variants), the finest setting changing fastest, neighbours one step apart; turning it moves the settings, turning a setting moves it. Shown at once: the first turn after a commit takes the pattern as it is as the base; Undo brings the base back. 0-100% of the way through this function's variants (the status line shows which)."
 						}
 					},
-					"annotation_name": "Canned From",
-					"annotation": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). From: 0: each row gets its own voice's row from the kit. Else every selected row gets this voice's row: 1 bd, 2 sd, 3 rs, 4 cp, 5 ch, 6 oh, 7 rd."
+					"annotation_name": "Seed",
+					"annotation": "Walks every combination of the function's settings (its variants), the finest setting changing fastest, neighbours one step apart; turning it moves the settings, turning a setting moves it. Shown at once: the first turn after a commit takes the pattern as it is as the base; Undo brings the base back. 0-100% of the way through this function's variants (the status line shows which)."
 				}
 			},
 			{
@@ -2055,7 +2057,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 0 1",
+					"text": "prepend seed",
 					"outlettype": [
 						""
 					]
@@ -2064,46 +2066,47 @@
 			{
 				"box": {
 					"id": "obj-77",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1870.0,
-						738.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "grids_x",
+					"varname": "canned_kit",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						370.0,
-						58.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Grids X",
-							"parameter_shortname": "X",
+							"parameter_longname": "Canned Kit",
+							"parameter_shortname": "Kit",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 255.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								128.0
+								1.0
 							],
+							"parameter_mmin": 1.0,
+							"parameter_mmax": 15.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Grids X",
-							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. X: The map's X, 0-255, as on Grids."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Canned Kit",
+							"parameter_info": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). Kit: Which kit: 1 P1 basic channel, 2 P8 4 ingredients, 3 P1 + rim 16ths, 4 P3 minimal house, 5 P7 house 124, 6 P4 deep house, 7 P2 motor city, 8 P2 rim answer, 9 P7 techno 130, 10 P9 mills 137, 11 P5 dark rumble, 12 P6 rolling, 13 P11 tresillo, 14 P11 bossa, 15 P11 son clave."
 						}
 					},
-					"annotation_name": "Grids X",
-					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. X: The map's X, 0-255, as on Grids."
+					"annotation_name": "Canned Kit",
+					"annotation": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). Kit: Which kit: 1 P1 basic channel, 2 P8 4 ingredients, 3 P1 + rim 16ths, 4 P3 minimal house, 5 P7 house 124, 6 P4 deep house, 7 P2 motor city, 8 P2 rim answer, 9 P7 techno 130, 10 P9 mills 137, 11 P5 dark rumble, 12 P6 rolling, 13 P11 tresillo, 14 P11 bossa, 15 P11 son clave."
 				}
 			},
 			{
@@ -2118,7 +2121,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 1 0",
+					"text": "prepend param 0 0",
 					"outlettype": [
 						""
 					]
@@ -2127,46 +2130,47 @@
 			{
 				"box": {
 					"id": "obj-79",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1870.0,
-						765.0,
-						50.0,
-						15.0
+						2050.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "grids_y",
+					"varname": "canned_from",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						370.0,
-						85.0,
-						50.0,
-						15.0
+						550.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Grids Y",
-							"parameter_shortname": "Y",
+							"parameter_longname": "Canned From",
+							"parameter_shortname": "From",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 255.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								128.0
+								0.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 7.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Grids Y",
-							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Y: The map's Y, 0-255, as on Grids."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Canned From",
+							"parameter_info": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). From: 0: each row gets its own voice's row from the kit. Else the row (or every row, on all) gets this voice's row: 1 bd, 2 sd, 3 rs, 4 cp, 5 ch, 6 oh, 7 rd."
 						}
 					},
-					"annotation_name": "Grids Y",
-					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Y: The map's Y, 0-255, as on Grids."
+					"annotation_name": "Canned From",
+					"annotation": "Canned: Rows from a sourced kit (patterns.md P1-P11, as their sources give them). From: 0: each row gets its own voice's row from the kit. Else the row (or every row, on all) gets this voice's row: 1 bd, 2 sd, 3 rs, 4 cp, 5 ch, 6 oh, 7 rd."
 				}
 			},
 			{
@@ -2181,7 +2185,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 1 1",
+					"text": "prepend param 0 1",
 					"outlettype": [
 						""
 					]
@@ -2190,46 +2194,48 @@
 			{
 				"box": {
 					"id": "obj-81",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1870.0,
-						792.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "grids_density",
+					"varname": "grids_x",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						370.0,
-						112.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Grids Density",
-							"parameter_shortname": "Density",
+							"parameter_longname": "Grids X",
+							"parameter_shortname": "X",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								50.0
+								128.0
 							],
-							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Grids Density",
-							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Density: Grids' density: a step plays when its level is above 255 - density. Above 192 it is an accent."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 255.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Grids X",
+							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. X: The map's X, 0-255, as on Grids."
 						}
 					},
-					"annotation_name": "Grids Density",
-					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Density: Grids' density: a step plays when its level is above 255 - density. Above 192 it is an accent."
+					"annotation_name": "Grids X",
+					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. X: The map's X, 0-255, as on Grids.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2244,7 +2250,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 1 2",
+					"text": "prepend param 1 0",
 					"outlettype": [
 						""
 					]
@@ -2253,46 +2259,48 @@
 			{
 				"box": {
 					"id": "obj-83",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1924.0,
-						738.0,
-						50.0,
-						15.0
+						2050.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "euclid_hits",
+					"varname": "grids_y",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						424.0,
-						58.0,
-						50.0,
-						15.0
+						550.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Euclid Hits",
-							"parameter_shortname": "Hits",
+							"parameter_longname": "Grids Y",
+							"parameter_shortname": "Y",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								4.0
+								128.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 255.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Euclid Hits",
-							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Hits: Onsets in the cycle (no more than Steps)."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Grids Y",
+							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Y: The map's Y, 0-255, as on Grids."
 						}
 					},
-					"annotation_name": "Euclid Hits",
-					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Hits: Onsets in the cycle (no more than Steps)."
+					"annotation_name": "Grids Y",
+					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Y: The map's Y, 0-255, as on Grids.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2307,7 +2315,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 2 0",
+					"text": "prepend param 1 1",
 					"outlettype": [
 						""
 					]
@@ -2316,46 +2324,48 @@
 			{
 				"box": {
 					"id": "obj-85",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1924.0,
-						765.0,
-						50.0,
-						15.0
+						2106.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "euclid_rotation",
+					"varname": "grids_density",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						424.0,
-						85.0,
-						50.0,
-						15.0
+						606.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Euclid Rotation",
-							"parameter_shortname": "Rotation",
+							"parameter_longname": "Grids Density",
+							"parameter_shortname": "Density",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 15.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								0.0
+								50.0
 							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Euclid Rotation",
-							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Rotation: Steps later the cycle starts, like Ableton's Euclidean rotation (B3)."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Grids Density",
+							"parameter_info": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Density: Grids' density: a step plays when its level is above 255 - density. Above 192 it is an accent."
 						}
 					},
-					"annotation_name": "Euclid Rotation",
-					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Rotation: Steps later the cycle starts, like Ableton's Euclidean rotation (B3)."
+					"annotation_name": "Grids Density",
+					"annotation": "Grids: Rows from Mutable Instruments Grids' pattern map (patterns.md P12, B1): BD, SD and HH from its three channels; CP takes the SD channel's accents, OH the HH channel's offbeat 8ths; RS and RD have no channel. Density: Grids' density: a step plays when its level is above 255 - density. Above 192 it is an accent.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2370,7 +2380,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 2 1",
+					"text": "prepend param 1 2",
 					"outlettype": [
 						""
 					]
@@ -2379,46 +2389,48 @@
 			{
 				"box": {
 					"id": "obj-87",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1924.0,
-						792.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "euclid_steps",
+					"varname": "euclid_hits",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						424.0,
-						112.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Euclid Steps",
-							"parameter_shortname": "Steps",
+							"parameter_longname": "Euclid Hits",
+							"parameter_shortname": "Hits",
 							"parameter_type": 1,
-							"parameter_mmin": 1.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								16.0
+								4.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Euclid Steps",
-							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Steps: The cycle's length; it repeats across the 16 steps."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Euclid Hits",
+							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Hits: Onsets in the cycle (no more than Steps)."
 						}
 					},
-					"annotation_name": "Euclid Steps",
-					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Steps: The cycle's length; it repeats across the 16 steps."
+					"annotation_name": "Euclid Hits",
+					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Hits: Onsets in the cycle (no more than Steps).",
+					"hidden": 1
 				}
 			},
 			{
@@ -2433,7 +2445,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 2 2",
+					"text": "prepend param 2 0",
 					"outlettype": [
 						""
 					]
@@ -2442,46 +2454,48 @@
 			{
 				"box": {
 					"id": "obj-89",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1978.0,
-						738.0,
-						50.0,
-						15.0
+						2050.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "random_density",
+					"varname": "euclid_rotation",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						478.0,
-						58.0,
-						50.0,
-						15.0
+						550.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Random Density",
-							"parameter_shortname": "Density",
+							"parameter_longname": "Euclid Rotation",
+							"parameter_shortname": "Rotation",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								30.0
+								0.0
 							],
-							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Random Density",
-							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Density: The chance that a step is a hit."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 15.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Euclid Rotation",
+							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Rotation: Steps later the cycle starts, like Ableton's Euclidean rotation (B3)."
 						}
 					},
-					"annotation_name": "Random Density",
-					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Density: The chance that a step is a hit."
+					"annotation_name": "Euclid Rotation",
+					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Rotation: Steps later the cycle starts, like Ableton's Euclidean rotation (B3).",
+					"hidden": 1
 				}
 			},
 			{
@@ -2496,7 +2510,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 3 0",
+					"text": "prepend param 2 1",
 					"outlettype": [
 						""
 					]
@@ -2505,46 +2519,48 @@
 			{
 				"box": {
 					"id": "obj-91",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1978.0,
-						765.0,
-						50.0,
-						15.0
+						2106.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "random_accent",
+					"varname": "euclid_steps",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						478.0,
-						85.0,
-						50.0,
-						15.0
+						606.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Random Accent",
-							"parameter_shortname": "Accent",
+							"parameter_longname": "Euclid Steps",
+							"parameter_shortname": "Steps",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								10.0
+								16.0
 							],
-							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Random Accent",
-							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Accent: The chance that a hit is an accent."
+							"parameter_mmin": 1.0,
+							"parameter_mmax": 16.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Euclid Steps",
+							"parameter_info": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Steps: The cycle's length; it repeats across the 16 steps."
 						}
 					},
-					"annotation_name": "Random Accent",
-					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Accent: The chance that a hit is an accent."
+					"annotation_name": "Euclid Steps",
+					"annotation": "Euclid: A Euclidean rhythm (Toussaint, patterns.md P11): hits spread as evenly as possible over a cycle of steps, rotated, repeated across the bar (P10's 3- and 5-step loops are E(1,3) and E(1,5)). Steps: The cycle's length; it repeats across the 16 steps.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2559,7 +2575,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 3 1",
+					"text": "prepend param 2 2",
 					"outlettype": [
 						""
 					]
@@ -2568,46 +2584,48 @@
 			{
 				"box": {
 					"id": "obj-93",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1978.0,
-						792.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "random_seed",
+					"varname": "random_density",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						478.0,
-						112.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Random Seed",
-							"parameter_shortname": "Seed",
-							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 999.0,
+							"parameter_longname": "Random Density",
+							"parameter_shortname": "Density",
+							"parameter_type": 1,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								0.0
+								30.0
 							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Random Seed",
-							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Seed: The same seed makes the same rows. 0: a new seed every Run (the status line shows which)."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Random Density",
+							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Density: The chance that a step is a hit."
 						}
 					},
-					"annotation_name": "Random Seed",
-					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Seed: The same seed makes the same rows. 0: a new seed every Run (the status line shows which)."
+					"annotation_name": "Random Density",
+					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Density: The chance that a step is a hit.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2622,7 +2640,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 3 2",
+					"text": "prepend param 3 0",
 					"outlettype": [
 						""
 					]
@@ -2631,46 +2649,48 @@
 			{
 				"box": {
 					"id": "obj-95",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2032.0,
-						738.0,
-						50.0,
-						15.0
+						2050.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "shift_steps",
+					"varname": "random_accent",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						532.0,
-						58.0,
-						50.0,
-						15.0
+						550.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Shift Steps",
-							"parameter_shortname": "Steps",
+							"parameter_longname": "Random Accent",
+							"parameter_shortname": "Accent",
 							"parameter_type": 1,
-							"parameter_mmin": -15.0,
-							"parameter_mmax": 15.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								1.0
+								10.0
 							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Shift Steps",
-							"parameter_info": "Shift: Moves the rows by steps, later for positive, earlier for negative, wrapping around the bar (Ableton's Rhythm Shift, patterns.md B3). Steps: Steps to move: + later, - earlier."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Random Accent",
+							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Accent: The chance that a hit is an accent."
 						}
 					},
-					"annotation_name": "Shift Steps",
-					"annotation": "Shift: Moves the rows by steps, later for positive, earlier for negative, wrapping around the bar (Ableton's Rhythm Shift, patterns.md B3). Steps: Steps to move: + later, - earlier."
+					"annotation_name": "Random Accent",
+					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Accent: The chance that a hit is an accent.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2685,7 +2705,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 4 0",
+					"text": "prepend param 3 1",
 					"outlettype": [
 						""
 					]
@@ -2694,46 +2714,48 @@
 			{
 				"box": {
 					"id": "obj-97",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2140.0,
-						738.0,
-						50.0,
-						15.0
+						2106.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "thin_amount",
+					"varname": "random_seed",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						640.0,
-						58.0,
-						50.0,
-						15.0
+						606.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Thin Amount",
-							"parameter_shortname": "Amount",
-							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
+							"parameter_longname": "Random Seed",
+							"parameter_shortname": "Seed",
+							"parameter_type": 0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								25.0
+								0.0
 							],
-							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Thin Amount",
-							"parameter_info": "Thin: Removes the weakest hits, as Grids' density keeps the strongest steps (patterns.md B1): ghosts first, then hits, then accents; within a grade the weakest place in the bar first. Amount: The share of each row's hits removed."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 999.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Random Seed",
+							"parameter_info": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Seed: The same seed makes the same rows."
 						}
 					},
-					"annotation_name": "Thin Amount",
-					"annotation": "Thin: Removes the weakest hits, as Grids' density keeps the strongest steps (patterns.md B1): ghosts first, then hits, then accents; within a grade the weakest place in the bar first. Amount: The share of each row's hits removed."
+					"annotation_name": "Random Seed",
+					"annotation": "Random: Random hits: each step plays with Density's chance, and a hit is an accent with Accent's chance (Ableton's Seed density, Elektron's trig probability: patterns.md B2, B3). Seed: The same seed makes the same rows.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2748,7 +2770,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 6 0",
+					"text": "prepend param 3 2",
 					"outlettype": [
 						""
 					]
@@ -2757,46 +2779,48 @@
 			{
 				"box": {
 					"id": "obj-99",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2194.0,
-						738.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "ghosts_amount",
+					"varname": "shift_steps",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						694.0,
-						58.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Ghosts Amount",
-							"parameter_shortname": "Amount",
+							"parameter_longname": "Shift Steps",
+							"parameter_shortname": "Steps",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								25.0
+								0.0
 							],
-							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Ghosts Amount",
-							"parameter_info": "Ghosts: Adds ghost notes (quiet hits, patterns.md B5) on rests: first just before a hit (as P6's ghost kicks before beats 2 and 4), then on the weakest places in the bar. Amount: The share of each row's rests that become ghosts."
+							"parameter_mmin": -15.0,
+							"parameter_mmax": 15.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Shift Steps",
+							"parameter_info": "Shift: Moves the rows by steps, later for positive, earlier for negative, wrapping around the bar (Ableton's Rhythm Shift, patterns.md B3). Steps: Steps to move: + later, - earlier."
 						}
 					},
-					"annotation_name": "Ghosts Amount",
-					"annotation": "Ghosts: Adds ghost notes (quiet hits, patterns.md B5) on rests: first just before a hit (as P6's ghost kicks before beats 2 and 4), then on the weakest places in the bar. Amount: The share of each row's rests that become ghosts."
+					"annotation_name": "Shift Steps",
+					"annotation": "Shift: Moves the rows by steps, later for positive, earlier for negative, wrapping around the bar (Ableton's Rhythm Shift, patterns.md B3). Steps: Steps to move: + later, - earlier.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2811,7 +2835,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 7 0",
+					"text": "prepend param 4 0",
 					"outlettype": [
 						""
 					]
@@ -2820,46 +2844,48 @@
 			{
 				"box": {
 					"id": "obj-101",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2248.0,
-						738.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "fill_steps",
+					"varname": "reverse_span",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						748.0,
-						58.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Fill Steps",
-							"parameter_shortname": "Steps",
+							"parameter_longname": "Reverse Span",
+							"parameter_shortname": "Span",
 							"parameter_type": 1,
-							"parameter_mmin": 1.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								4.0
+								1.0
 							],
+							"parameter_mmin": 1.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Fill Steps",
-							"parameter_info": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Run it, hear it, Undo it. Steps: How many of the bar's last steps: 4 = the last beat, 8 = the last half bar."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Reverse Span",
+							"parameter_info": "Reverse: Plays each span of steps backwards from its first step: step 1 of the span stays, 2 swaps with the last, 3 with the one before ... (unsourced). Span 16 = the bar, so four on the floor and offbeats stay. Span: How many steps each reversed piece is, from the downbeat: 16 = the bar, 8 = each half bar, 4 = each beat. 1 and 2 change nothing."
 						}
 					},
-					"annotation_name": "Fill Steps",
-					"annotation": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Run it, hear it, Undo it. Steps: How many of the bar's last steps: 4 = the last beat, 8 = the last half bar."
+					"annotation_name": "Reverse Span",
+					"annotation": "Reverse: Plays each span of steps backwards from its first step: step 1 of the span stays, 2 swaps with the last, 3 with the one before ... (unsourced). Span 16 = the bar, so four on the floor and offbeats stay. Span: How many steps each reversed piece is, from the downbeat: 16 = the bar, 8 = each half bar, 4 = each beat. 1 and 2 change nothing.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2874,7 +2900,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 8 0",
+					"text": "prepend param 5 0",
 					"outlettype": [
 						""
 					]
@@ -2883,46 +2909,48 @@
 			{
 				"box": {
 					"id": "obj-103",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2248.0,
-						765.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "fill_density",
+					"varname": "thin_amount",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						748.0,
-						85.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Fill Density",
-							"parameter_shortname": "Density",
+							"parameter_longname": "Thin Amount",
+							"parameter_shortname": "Amount",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								50.0
+								0.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Fill Density",
-							"parameter_info": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Run it, hear it, Undo it. Density: The share of those steps that get a hit."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Thin Amount",
+							"parameter_info": "Thin: Removes the weakest hits, as Grids' density keeps the strongest steps (patterns.md B1): ghosts first, then hits, then accents; within a grade the weakest place in the bar first. Amount: The share of each row's hits removed."
 						}
 					},
-					"annotation_name": "Fill Density",
-					"annotation": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Run it, hear it, Undo it. Density: The share of those steps that get a hit."
+					"annotation_name": "Thin Amount",
+					"annotation": "Thin: Removes the weakest hits, as Grids' density keeps the strongest steps (patterns.md B1): ghosts first, then hits, then accents; within a grade the weakest place in the bar first. Amount: The share of each row's hits removed.",
+					"hidden": 1
 				}
 			},
 			{
@@ -2937,7 +2965,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 8 1",
+					"text": "prepend param 6 0",
 					"outlettype": [
 						""
 					]
@@ -2946,46 +2974,48 @@
 			{
 				"box": {
 					"id": "obj-105",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2302.0,
-						738.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "open_hh_amount",
+					"varname": "ghosts_amount",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						802.0,
-						58.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Open hh Amount",
+							"parameter_longname": "Ghosts Amount",
 							"parameter_shortname": "Amount",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								50.0
+								0.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
-							"parameter_annotation_name": "Open hh Amount",
-							"parameter_info": "Open hh: Turns closed hats into open hats (the CH row's hits move to the OH row; patterns.md B5 swaps them for variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places. Amount: The share of the closed hat's hits that open."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Ghosts Amount",
+							"parameter_info": "Ghosts: Adds ghost notes (quiet hits, patterns.md B5) on rests: first just before a hit (as P6's ghost kicks before beats 2 and 4), then on the weakest places in the bar. Amount: The share of each row's rests that become ghosts."
 						}
 					},
-					"annotation_name": "Open hh Amount",
-					"annotation": "Open hh: Turns closed hats into open hats (the CH row's hits move to the OH row; patterns.md B5 swaps them for variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places. Amount: The share of the closed hat's hits that open."
+					"annotation_name": "Ghosts Amount",
+					"annotation": "Ghosts: Adds ghost notes (quiet hits, patterns.md B5) on rests: first just before a hit (as P6's ghost kicks before beats 2 and 4), then on the weakest places in the bar. Amount: The share of each row's rests that become ghosts.",
+					"hidden": 1
 				}
 			},
 			{
@@ -3000,7 +3030,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 9 0",
+					"text": "prepend param 7 0",
 					"outlettype": [
 						""
 					]
@@ -3009,46 +3039,48 @@
 			{
 				"box": {
 					"id": "obj-107",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2356.0,
-						738.0,
-						50.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "accent_every",
+					"varname": "fill_steps",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						856.0,
-						58.0,
-						50.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Accent Every",
-							"parameter_shortname": "Every",
+							"parameter_longname": "Fill Steps",
+							"parameter_shortname": "Steps",
 							"parameter_type": 1,
-							"parameter_mmin": 1.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								4.0
 							],
+							"parameter_mmin": 1.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Accent Every",
-							"parameter_info": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Every: Hits from one accent to the next (an accent counts as a hit; 1 = every hit)."
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Fill Steps",
+							"parameter_info": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Steps: How many of the bar's last steps: 4 = the last beat, 8 = the last half bar."
 						}
 					},
-					"annotation_name": "Accent Every",
-					"annotation": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Every: Hits from one accent to the next (an accent counts as a hit; 1 = every hit)."
+					"annotation_name": "Fill Steps",
+					"annotation": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Steps: How many of the bar's last steps: 4 = the last beat, 8 = the last half bar.",
+					"hidden": 1
 				}
 			},
 			{
@@ -3063,7 +3095,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 10 0",
+					"text": "prepend param 8 0",
 					"outlettype": [
 						""
 					]
@@ -3072,46 +3104,48 @@
 			{
 				"box": {
 					"id": "obj-109",
-					"maxclass": "live.numbox",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2356.0,
-						765.0,
-						50.0,
-						15.0
+						2050.0,
+						819.0,
+						44.0,
+						48.0
 					],
 					"outlettype": [
 						"",
 						"float"
 					],
-					"varname": "accent_offset",
+					"varname": "fill_density",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						856.0,
-						85.0,
-						50.0,
-						15.0
+						550.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Accent Offset",
-							"parameter_shortname": "Offset",
+							"parameter_longname": "Fill Density",
+							"parameter_shortname": "Density",
 							"parameter_type": 1,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 15.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0.0
 							],
-							"parameter_unitstyle": 0,
-							"parameter_annotation_name": "Accent Offset",
-							"parameter_info": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Offset: Hits before the first accent."
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Fill Density",
+							"parameter_info": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Density: The share of those steps that get a hit."
 						}
 					},
-					"annotation_name": "Accent Offset",
-					"annotation": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Offset: Hits before the first accent."
+					"annotation_name": "Fill Density",
+					"annotation": "Fill: A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, spread evenly (Toussaint, P11). Density: The share of those steps that get a hit.",
+					"hidden": 1
 				}
 			},
 			{
@@ -3126,7 +3160,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend param 10 1",
+					"text": "prepend param 8 1",
 					"outlettype": [
 						""
 					]
@@ -3135,58 +3169,246 @@
 			{
 				"box": {
 					"id": "obj-111",
-					"maxclass": "live.text",
+					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1814.0,
-						792.0,
-						48.0,
-						15.0
+						1994.0,
+						819.0,
+						44.0,
+						48.0
 					],
-					"text": "run",
 					"outlettype": [
 						"",
-						""
+						"float"
 					],
-					"varname": "run",
+					"varname": "open_hh_amount",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						314.0,
-						132.0,
-						48.0,
-						15.0
+						494.0,
+						119.0,
+						44.0,
+						48.0
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Run",
-							"parameter_shortname": "Run",
-							"parameter_type": 2,
-							"parameter_annotation_name": "Run",
-							"parameter_info": "Applies the lit function to the selected rows (the others stay) and makes the next pattern in the history. Run after Undo drops the patterns undone.",
-							"parameter_enum": [
-								"off",
-								"on"
+							"parameter_longname": "Open hh Amount",
+							"parameter_shortname": "Amount",
+							"parameter_type": 1,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								0.0
 							],
-							"parameter_mmax": 1
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
+							"parameter_unitstyle": 5,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Open hh Amount",
+							"parameter_info": "Open hh: Turns closed hats into open hats (the CH row's hits move to the OH row; patterns.md B5 swaps them for variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places. On one row it reads CH and writes only OH, whichever row Voice picks; on all, the hits move. Amount: The share of the closed hat's hits that open."
 						}
 					},
-					"annotation_name": "Run",
-					"annotation": "Applies the lit function to the selected rows (the others stay) and makes the next pattern in the history. Run after Undo drops the patterns undone.",
-					"texton": "run",
-					"mode": 0
+					"annotation_name": "Open hh Amount",
+					"annotation": "Open hh: Turns closed hats into open hats (the CH row's hits move to the OH row; patterns.md B5 swaps them for variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places. On one row it reads CH and writes only OH, whichever row Voice picks; on all, the hits move. Amount: The share of the closed hat's hits that open.",
+					"hidden": 1
 				}
 			},
 			{
 				"box": {
 					"id": "obj-112",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1122.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend param 9 0",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-113",
+					"maxclass": "live.dial",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"patching_rect": [
+						1994.0,
+						819.0,
+						44.0,
+						48.0
+					],
+					"outlettype": [
+						"",
+						"float"
+					],
+					"varname": "accent_every",
+					"parameter_enable": 1,
+					"presentation": 1,
+					"presentation_rect": [
+						494.0,
+						119.0,
+						44.0,
+						48.0
+					],
+					"saved_attribute_attributes": {
+						"valueof": {
+							"parameter_longname": "Accent Every",
+							"parameter_shortname": "Every",
+							"parameter_type": 1,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								4.0
+							],
+							"parameter_mmin": 1.0,
+							"parameter_mmax": 16.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Accent Every",
+							"parameter_info": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Every: Hits from one accent to the next (an accent counts as a hit; 1 = every hit)."
+						}
+					},
+					"annotation_name": "Accent Every",
+					"annotation": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Every: Hits from one accent to the next (an accent counts as a hit; 1 = every hit).",
+					"hidden": 1
+				}
+			},
+			{
+				"box": {
+					"id": "obj-114",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1126.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend param 10 0",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-115",
+					"maxclass": "live.dial",
+					"numinlets": 1,
+					"numoutlets": 2,
+					"patching_rect": [
+						2050.0,
+						819.0,
+						44.0,
+						48.0
+					],
+					"outlettype": [
+						"",
+						"float"
+					],
+					"varname": "accent_offset",
+					"parameter_enable": 1,
+					"presentation": 1,
+					"presentation_rect": [
+						550.0,
+						119.0,
+						44.0,
+						48.0
+					],
+					"saved_attribute_attributes": {
+						"valueof": {
+							"parameter_longname": "Accent Offset",
+							"parameter_shortname": "Offset",
+							"parameter_type": 1,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								0.0
+							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 15.0,
+							"parameter_unitstyle": 0,
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Accent Offset",
+							"parameter_info": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Offset: Hits before the first accent."
+						}
+					},
+					"annotation_name": "Accent Offset",
+					"annotation": "Accent: Accents every Nth hit of each row, the others become plain hits; ghosts stay (Ableton's Rhythm Accent Frequency and Offset, patterns.md B3). Offset: Hits before the first accent.",
+					"hidden": 1
+				}
+			},
+			{
+				"box": {
+					"id": "obj-116",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1130.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend param 10 1",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-117",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 22,
+					"patching_rect": [
+						1100.0,
+						160.0,
+						900.0,
+						22.0
+					],
+					"text": "route seed canned_kit canned_from grids_x grids_y grids_density euclid_hits euclid_rotation euclid_steps random_density random_accent random_seed shift_steps reverse_span thin_amount ghosts_amount fill_steps fill_density open_hh_amount accent_every accent_offset",
+					"outlettype": [
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						"",
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-118",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
 						1814.0,
-						810.0,
+						758.0,
 						48.0,
 						15.0
 					],
@@ -3200,7 +3422,7 @@
 					"presentation": 1,
 					"presentation_rect": [
 						314.0,
-						150.0,
+						98.0,
 						48.0,
 						15.0
 					],
@@ -3210,7 +3432,7 @@
 							"parameter_shortname": "Undo",
 							"parameter_type": 2,
 							"parameter_annotation_name": "Undo",
-							"parameter_info": "Steps back to the pattern before. The last 100 patterns are kept; the history isn't saved with the set (the pattern playing is).",
+							"parameter_info": "Drops what Seed and the settings show that isn't committed (back to the base, the settings back where they were). Else steps back one commit (a Voice or Function move, or a hand edit). The last 100 patterns are kept; the history isn't saved with the set (the pattern playing is).",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -3219,38 +3441,20 @@
 						}
 					},
 					"annotation_name": "Undo",
-					"annotation": "Steps back to the pattern before. The last 100 patterns are kept; the history isn't saved with the set (the pattern playing is).",
+					"annotation": "Drops what Seed and the settings show that isn't committed (back to the base, the settings back where they were). Else steps back one commit (a Voice or Function move, or a hand edit). The last 100 patterns are kept; the history isn't saved with the set (the pattern playing is).",
 					"texton": "undo",
 					"mode": 0
 				}
 			},
 			{
 				"box": {
-					"id": "obj-113",
+					"id": "obj-119",
 					"maxclass": "message",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"patching_rect": [
 						1100.0,
-						524.0,
-						70.0,
-						22.0
-					],
-					"text": "run",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-114",
-					"maxclass": "message",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1100.0,
-						526.0,
+						300.0,
 						70.0,
 						22.0
 					],
@@ -3262,13 +3466,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-115",
+					"id": "obj-120",
 					"maxclass": "live.menu",
 					"numinlets": 1,
 					"numoutlets": 3,
 					"patching_rect": [
-						2336.0,
-						790.0,
+						2188.0,
+						738.0,
 						72.0,
 						15.0
 					],
@@ -3281,8 +3485,8 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						836.0,
-						150.0,
+						688.0,
+						98.0,
 						72.0,
 						15.0
 					],
@@ -3315,13 +3519,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-116",
+					"id": "obj-121",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1130.0,
+						1140.0,
 						100.0,
 						22.0
 					],
@@ -3333,39 +3537,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-117",
-					"maxclass": "jsui",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1870.0,
-						1132.0,
-						458.0,
-						33.0
-					],
-					"outlettype": [
-						""
-					],
-					"filename": "2sl-drums-view.js",
-					"jsarguments": [
-						"status"
-					],
-					"presentation": 1,
-					"presentation_rect": [
-						370.0,
-						132.0,
-						458.0,
-						33.0
-					],
-					"border": 0,
-					"annotation_name": "Status",
-					"annotation": "Top: what Run will do (the lit function, its settings, the selected rows). Bottom: where you are in the history (Undo steps back) and what made this pattern.",
-					"varname": "view_status"
-				}
-			},
-			{
-				"box": {
-					"id": "obj-118",
+					"id": "obj-122",
 					"maxclass": "live.tab",
 					"numinlets": 1,
 					"numoutlets": 3,
@@ -3380,7 +3552,7 @@
 						"",
 						"float"
 					],
-					"varname": "voice",
+					"varname": "kit_voice",
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
@@ -3391,7 +3563,7 @@
 					],
 					"saved_attribute_attributes": {
 						"valueof": {
-							"parameter_longname": "Voice",
+							"parameter_longname": "Kit Voice",
 							"parameter_shortname": "Voice",
 							"parameter_type": 2,
 							"parameter_enum": [
@@ -3407,11 +3579,11 @@
 							"parameter_initial": [
 								0
 							],
-							"parameter_annotation_name": "Voice",
+							"parameter_annotation_name": "Kit Voice",
 							"parameter_info": "Which voice's sound controls show: bd, sd, rs, cp, the hats (ch and oh) or rd."
 						}
 					},
-					"annotation_name": "Voice",
+					"annotation_name": "Kit Voice",
 					"annotation": "Which voice's sound controls show: bd, sd, rs, cp, the hats (ch and oh) or rd.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1,
@@ -3420,17 +3592,17 @@
 			},
 			{
 				"box": {
-					"id": "obj-119",
+					"id": "obj-123",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1136.0,
+						1144.0,
 						100.0,
 						22.0
 					],
-					"text": "prepend group voice",
+					"text": "prepend group kit_voice",
 					"outlettype": [
 						""
 					]
@@ -3438,7 +3610,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-120",
+					"id": "obj-124",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -3471,7 +3643,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-121",
+					"id": "obj-125",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -3499,12 +3671,12 @@
 							"parameter_longname": "BD Tune",
 							"parameter_shortname": "Tune",
 							"parameter_type": 0,
-							"parameter_mmin": 30.0,
-							"parameter_mmax": 90.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 30.0,
+							"parameter_mmax": 90.0,
 							"parameter_unitstyle": 3,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Tune",
@@ -3518,13 +3690,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-122",
+					"id": "obj-126",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1142.0,
+						1150.0,
 						100.0,
 						22.0
 					],
@@ -3536,13 +3708,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-123",
+					"id": "obj-127",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1144.0,
+						1152.0,
 						100.0,
 						22.0
 					],
@@ -3554,7 +3726,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-124",
+					"id": "obj-128",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -3582,12 +3754,12 @@
 							"parameter_longname": "BD Sweep",
 							"parameter_shortname": "Sweep",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Sweep",
@@ -3601,79 +3773,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-125",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1148.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-126",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1150.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_sweep",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-127",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1152.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-128",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1154.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_sweep",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-129",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1156.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-130",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1158.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_sweep",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-131",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1160.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-132",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1162.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_sweep",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-133",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -3701,12 +3873,12 @@
 							"parameter_longname": "BD Decay",
 							"parameter_shortname": "Decay",
 							"parameter_type": 0,
-							"parameter_mmin": 60.0,
-							"parameter_mmax": 2000.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								450.0
 							],
+							"parameter_mmin": 60.0,
+							"parameter_mmax": 2000.0,
 							"parameter_unitstyle": 2,
 							"parameter_exponent": 2.0,
 							"parameter_annotation_name": "BD Decay",
@@ -3720,13 +3892,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-130",
+					"id": "obj-134",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1158.0,
+						1166.0,
 						100.0,
 						22.0
 					],
@@ -3738,13 +3910,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-131",
+					"id": "obj-135",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1160.0,
+						1168.0,
 						100.0,
 						22.0
 					],
@@ -3756,7 +3928,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-132",
+					"id": "obj-136",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -3784,12 +3956,12 @@
 							"parameter_longname": "BD Attack",
 							"parameter_shortname": "Attack",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Attack",
@@ -3803,79 +3975,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-133",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1164.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-134",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1166.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_attack",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-135",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1168.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-136",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1170.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_attack",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-137",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1172.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-138",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1174.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_attack",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-139",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1176.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-140",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1178.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_attack",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-141",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -3903,12 +4075,12 @@
 							"parameter_longname": "BD Soft",
 							"parameter_shortname": "Soft",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Soft",
@@ -3922,79 +4094,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-138",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1174.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-139",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1176.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_soft",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-140",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1178.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-141",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1180.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_soft",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-142",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1182.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-143",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1184.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_soft",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-144",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1186.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-145",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1188.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_soft",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-146",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4022,12 +4194,12 @@
 							"parameter_longname": "BD Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 3.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								16.0
 							],
+							"parameter_mmin": 3.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Bits",
@@ -4041,13 +4213,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-143",
+					"id": "obj-147",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1184.0,
+						1192.0,
 						100.0,
 						22.0
 					],
@@ -4059,13 +4231,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-144",
+					"id": "obj-148",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1186.0,
+						1194.0,
 						100.0,
 						22.0
 					],
@@ -4077,7 +4249,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-145",
+					"id": "obj-149",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -4110,7 +4282,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-146",
+					"id": "obj-150",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4138,12 +4310,12 @@
 							"parameter_longname": "SD Tune",
 							"parameter_shortname": "Tune",
 							"parameter_type": 0,
-							"parameter_mmin": 120.0,
-							"parameter_mmax": 320.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								180.0
 							],
+							"parameter_mmin": 120.0,
+							"parameter_mmax": 320.0,
 							"parameter_unitstyle": 3,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "SD Tune",
@@ -4157,13 +4329,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-147",
+					"id": "obj-151",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1192.0,
+						1200.0,
 						100.0,
 						22.0
 					],
@@ -4175,13 +4347,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-148",
+					"id": "obj-152",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1194.0,
+						1202.0,
 						100.0,
 						22.0
 					],
@@ -4193,7 +4365,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-149",
+					"id": "obj-153",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4221,12 +4393,12 @@
 							"parameter_longname": "SD Tone",
 							"parameter_shortname": "Tone",
 							"parameter_type": 0,
-							"parameter_mmin": 40.0,
-							"parameter_mmax": 500.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								160.0
 							],
+							"parameter_mmin": 40.0,
+							"parameter_mmax": 500.0,
 							"parameter_unitstyle": 2,
 							"parameter_exponent": 1.5,
 							"parameter_annotation_name": "SD Tone",
@@ -4240,13 +4412,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-150",
+					"id": "obj-154",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1198.0,
+						1206.0,
 						100.0,
 						22.0
 					],
@@ -4258,13 +4430,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-151",
+					"id": "obj-155",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1200.0,
+						1208.0,
 						100.0,
 						22.0
 					],
@@ -4276,7 +4448,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-152",
+					"id": "obj-156",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4304,12 +4476,12 @@
 							"parameter_longname": "SD Snappy",
 							"parameter_shortname": "Snappy",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								60.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "SD Snappy",
@@ -4323,79 +4495,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-153",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1204.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-154",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1206.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend sd_snappy",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-155",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1208.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-156",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1210.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend sd_snappy",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-157",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1212.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-158",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1214.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend sd_snappy",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-159",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1216.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-160",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1218.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend sd_snappy",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-161",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4423,12 +4595,12 @@
 							"parameter_longname": "SD Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 3.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								16.0
 							],
+							"parameter_mmin": 3.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "SD Bits",
@@ -4442,13 +4614,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-158",
+					"id": "obj-162",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1214.0,
+						1222.0,
 						100.0,
 						22.0
 					],
@@ -4460,13 +4632,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-159",
+					"id": "obj-163",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1216.0,
+						1224.0,
 						100.0,
 						22.0
 					],
@@ -4478,7 +4650,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-160",
+					"id": "obj-164",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -4511,7 +4683,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-161",
+					"id": "obj-165",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4539,12 +4711,12 @@
 							"parameter_longname": "RS Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 3.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								16.0
 							],
+							"parameter_mmin": 3.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "RS Bits",
@@ -4558,13 +4730,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-162",
+					"id": "obj-166",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1222.0,
+						1230.0,
 						100.0,
 						22.0
 					],
@@ -4576,13 +4748,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-163",
+					"id": "obj-167",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1224.0,
+						1232.0,
 						100.0,
 						22.0
 					],
@@ -4594,7 +4766,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-164",
+					"id": "obj-168",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -4627,7 +4799,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-165",
+					"id": "obj-169",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4655,12 +4827,12 @@
 							"parameter_longname": "CP Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 3.0,
-							"parameter_mmax": 16.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								16.0
 							],
+							"parameter_mmin": 3.0,
+							"parameter_mmax": 16.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "CP Bits",
@@ -4674,13 +4846,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-166",
+					"id": "obj-170",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1230.0,
+						1238.0,
 						100.0,
 						22.0
 					],
@@ -4692,13 +4864,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-167",
+					"id": "obj-171",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1232.0,
+						1240.0,
 						100.0,
 						22.0
 					],
@@ -4710,7 +4882,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-168",
+					"id": "obj-172",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -4743,7 +4915,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-169",
+					"id": "obj-173",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4771,12 +4943,12 @@
 							"parameter_longname": "Hat Tune",
 							"parameter_shortname": "Tune",
 							"parameter_type": 0,
-							"parameter_mmin": 0.43,
-							"parameter_mmax": 1.7,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								1.0
 							],
+							"parameter_mmin": 0.43,
+							"parameter_mmax": 1.7,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "Hat Tune",
@@ -4790,13 +4962,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-170",
+					"id": "obj-174",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1238.0,
+						1246.0,
 						100.0,
 						22.0
 					],
@@ -4808,13 +4980,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-171",
+					"id": "obj-175",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1240.0,
+						1248.0,
 						100.0,
 						22.0
 					],
@@ -4826,7 +4998,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-172",
+					"id": "obj-176",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4854,12 +5026,12 @@
 							"parameter_longname": "CH Decay",
 							"parameter_shortname": "CH Decay",
 							"parameter_type": 0,
-							"parameter_mmin": 10.0,
-							"parameter_mmax": 300.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								60.0
 							],
+							"parameter_mmin": 10.0,
+							"parameter_mmax": 300.0,
 							"parameter_unitstyle": 2,
 							"parameter_exponent": 1.5,
 							"parameter_annotation_name": "CH Decay",
@@ -4873,13 +5045,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-173",
+					"id": "obj-177",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1244.0,
+						1252.0,
 						100.0,
 						22.0
 					],
@@ -4891,13 +5063,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-174",
+					"id": "obj-178",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1246.0,
+						1254.0,
 						100.0,
 						22.0
 					],
@@ -4909,7 +5081,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-175",
+					"id": "obj-179",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -4937,12 +5109,12 @@
 							"parameter_longname": "OH Decay",
 							"parameter_shortname": "OH Decay",
 							"parameter_type": 0,
-							"parameter_mmin": 80.0,
-							"parameter_mmax": 2000.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								500.0
 							],
+							"parameter_mmin": 80.0,
+							"parameter_mmax": 2000.0,
 							"parameter_unitstyle": 2,
 							"parameter_exponent": 2.0,
 							"parameter_annotation_name": "OH Decay",
@@ -4956,13 +5128,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-176",
+					"id": "obj-180",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1250.0,
+						1258.0,
 						100.0,
 						22.0
 					],
@@ -4974,13 +5146,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-177",
+					"id": "obj-181",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1252.0,
+						1260.0,
 						100.0,
 						22.0
 					],
@@ -4992,7 +5164,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-178",
+					"id": "obj-182",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5020,12 +5192,12 @@
 							"parameter_longname": "Hat Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 2.0,
-							"parameter_mmax": 12.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								6.0
 							],
+							"parameter_mmin": 2.0,
+							"parameter_mmax": 12.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "Hat Bits",
@@ -5039,13 +5211,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-179",
+					"id": "obj-183",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1256.0,
+						1264.0,
 						100.0,
 						22.0
 					],
@@ -5057,13 +5229,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-180",
+					"id": "obj-184",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1258.0,
+						1266.0,
 						100.0,
 						22.0
 					],
@@ -5075,7 +5247,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-181",
+					"id": "obj-185",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -5108,7 +5280,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-182",
+					"id": "obj-186",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5136,12 +5308,12 @@
 							"parameter_longname": "RD Tune",
 							"parameter_shortname": "Tune",
 							"parameter_type": 0,
-							"parameter_mmin": 0.6,
-							"parameter_mmax": 1.5,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								1.0
 							],
+							"parameter_mmin": 0.6,
+							"parameter_mmax": 1.5,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "RD Tune",
@@ -5155,13 +5327,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-183",
+					"id": "obj-187",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1264.0,
+						1272.0,
 						100.0,
 						22.0
 					],
@@ -5173,13 +5345,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-184",
+					"id": "obj-188",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1266.0,
+						1274.0,
 						100.0,
 						22.0
 					],
@@ -5191,7 +5363,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-185",
+					"id": "obj-189",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5219,12 +5391,12 @@
 							"parameter_longname": "RD Bits",
 							"parameter_shortname": "Bits",
 							"parameter_type": 0,
-							"parameter_mmin": 2.0,
-							"parameter_mmax": 12.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								6.0
 							],
+							"parameter_mmin": 2.0,
+							"parameter_mmax": 12.0,
 							"parameter_unitstyle": 1,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "RD Bits",
@@ -5238,13 +5410,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-186",
+					"id": "obj-190",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1270.0,
+						1278.0,
 						100.0,
 						22.0
 					],
@@ -5256,13 +5428,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-187",
+					"id": "obj-191",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1272.0,
+						1280.0,
 						100.0,
 						22.0
 					],
@@ -5274,7 +5446,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-188",
+					"id": "obj-192",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -5307,7 +5479,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-189",
+					"id": "obj-193",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5335,12 +5507,12 @@
 							"parameter_longname": "BD Level",
 							"parameter_shortname": "BD",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								80.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "BD Level",
@@ -5354,79 +5526,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-190",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1278.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-191",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1280.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-192",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1282.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-193",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1284.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend bd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-194",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1286.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-195",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1288.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-196",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1290.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-197",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1292.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend bd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-198",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5477,13 +5649,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-195",
+					"id": "obj-199",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1288.0,
+						1296.0,
 						100.0,
 						22.0
 					],
@@ -5495,13 +5667,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-196",
+					"id": "obj-200",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1290.0,
+						1298.0,
 						100.0,
 						22.0
 					],
@@ -5513,7 +5685,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-197",
+					"id": "obj-201",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5564,13 +5736,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-198",
+					"id": "obj-202",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1294.0,
+						1302.0,
 						100.0,
 						22.0
 					],
@@ -5582,13 +5754,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-199",
+					"id": "obj-203",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1296.0,
+						1304.0,
 						100.0,
 						22.0
 					],
@@ -5600,7 +5772,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-200",
+					"id": "obj-204",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5628,12 +5800,12 @@
 							"parameter_longname": "SD Level",
 							"parameter_shortname": "SD",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								70.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "SD Level",
@@ -5647,79 +5819,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-201",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1300.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-202",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1302.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend sd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-203",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1304.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-204",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1306.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend sd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-205",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1308.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-206",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1310.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend sd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-207",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1312.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-208",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1314.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend sd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-209",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5770,13 +5942,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-206",
+					"id": "obj-210",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1310.0,
+						1318.0,
 						100.0,
 						22.0
 					],
@@ -5788,13 +5960,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-207",
+					"id": "obj-211",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1312.0,
+						1320.0,
 						100.0,
 						22.0
 					],
@@ -5806,7 +5978,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-208",
+					"id": "obj-212",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5857,13 +6029,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-209",
+					"id": "obj-213",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1316.0,
+						1324.0,
 						100.0,
 						22.0
 					],
@@ -5875,13 +6047,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-210",
+					"id": "obj-214",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1318.0,
+						1326.0,
 						100.0,
 						22.0
 					],
@@ -5893,7 +6065,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-211",
+					"id": "obj-215",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5921,12 +6093,12 @@
 							"parameter_longname": "RS Level",
 							"parameter_shortname": "RS",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "RS Level",
@@ -5940,79 +6112,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-212",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1322.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-213",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1324.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rs_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-214",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1326.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-215",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1328.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rs_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-216",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1330.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-217",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1332.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rs_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-218",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1334.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-219",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1336.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rs_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-220",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6063,13 +6235,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-217",
+					"id": "obj-221",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1332.0,
+						1340.0,
 						100.0,
 						22.0
 					],
@@ -6081,13 +6253,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-218",
+					"id": "obj-222",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1334.0,
+						1342.0,
 						100.0,
 						22.0
 					],
@@ -6099,7 +6271,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-219",
+					"id": "obj-223",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6150,13 +6322,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-220",
+					"id": "obj-224",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1338.0,
+						1346.0,
 						100.0,
 						22.0
 					],
@@ -6168,13 +6340,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-221",
+					"id": "obj-225",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1340.0,
+						1348.0,
 						100.0,
 						22.0
 					],
@@ -6186,7 +6358,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-222",
+					"id": "obj-226",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6214,12 +6386,12 @@
 							"parameter_longname": "CP Level",
 							"parameter_shortname": "CP",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								60.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "CP Level",
@@ -6233,79 +6405,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-223",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1344.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-224",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1346.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend cp_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-225",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1348.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-226",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1350.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend cp_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-227",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1352.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-228",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1354.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend cp_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-229",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1356.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-230",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1358.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend cp_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-231",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6356,13 +6528,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-228",
+					"id": "obj-232",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1354.0,
+						1362.0,
 						100.0,
 						22.0
 					],
@@ -6374,13 +6546,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-229",
+					"id": "obj-233",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1356.0,
+						1364.0,
 						100.0,
 						22.0
 					],
@@ -6392,7 +6564,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-230",
+					"id": "obj-234",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6443,13 +6615,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-231",
+					"id": "obj-235",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1360.0,
+						1368.0,
 						100.0,
 						22.0
 					],
@@ -6461,13 +6633,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-232",
+					"id": "obj-236",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1362.0,
+						1370.0,
 						100.0,
 						22.0
 					],
@@ -6479,7 +6651,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-233",
+					"id": "obj-237",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6507,12 +6679,12 @@
 							"parameter_longname": "CH Level",
 							"parameter_shortname": "CH",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "CH Level",
@@ -6526,79 +6698,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-234",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1366.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-235",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1368.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend ch_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-236",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1370.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-237",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1372.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend ch_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-238",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1374.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-239",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1376.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend ch_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-240",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1378.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-241",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1380.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend ch_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-242",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6649,13 +6821,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-239",
+					"id": "obj-243",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1376.0,
+						1384.0,
 						100.0,
 						22.0
 					],
@@ -6667,13 +6839,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-240",
+					"id": "obj-244",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1378.0,
+						1386.0,
 						100.0,
 						22.0
 					],
@@ -6685,7 +6857,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-241",
+					"id": "obj-245",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6736,13 +6908,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-242",
+					"id": "obj-246",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1382.0,
+						1390.0,
 						100.0,
 						22.0
 					],
@@ -6754,13 +6926,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-243",
+					"id": "obj-247",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1384.0,
+						1392.0,
 						100.0,
 						22.0
 					],
@@ -6772,7 +6944,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-244",
+					"id": "obj-248",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6800,12 +6972,12 @@
 							"parameter_longname": "OH Level",
 							"parameter_shortname": "OH",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								50.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "OH Level",
@@ -6819,79 +6991,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-245",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1388.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-246",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1390.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend oh_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-247",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1392.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-248",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1394.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend oh_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-249",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1396.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-250",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1398.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend oh_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-251",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1400.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-252",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1402.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend oh_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-253",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6942,13 +7114,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-250",
+					"id": "obj-254",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1398.0,
+						1406.0,
 						100.0,
 						22.0
 					],
@@ -6960,13 +7132,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-251",
+					"id": "obj-255",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1400.0,
+						1408.0,
 						100.0,
 						22.0
 					],
@@ -6978,7 +7150,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-252",
+					"id": "obj-256",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -7029,13 +7201,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-253",
+					"id": "obj-257",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1404.0,
+						1412.0,
 						100.0,
 						22.0
 					],
@@ -7047,13 +7219,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-254",
+					"id": "obj-258",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1406.0,
+						1414.0,
 						100.0,
 						22.0
 					],
@@ -7065,7 +7237,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-255",
+					"id": "obj-259",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -7093,12 +7265,12 @@
 							"parameter_longname": "RD Level",
 							"parameter_shortname": "RD",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								40.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "RD Level",
@@ -7112,79 +7284,79 @@
 			},
 			{
 				"box": {
-					"id": "obj-256",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1410.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-257",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1412.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-258",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1414.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-259",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1416.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rd_level",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-260",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1418.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-261",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1420.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-262",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1422.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-263",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1424.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rd_level",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-264",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -7235,13 +7407,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-261",
+					"id": "obj-265",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1420.0,
+						1428.0,
 						100.0,
 						22.0
 					],
@@ -7253,13 +7425,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-262",
+					"id": "obj-266",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1422.0,
+						1430.0,
 						100.0,
 						22.0
 					],
@@ -7271,7 +7443,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-263",
+					"id": "obj-267",
 					"maxclass": "live.text",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -7322,13 +7494,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-264",
+					"id": "obj-268",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1426.0,
+						1434.0,
 						100.0,
 						22.0
 					],
@@ -7340,13 +7512,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-265",
+					"id": "obj-269",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1428.0,
+						1436.0,
 						100.0,
 						22.0
 					],
@@ -7358,7 +7530,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-266",
+					"id": "obj-270",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -7386,12 +7558,12 @@
 							"parameter_longname": "Accent",
 							"parameter_shortname": "Accent",
 							"parameter_type": 0,
-							"parameter_mmin": 0.0,
-							"parameter_mmax": 100.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								70.0
 							],
+							"parameter_mmin": 0.0,
+							"parameter_mmax": 100.0,
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "Accent",
@@ -7405,13 +7577,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-267",
+					"id": "obj-271",
 					"maxclass": "newobj",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"patching_rect": [
 						1300.0,
-						1432.0,
+						1440.0,
 						50.0,
 						22.0
 					],
@@ -7423,13 +7595,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-268",
+					"id": "obj-272",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1434.0,
+						1442.0,
 						100.0,
 						22.0
 					],
@@ -8296,35 +8468,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-67",
-						0
-					],
-					"destination": [
-						"obj-68",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-68",
-						0
-					],
-					"destination": [
-						"obj-3",
-						1
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
 						"obj-3",
 						4
 					],
 					"destination": [
-						"obj-69",
+						"obj-67",
 						0
 					]
 				}
@@ -8332,7 +8480,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						0
 					],
 					"destination": [
@@ -8344,7 +8492,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						1
 					],
 					"destination": [
@@ -8356,7 +8504,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						2
 					],
 					"destination": [
@@ -8368,7 +8516,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						3
 					],
 					"destination": [
@@ -8380,7 +8528,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						4
 					],
 					"destination": [
@@ -8392,7 +8540,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						5
 					],
 					"destination": [
@@ -8404,7 +8552,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						6
 					],
 					"destination": [
@@ -8416,7 +8564,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						7
 					],
 					"destination": [
@@ -8428,7 +8576,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						8
 					],
 					"destination": [
@@ -8440,7 +8588,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						9
 					],
 					"destination": [
@@ -8452,7 +8600,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						10
 					],
 					"destination": [
@@ -8464,7 +8612,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						11
 					],
 					"destination": [
@@ -8476,7 +8624,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						12
 					],
 					"destination": [
@@ -8488,7 +8636,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-69",
+						"obj-67",
 						13
 					],
 					"destination": [
@@ -8500,23 +8648,35 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-3",
+						1
+					],
+					"destination": [
+						"obj-68",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-68",
+						0
+					],
+					"destination": [
+						"obj-3",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-3",
+						2
+					],
+					"destination": [
 						"obj-69",
-						14
-					],
-					"destination": [
-						"obj-67",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-3",
-						1
-					],
-					"destination": [
-						"obj-70",
 						0
 					]
 				}
@@ -8528,8 +8688,8 @@
 						0
 					],
 					"destination": [
-						"obj-3",
-						1
+						"obj-71",
+						0
 					]
 				}
 			},
@@ -8540,8 +8700,8 @@
 						0
 					],
 					"destination": [
-						"obj-72",
-						0
+						"obj-3",
+						1
 					]
 				}
 			},
@@ -8552,8 +8712,8 @@
 						0
 					],
 					"destination": [
-						"obj-3",
-						1
+						"obj-73",
+						0
 					]
 				}
 			},
@@ -8564,6 +8724,18 @@
 						0
 					],
 					"destination": [
+						"obj-3",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-72",
+						0
+					],
+					"destination": [
 						"obj-74",
 						0
 					]
@@ -8576,8 +8748,8 @@
 						0
 					],
 					"destination": [
-						"obj-3",
-						1
+						"obj-7",
+						0
 					]
 				}
 			},
@@ -9020,7 +9192,7 @@
 						0
 					],
 					"destination": [
-						"obj-113",
+						"obj-112",
 						0
 					]
 				}
@@ -9028,7 +9200,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-113",
+						"obj-112",
 						0
 					],
 					"destination": [
@@ -9040,7 +9212,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-112",
+						"obj-113",
 						0
 					],
 					"destination": [
@@ -9089,10 +9261,262 @@
 				"patchline": {
 					"source": [
 						"obj-3",
-						2
+						5
 					],
 					"destination": [
 						"obj-117",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						0
+					],
+					"destination": [
+						"obj-75",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						1
+					],
+					"destination": [
+						"obj-77",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						2
+					],
+					"destination": [
+						"obj-79",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						3
+					],
+					"destination": [
+						"obj-81",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						4
+					],
+					"destination": [
+						"obj-83",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						5
+					],
+					"destination": [
+						"obj-85",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						6
+					],
+					"destination": [
+						"obj-87",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						7
+					],
+					"destination": [
+						"obj-89",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						8
+					],
+					"destination": [
+						"obj-91",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						9
+					],
+					"destination": [
+						"obj-93",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						10
+					],
+					"destination": [
+						"obj-95",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						11
+					],
+					"destination": [
+						"obj-97",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						12
+					],
+					"destination": [
+						"obj-99",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						13
+					],
+					"destination": [
+						"obj-101",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						14
+					],
+					"destination": [
+						"obj-103",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						15
+					],
+					"destination": [
+						"obj-105",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						16
+					],
+					"destination": [
+						"obj-107",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						17
+					],
+					"destination": [
+						"obj-109",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						18
+					],
+					"destination": [
+						"obj-111",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						19
+					],
+					"destination": [
+						"obj-113",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-117",
+						20
+					],
+					"destination": [
+						"obj-115",
 						0
 					]
 				}
@@ -9116,6 +9540,54 @@
 						0
 					],
 					"destination": [
+						"obj-3",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-120",
+						0
+					],
+					"destination": [
+						"obj-121",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-121",
+						0
+					],
+					"destination": [
+						"obj-3",
+						1
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-122",
+						0
+					],
+					"destination": [
+						"obj-123",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-123",
+						0
+					],
+					"destination": [
 						"obj-7",
 						0
 					]
@@ -9124,66 +9596,6 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-121",
-						0
-					],
-					"destination": [
-						"obj-122",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-122",
-						0
-					],
-					"destination": [
-						"obj-4",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-121",
-						0
-					],
-					"destination": [
-						"obj-123",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-123",
-						0
-					],
-					"destination": [
-						"obj-120",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-124",
-						0
-					],
-					"destination": [
-						"obj-125",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
 						"obj-125",
 						0
 					],
@@ -9208,24 +9620,24 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-125",
+						0
+					],
+					"destination": [
+						"obj-127",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-127",
+						0
+					],
+					"destination": [
 						"obj-124",
 						0
-					],
-					"destination": [
-						"obj-127",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-127",
-						0
-					],
-					"destination": [
-						"obj-128",
-						0
 					]
 				}
 			},
@@ -9236,7 +9648,7 @@
 						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-129",
 						0
 					]
 				}
@@ -9268,7 +9680,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-129",
+						"obj-128",
 						0
 					],
 					"destination": [
@@ -9284,7 +9696,7 @@
 						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-132",
 						0
 					]
 				}
@@ -9296,7 +9708,7 @@
 						0
 					],
 					"destination": [
-						"obj-133",
+						"obj-124",
 						0
 					]
 				}
@@ -9328,7 +9740,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-132",
+						"obj-133",
 						0
 					],
 					"destination": [
@@ -9344,7 +9756,7 @@
 						0
 					],
 					"destination": [
-						"obj-136",
+						"obj-124",
 						0
 					]
 				}
@@ -9356,7 +9768,7 @@
 						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-137",
 						0
 					]
 				}
@@ -9377,18 +9789,6 @@
 				"patchline": {
 					"source": [
 						"obj-138",
-						0
-					],
-					"destination": [
-						"obj-139",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-139",
 						0
 					],
 					"destination": [
@@ -9400,7 +9800,19 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-137",
+						"obj-136",
+						0
+					],
+					"destination": [
+						"obj-139",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-139",
 						0
 					],
 					"destination": [
@@ -9416,7 +9828,7 @@
 						0
 					],
 					"destination": [
-						"obj-141",
+						"obj-124",
 						0
 					]
 				}
@@ -9428,7 +9840,7 @@
 						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-142",
 						0
 					]
 				}
@@ -9460,7 +9872,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-142",
+						"obj-141",
 						0
 					],
 					"destination": [
@@ -9476,7 +9888,19 @@
 						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-145",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-145",
+						0
+					],
+					"destination": [
+						"obj-124",
 						0
 					]
 				}
@@ -9524,7 +9948,7 @@
 						0
 					],
 					"destination": [
-						"obj-145",
+						"obj-124",
 						0
 					]
 				}
@@ -9532,11 +9956,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-149",
+						"obj-150",
 						0
 					],
 					"destination": [
-						"obj-150",
+						"obj-151",
 						0
 					]
 				}
@@ -9544,7 +9968,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-150",
+						"obj-151",
 						0
 					],
 					"destination": [
@@ -9556,23 +9980,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-149",
+						"obj-150",
 						0
 					],
 					"destination": [
-						"obj-151",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-151",
-						0
-					],
-					"destination": [
-						"obj-145",
+						"obj-152",
 						0
 					]
 				}
@@ -9584,7 +9996,7 @@
 						0
 					],
 					"destination": [
-						"obj-153",
+						"obj-149",
 						0
 					]
 				}
@@ -9616,7 +10028,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-152",
+						"obj-153",
 						0
 					],
 					"destination": [
@@ -9632,7 +10044,7 @@
 						0
 					],
 					"destination": [
-						"obj-156",
+						"obj-149",
 						0
 					]
 				}
@@ -9644,7 +10056,7 @@
 						0
 					],
 					"destination": [
-						"obj-145",
+						"obj-157",
 						0
 					]
 				}
@@ -9676,7 +10088,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-157",
+						"obj-156",
 						0
 					],
 					"destination": [
@@ -9689,58 +10101,70 @@
 				"patchline": {
 					"source": [
 						"obj-159",
-						0
-					],
-					"destination": [
-						"obj-145",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-161",
-						0
-					],
-					"destination": [
-						"obj-162",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-162",
-						0
-					],
-					"destination": [
-						"obj-4",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-161",
-						0
-					],
-					"destination": [
-						"obj-163",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-163",
 						0
 					],
 					"destination": [
 						"obj-160",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-160",
+						0
+					],
+					"destination": [
+						"obj-149",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-161",
+						0
+					],
+					"destination": [
+						"obj-162",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-162",
+						0
+					],
+					"destination": [
+						"obj-4",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-161",
+						0
+					],
+					"destination": [
+						"obj-163",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-163",
+						0
+					],
+					"destination": [
+						"obj-149",
 						0
 					]
 				}
@@ -9844,31 +10268,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-172",
-						0
-					],
-					"destination": [
 						"obj-173",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-173",
-						0
-					],
-					"destination": [
-						"obj-4",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-172",
 						0
 					],
 					"destination": [
@@ -9884,30 +10284,6 @@
 						0
 					],
 					"destination": [
-						"obj-168",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-175",
-						0
-					],
-					"destination": [
-						"obj-176",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-176",
-						0
-					],
-					"destination": [
 						"obj-4",
 						0
 					]
@@ -9916,7 +10292,31 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-173",
+						0
+					],
+					"destination": [
 						"obj-175",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-175",
+						0
+					],
+					"destination": [
+						"obj-172",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-176",
 						0
 					],
 					"destination": [
@@ -9932,7 +10332,19 @@
 						0
 					],
 					"destination": [
-						"obj-168",
+						"obj-4",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-176",
+						0
+					],
+					"destination": [
+						"obj-178",
 						0
 					]
 				}
@@ -9944,7 +10356,7 @@
 						0
 					],
 					"destination": [
-						"obj-179",
+						"obj-172",
 						0
 					]
 				}
@@ -9953,6 +10365,18 @@
 				"patchline": {
 					"source": [
 						"obj-179",
+						0
+					],
+					"destination": [
+						"obj-180",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-180",
 						0
 					],
 					"destination": [
@@ -9964,11 +10388,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-178",
+						"obj-179",
 						0
 					],
 					"destination": [
-						"obj-180",
+						"obj-181",
 						0
 					]
 				}
@@ -9976,11 +10400,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-180",
+						"obj-181",
 						0
 					],
 					"destination": [
-						"obj-168",
+						"obj-172",
 						0
 					]
 				}
@@ -10028,19 +10452,7 @@
 						0
 					],
 					"destination": [
-						"obj-181",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-185",
-						0
-					],
-					"destination": [
-						"obj-186",
+						"obj-172",
 						0
 					]
 				}
@@ -10049,18 +10461,6 @@
 				"patchline": {
 					"source": [
 						"obj-186",
-						0
-					],
-					"destination": [
-						"obj-4",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-185",
 						0
 					],
 					"destination": [
@@ -10076,42 +10476,6 @@
 						0
 					],
 					"destination": [
-						"obj-181",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-189",
-						0
-					],
-					"destination": [
-						"obj-190",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-190",
-						0
-					],
-					"destination": [
-						"obj-191",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-191",
-						0
-					],
-					"destination": [
 						"obj-4",
 						0
 					]
@@ -10120,35 +10484,83 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-189",
-						0
-					],
-					"destination": [
-						"obj-192",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-192",
-						0
-					],
-					"destination": [
-						"obj-193",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-193",
+						"obj-186",
 						0
 					],
 					"destination": [
 						"obj-188",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-188",
+						0
+					],
+					"destination": [
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-189",
+						0
+					],
+					"destination": [
+						"obj-190",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-190",
+						0
+					],
+					"destination": [
+						"obj-4",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-189",
+						0
+					],
+					"destination": [
+						"obj-191",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-191",
+						0
+					],
+					"destination": [
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-193",
+						0
+					],
+					"destination": [
+						"obj-194",
 						0
 					]
 				}
@@ -10180,7 +10592,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-194",
+						"obj-193",
 						0
 					],
 					"destination": [
@@ -10196,7 +10608,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-197",
 						0
 					]
 				}
@@ -10208,7 +10620,7 @@
 						0
 					],
 					"destination": [
-						"obj-198",
+						"obj-192",
 						0
 					]
 				}
@@ -10217,6 +10629,18 @@
 				"patchline": {
 					"source": [
 						"obj-198",
+						0
+					],
+					"destination": [
+						"obj-199",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-199",
 						0
 					],
 					"destination": [
@@ -10228,23 +10652,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-197",
+						"obj-198",
 						0
 					],
 					"destination": [
-						"obj-199",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-199",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-200",
 						0
 					]
 				}
@@ -10256,7 +10668,7 @@
 						0
 					],
 					"destination": [
-						"obj-201",
+						"obj-192",
 						0
 					]
 				}
@@ -10288,7 +10700,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-200",
+						"obj-201",
 						0
 					],
 					"destination": [
@@ -10304,7 +10716,7 @@
 						0
 					],
 					"destination": [
-						"obj-204",
+						"obj-192",
 						0
 					]
 				}
@@ -10316,7 +10728,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-205",
 						0
 					]
 				}
@@ -10348,7 +10760,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-205",
+						"obj-204",
 						0
 					],
 					"destination": [
@@ -10364,7 +10776,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-208",
 						0
 					]
 				}
@@ -10376,7 +10788,7 @@
 						0
 					],
 					"destination": [
-						"obj-209",
+						"obj-192",
 						0
 					]
 				}
@@ -10385,6 +10797,18 @@
 				"patchline": {
 					"source": [
 						"obj-209",
+						0
+					],
+					"destination": [
+						"obj-210",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-210",
 						0
 					],
 					"destination": [
@@ -10396,23 +10820,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-208",
+						"obj-209",
 						0
 					],
 					"destination": [
-						"obj-210",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-210",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-211",
 						0
 					]
 				}
@@ -10424,7 +10836,7 @@
 						0
 					],
 					"destination": [
-						"obj-212",
+						"obj-192",
 						0
 					]
 				}
@@ -10456,7 +10868,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-211",
+						"obj-212",
 						0
 					],
 					"destination": [
@@ -10472,7 +10884,7 @@
 						0
 					],
 					"destination": [
-						"obj-215",
+						"obj-192",
 						0
 					]
 				}
@@ -10484,7 +10896,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-216",
 						0
 					]
 				}
@@ -10516,7 +10928,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-216",
+						"obj-215",
 						0
 					],
 					"destination": [
@@ -10532,7 +10944,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-219",
 						0
 					]
 				}
@@ -10544,7 +10956,7 @@
 						0
 					],
 					"destination": [
-						"obj-220",
+						"obj-192",
 						0
 					]
 				}
@@ -10553,6 +10965,18 @@
 				"patchline": {
 					"source": [
 						"obj-220",
+						0
+					],
+					"destination": [
+						"obj-221",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-221",
 						0
 					],
 					"destination": [
@@ -10564,23 +10988,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-219",
+						"obj-220",
 						0
 					],
 					"destination": [
-						"obj-221",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-221",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-222",
 						0
 					]
 				}
@@ -10592,7 +11004,7 @@
 						0
 					],
 					"destination": [
-						"obj-223",
+						"obj-192",
 						0
 					]
 				}
@@ -10624,7 +11036,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-222",
+						"obj-223",
 						0
 					],
 					"destination": [
@@ -10640,7 +11052,7 @@
 						0
 					],
 					"destination": [
-						"obj-226",
+						"obj-192",
 						0
 					]
 				}
@@ -10652,7 +11064,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-227",
 						0
 					]
 				}
@@ -10684,7 +11096,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-227",
+						"obj-226",
 						0
 					],
 					"destination": [
@@ -10700,7 +11112,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-230",
 						0
 					]
 				}
@@ -10712,7 +11124,7 @@
 						0
 					],
 					"destination": [
-						"obj-231",
+						"obj-192",
 						0
 					]
 				}
@@ -10721,6 +11133,18 @@
 				"patchline": {
 					"source": [
 						"obj-231",
+						0
+					],
+					"destination": [
+						"obj-232",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-232",
 						0
 					],
 					"destination": [
@@ -10732,23 +11156,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-230",
+						"obj-231",
 						0
 					],
 					"destination": [
-						"obj-232",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-232",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-233",
 						0
 					]
 				}
@@ -10760,7 +11172,7 @@
 						0
 					],
 					"destination": [
-						"obj-234",
+						"obj-192",
 						0
 					]
 				}
@@ -10792,7 +11204,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-233",
+						"obj-234",
 						0
 					],
 					"destination": [
@@ -10808,7 +11220,7 @@
 						0
 					],
 					"destination": [
-						"obj-237",
+						"obj-192",
 						0
 					]
 				}
@@ -10820,7 +11232,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-238",
 						0
 					]
 				}
@@ -10852,7 +11264,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-238",
+						"obj-237",
 						0
 					],
 					"destination": [
@@ -10868,7 +11280,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-241",
 						0
 					]
 				}
@@ -10880,7 +11292,7 @@
 						0
 					],
 					"destination": [
-						"obj-242",
+						"obj-192",
 						0
 					]
 				}
@@ -10889,6 +11301,18 @@
 				"patchline": {
 					"source": [
 						"obj-242",
+						0
+					],
+					"destination": [
+						"obj-243",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-243",
 						0
 					],
 					"destination": [
@@ -10900,23 +11324,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-241",
+						"obj-242",
 						0
 					],
 					"destination": [
-						"obj-243",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-243",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-244",
 						0
 					]
 				}
@@ -10928,7 +11340,7 @@
 						0
 					],
 					"destination": [
-						"obj-245",
+						"obj-192",
 						0
 					]
 				}
@@ -10960,7 +11372,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-244",
+						"obj-245",
 						0
 					],
 					"destination": [
@@ -10976,7 +11388,7 @@
 						0
 					],
 					"destination": [
-						"obj-248",
+						"obj-192",
 						0
 					]
 				}
@@ -10988,7 +11400,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-249",
 						0
 					]
 				}
@@ -11020,7 +11432,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-249",
+						"obj-248",
 						0
 					],
 					"destination": [
@@ -11036,7 +11448,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-252",
 						0
 					]
 				}
@@ -11048,7 +11460,7 @@
 						0
 					],
 					"destination": [
-						"obj-253",
+						"obj-192",
 						0
 					]
 				}
@@ -11057,6 +11469,18 @@
 				"patchline": {
 					"source": [
 						"obj-253",
+						0
+					],
+					"destination": [
+						"obj-254",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-254",
 						0
 					],
 					"destination": [
@@ -11068,23 +11492,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-252",
+						"obj-253",
 						0
 					],
 					"destination": [
-						"obj-254",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-254",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-255",
 						0
 					]
 				}
@@ -11096,7 +11508,7 @@
 						0
 					],
 					"destination": [
-						"obj-256",
+						"obj-192",
 						0
 					]
 				}
@@ -11128,7 +11540,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-255",
+						"obj-256",
 						0
 					],
 					"destination": [
@@ -11144,7 +11556,7 @@
 						0
 					],
 					"destination": [
-						"obj-259",
+						"obj-192",
 						0
 					]
 				}
@@ -11156,7 +11568,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-260",
 						0
 					]
 				}
@@ -11188,7 +11600,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-260",
+						"obj-259",
 						0
 					],
 					"destination": [
@@ -11204,7 +11616,7 @@
 						0
 					],
 					"destination": [
-						"obj-188",
+						"obj-263",
 						0
 					]
 				}
@@ -11216,7 +11628,7 @@
 						0
 					],
 					"destination": [
-						"obj-264",
+						"obj-192",
 						0
 					]
 				}
@@ -11225,6 +11637,18 @@
 				"patchline": {
 					"source": [
 						"obj-264",
+						0
+					],
+					"destination": [
+						"obj-265",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-265",
 						0
 					],
 					"destination": [
@@ -11236,23 +11660,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-263",
+						"obj-264",
 						0
 					],
 					"destination": [
-						"obj-265",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-265",
-						0
-					],
-					"destination": [
-						"obj-188",
+						"obj-266",
 						0
 					]
 				}
@@ -11264,7 +11676,7 @@
 						0
 					],
 					"destination": [
-						"obj-267",
+						"obj-192",
 						0
 					]
 				}
@@ -11296,11 +11708,59 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-3",
-						3
+						"obj-267",
+						0
 					],
 					"destination": [
-						"obj-120",
+						"obj-269",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-269",
+						0
+					],
+					"destination": [
+						"obj-192",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-270",
+						0
+					],
+					"destination": [
+						"obj-271",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-271",
+						0
+					],
+					"destination": [
+						"obj-272",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-272",
+						0
+					],
+					"destination": [
+						"obj-4",
 						0
 					]
 				}
@@ -11312,7 +11772,7 @@
 						3
 					],
 					"destination": [
-						"obj-145",
+						"obj-124",
 						0
 					]
 				}
@@ -11324,7 +11784,7 @@
 						3
 					],
 					"destination": [
-						"obj-160",
+						"obj-149",
 						0
 					]
 				}
@@ -11360,7 +11820,7 @@
 						3
 					],
 					"destination": [
-						"obj-181",
+						"obj-172",
 						0
 					]
 				}
@@ -11372,7 +11832,19 @@
 						3
 					],
 					"destination": [
-						"obj-188",
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-3",
+						3
+					],
+					"destination": [
+						"obj-192",
 						0
 					]
 				}

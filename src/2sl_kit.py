@@ -19,8 +19,9 @@ row, then every section has three bands aligned across the device: a display (VI
 menus (ROW_Y), and dials (DIAL_Y). `finish()` fails the build when two controls or displays that show at the same
 time overlap.
 
-A page can hold groups of controls that a selector (a live.tab, `group_selector`) shows one at a time, like 2sl
-drums' kit page, where the voice buttons show one voice's controls.
+A page can hold groups of controls that a selector shows one at a time: a live.tab (`group_selector`), like 2sl
+drums' kit page, where the voice buttons show one voice's controls, or any control (`groups_selected_by`), like
+2sl drums' Function dial, which shows only its function's settings.
 
 Controls are in the presets (their initial value from BASE, the Init preset) unless they are given
 `initial_outside_presets`: then they are saved with the set but presets leave them alone.
@@ -281,17 +282,27 @@ class DevicePatchBuilder:
         self.wire(prepend, destination, 0, inlet)
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
-             views=(), group=None, initial_outside_presets=None):
-        box_id = self.param("live.dial", name, short, (1500 + x, 700 + y, DIAL_WIDTH, DIAL_HEIGHT), 0,
-                            (x, y, DIAL_WIDTH, DIAL_HEIGHT),
-                            parameter_mmin=float(minimum), parameter_mmax=float(maximum), parameter_initial_enable=1,
-                            parameter_initial=[float(self.initial(name, initial_outside_presets))],
-                            parameter_unitstyle=unit, parameter_exponent=float(exponent))
+             views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0):
+        """A live.dial: a float by default; integer=True Live's Int type (256 values at most, as `numbox`);
+        items=[names] an enum (minimum, maximum, unit and exponent unused), showing the chosen name."""
+        if integer and maximum - minimum > 255:
+            self.fail(f"dial {name!r}: an Int parameter holds 256 values, {minimum}..{maximum} has more")
+        initial = self.initial(name, initial_outside_presets)
+        if items is not None:
+            if integer:
+                self.fail(f"dial {name!r} is an enum or an Int, not both")
+            kind, values = 2, dict(parameter_enum=list(items), parameter_mmax=len(items) - 1)
+        else:
+            kind, values = (1 if integer else 0), dict(parameter_mmin=float(minimum), parameter_mmax=float(maximum),
+                                                       parameter_unitstyle=unit, parameter_exponent=float(exponent))
+        box_id = self.param("live.dial", name, short, (1500 + x, 700 + y, DIAL_WIDTH, DIAL_HEIGHT), kind,
+                            (x, y, DIAL_WIDTH, DIAL_HEIGHT), parameter_initial_enable=1,
+                            parameter_initial=[float(initial) if items is None else initial], **values)
         varname = varname_for(name)
         self.on_page(page, box_id, varname, group)
         self.in_presets(name, varname, initial_outside_presets)
         self.controls_by_kind["dial"].append(varname)
-        self.tell(box_id, message, target, 0, scale if scale != 1.0 else None)
+        self.tell(box_id, message, target, inlet, scale if scale != 1.0 else None)
         for view_box, view_message in views:
             self.tell(box_id, view_message, view_box, 0, scale if scale != 1.0 else None)
         return box_id
@@ -316,15 +327,23 @@ class DevicePatchBuilder:
         self.controls_by_kind["tab"].append(varname)
         return self.on_page(page, box_id, varname, group)
 
-    def group_selector(self, name, short, items, x, y, w, page):
-        """A live.tab that shows one group of boxes on `page` at a time (boxes join with group=(varname, i)).
-        Saved with the set, not in presets; starts on the first group."""
-        varname = varname_for(name)
+    def groups_selected_by(self, selector_box, choice_count, page):
+        """Make `selector_box` (any control whose value is a choice 0..choice_count-1) show one group of boxes on
+        `page` at a time; boxes join a group with group=(the selector's varname, i). It starts on its first group,
+        so the selector's initial value must be 0."""
+        varname = self.find(selector_box)["varname"]
         if varname in self.groups:
-            self.fail(f"group selector {name!r} made twice")
-        self.groups[varname] = {"page": page, "members": [[] for _ in items]}
+            self.fail(f"{varname!r} selects groups twice")
+        if self.initial_values.get(self.control_by_box[selector_box]) != 0:
+            self.fail(f"group selector {varname!r} must start on its first group (initial value 0)")
+        self.groups[varname] = {"page": page, "members": [[] for _ in range(choice_count)]}
+        self.tell(selector_box, f"group {varname}", self.header_boxes["ui"])
+
+    def group_selector(self, name, short, items, x, y, w, page):
+        """A live.tab that shows one group of boxes on `page` at a time (see `groups_selected_by`). Saved with the
+        set, not in presets; starts on the first group."""
         box_id = self.tabs(name, short, items, x, y, w, page, initial_outside_presets=0)
-        self.tell(box_id, f"group {varname}", self.header_boxes["ui"])
+        self.groups_selected_by(box_id, len(items), page)
         return box_id
 
     def toggle(self, name, short, x, y, w, h, page, mode=1, initial_outside_presets=None, group=None):

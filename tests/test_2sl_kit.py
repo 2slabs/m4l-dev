@@ -82,6 +82,31 @@ def test_controls_with_their_own_initial_value_stay_out_of_presets():
     expect_failure(lambda: patch.numbox("C", "C", TARGET, "c", 0, 999, 0, 60, 60, 40, "one", integer=True), "256 values")
 
 
+def test_any_control_can_select_groups_and_must_start_on_the_first():
+    patch = builder()
+    picker = patch.dial("Pick", "Pick", TARGET, "pick", 0, 0, 0, 12, 119, "one", items=["x", "y"],
+                        initial_outside_presets=0)
+    patch.groups_selected_by(picker, 2, "one")
+    patch.dial("A", "A", TARGET, "a", 0, 1, 0, 60, 119, "one", group=("pick", 0))
+    patch.dial("B", "B", TARGET, "b", 0, 1, 0, 60, 119, "one", group=("pick", 1))
+    patch.check_layout()
+    assert patch.find_by_varname("b")["hidden"] == 1, "the second group starts hidden"
+    assert ("Pick", patch.header_boxes["ui"], "group pick", None) in patch.control_routes, "the UI hears the selector"
+    late = patch.dial("Tool", "Tool", TARGET, "tool", 0, 3, 0, 120, 119, "one", integer=True, initial_outside_presets=2)
+    expect_failure(lambda: patch.groups_selected_by(late, 4, "one"), "initial value 0")
+
+
+def test_dials_are_floats_ints_or_enums():
+    patch = builder()
+    saved = lambda box: patch.find(box)["saved_attribute_attributes"]["valueof"]
+    assert saved(patch.dial("A", "A", TARGET, "a", 0, 10, 0, 12, 119, "one"))["parameter_type"] == 0
+    assert saved(patch.dial("B", "B", TARGET, "b", 0, 10, 0, 60, 119, "one", integer=True))["parameter_type"] == 1
+    enum = saved(patch.dial("Tool", "Tool", TARGET, "t", 0, 0, 0, 108, 119, "one", items=["p", "q"],
+                            initial_outside_presets=1))
+    assert (enum["parameter_type"], enum["parameter_enum"], enum["parameter_mmax"], enum["parameter_initial"]) == (2, ["p", "q"], 1, [1])
+    expect_failure(lambda: patch.dial("C", "C", TARGET, "c", 0, 999, 0, 156, 119, "one", integer=True), "256 values")
+
+
 def find_by_varname(self, varname):
     found = [x["box"] for x in self.boxes if x["box"].get("varname") == varname]
     assert len(found) == 1, f"{len(found)} boxes named {varname}"

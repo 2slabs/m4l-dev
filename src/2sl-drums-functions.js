@@ -1,16 +1,23 @@
 // ---- 2sl drums' functions (src/2sl-drums-functions.js, inserted into the brain by src/2sl-drums.py) ------------
 // A pattern is one row per voice (VOICES order), 16 steps, each step a grade: REST, GHOST, HIT or ACCENT.
-// Every function is pure (references/drums PLANS/2026-10-15-2sl-drums-functions.md):
+// Every function is pure (PLANS/2026-10-15-2sl-drums-functions.md):
 //   generator: run(values) -> a pattern (a row may be null: "nothing for this voice", the row is kept)
 //   modifier:  run(pattern, values) -> a new pattern (the input is never changed)
 // `values` holds the function's settings by name, in their own units (int, or 0-100 for %). The brain applies
-// the result only to the selected rows; the rest pass through.
+// the result to the row Voice picks, or to every row (PLANS/2026-10-15-2sl-drums-knobs.md).
+//
+// A function's variants are every combination of its settings in one list, which the Seed knob walks: a
+// reflected mixed-radix order (variantSettings) over the settings in the entry's `order`, finest first. The
+// finest changes fastest, and neighbours always differ in one setting by one step.
 //
 // FUNCTIONS is the one source of a function: the build reads its entries (through Duktape, tools/es5check.py)
 // and makes one Live parameter per setting from them; the brain runs them. Adding a function is one entry:
-//   { name, kind: "generator" | "modifier", info: Info View text, needs: [voice ids it needs selected] (optional),
-//     params: [{ name, min, max, initial, unit: "int" | "%", info, roll (optional: 0 = a new seed every Run) }],
-//     summary: function (values) -> what it will do, in a few words (the status display),
+//   { name, kind: "generator" | "modifier", info: Info View text,
+//     params: [{ name, min, max, initial, unit: "int" | "%", info }] (at least one: Seed walks them),
+//     order: [setting names, finest first: how the variants are listed],
+//     writes, reads (optional, voice ids): on a single row the function writes only the `writes` row, whichever
+//       row Voice picks, from the `reads` row (open hh: reads ch, writes oh),
+//     summary: function (values) -> what it does, in a few words (the status display, the history),
 //     run: as above }
 // Sources: references/drums/patterns.md (B1 Grids, B2 Elektron, B3 Ableton's Rhythm / Seed / Euclidean, B5,
 // P1-P12). The choices no source makes are marked (unsourced) and listed in devices/2sl-drums/README.md.
@@ -115,6 +122,8 @@ function voiceList() {
 }
 
 // ---- the registry ------------------------------------------------------------------------------------------
+// `order` (finest first) is chosen so that neighbouring variants sound alike (the user's plan); the reasons
+// no source gives are marked (unsourced) and listed in the README.
 
 var FUNCTIONS = [
   // ======== generators ========
@@ -124,8 +133,10 @@ var FUNCTIONS = [
       { name: "kit", min: 1, max: CANNED_KITS.length, initial: 1, unit: "int",
         info: "Which kit: " + cannedKitList() + "." },
       { name: "from", min: 0, max: VOICES.length, initial: 0, unit: "int",
-        info: "0: each row gets its own voice's row from the kit. Else every selected row gets this voice's row: " +
-              voiceList() + "." }],
+        info: "0: each row gets its own voice's row from the kit. Else the row (or every row, on all) gets this " +
+              "voice's row: " + voiceList() + "." }],
+    // kit fastest: the kits are listed by style, so neighbours are related kits; From changes whose row it is
+    order: ["kit", "from"],
     summary: function (values) {
       return CANNED_KITS[values.kit - 1].name + (values.from ? ", " + VOICES[values.from - 1].name + "'s row" : "");
     },
@@ -146,6 +157,10 @@ var FUNCTIONS = [
       { name: "y", min: 0, max: 255, initial: 128, unit: "int", info: "The map's Y, 0-255, as on Grids." },
       { name: "density", min: 0, max: 100, initial: 50, unit: "%",
         info: "Grids' density: a step plays when its level is above 255 - density. Above 192 it is an accent." }],
+    // density fastest: one step of it moves the threshold 2.55 levels, so neighbours differ by a hit at most and
+    // the walk is "busier / sparser" at one map point; then x, then y, each moving the map point by 1 of 255
+    // (1/64 of the way between two nodes) (unsourced)
+    order: ["density", "x", "y"],
     summary: function (values) { return "map " + values.x + "," + values.y + "  density " + values.density + "%"; },
     run: function (values) {
       var threshold = 255 - Math.round(values.density / 100 * 255), rows = [];
@@ -173,6 +188,7 @@ var FUNCTIONS = [
       { name: "rotation", min: 0, max: 15, initial: 0, unit: "int",
         info: "Steps later the cycle starts, like Ableton's Euclidean rotation (B3)." },
       { name: "steps", min: 1, max: 16, initial: 16, unit: "int", info: "The cycle's length; it repeats across the 16 steps." }],
+    order: ["rotation", "hits", "steps"],     // the user's order (PLANS/2026-10-15-2sl-drums-knobs.md)
     summary: function (values) {
       var hits = Math.min(values.hits, values.steps);
       return "E(" + hits + "," + values.steps + ")" + (values.rotation ? " +" + values.rotation : "") +
@@ -191,10 +207,10 @@ var FUNCTIONS = [
     params: [
       { name: "density", min: 0, max: 100, initial: 30, unit: "%", info: "The chance that a step is a hit." },
       { name: "accent", min: 0, max: 100, initial: 10, unit: "%", info: "The chance that a hit is an accent." },
-      { name: "seed", min: 0, max: 999, initial: 0, unit: "int", roll: true,
-        info: "The same seed makes the same rows. 0: a new seed every Run (the status line shows which)." }],
+      { name: "seed", min: 0, max: 999, initial: 0, unit: "int", info: "The same seed makes the same rows." }],
+    order: ["seed", "accent", "density"],     // the user's order (PLANS/2026-10-15-2sl-drums-knobs.md)
     summary: function (values) {
-      return "density " + values.density + "%  accent " + values.accent + "%  " + (values.seed ? "seed " + values.seed : "new seed");
+      return "density " + values.density + "%  accent " + values.accent + "%  seed " + values.seed;
     },
     run: function (values) {
       var rows = [];
@@ -209,11 +225,12 @@ var FUNCTIONS = [
       return rows;
     } },
 
-  // ======== modifiers ========
+  // ======== modifiers (each starts where it changes nothing, where it has such a setting) ========
   { name: "shift", kind: "modifier",
     info: "Moves the rows by steps, later for positive, earlier for negative, wrapping around the bar " +
           "(Ableton's Rhythm Shift, patterns.md B3).",
-    params: [{ name: "steps", min: -15, max: 15, initial: 1, unit: "int", info: "Steps to move: + later, - earlier." }],
+    params: [{ name: "steps", min: -15, max: 15, initial: 0, unit: "int", info: "Steps to move: + later, - earlier." }],
+    order: ["steps"],
     summary: function (values) { return (values.steps > 0 ? "+" : "") + values.steps + " steps"; },
     run: function (pattern, values) {
       return mapRows(pattern, function (row) {
@@ -224,14 +241,20 @@ var FUNCTIONS = [
     } },
 
   { name: "reverse", kind: "modifier",
-    info: "Plays the rows backwards from the downbeat: step 1 stays, step 2 swaps with 16, 3 with 15, ... " +
-          "(unsourced), so four on the floor and offbeats stay where they are.",
-    params: [],
-    summary: function () { return "backwards from the downbeat"; },
-    run: function (pattern) {
+    info: "Plays each span of steps backwards from its first step: step 1 of the span stays, 2 swaps with the " +
+          "last, 3 with the one before ... (unsourced). Span 16 = the bar, so four on the floor and offbeats stay.",
+    params: [{ name: "span", min: 1, max: 16, initial: 1, unit: "int",
+               info: "How many steps each reversed piece is, from the downbeat: 16 = the bar, 8 = each half bar, " +
+                     "4 = each beat. 1 and 2 change nothing." }],
+    order: ["span"],
+    summary: function (values) { return values.span === 16 ? "the bar backwards" : "every " + values.span + " steps backwards"; },
+    run: function (pattern, values) {
       return mapRows(pattern, function (row) {
         var out = [];
-        for (var s = 0; s < STEPS; s++) out.push(row[(STEPS - s) % STEPS]);
+        for (var s = 0; s < STEPS; s++) {
+          var first = s - s % values.span, length = Math.min(values.span, STEPS - first), i = s - first;
+          out.push(row[first + (length - i) % length]);
+        }
         return out;
       });
     } },
@@ -239,7 +262,8 @@ var FUNCTIONS = [
   { name: "thin", kind: "modifier",
     info: "Removes the weakest hits, as Grids' density keeps the strongest steps (patterns.md B1): ghosts first, " +
           "then hits, then accents; within a grade the weakest place in the bar first.",
-    params: [{ name: "amount", min: 0, max: 100, initial: 25, unit: "%", info: "The share of each row's hits removed." }],
+    params: [{ name: "amount", min: 0, max: 100, initial: 0, unit: "%", info: "The share of each row's hits removed." }],
+    order: ["amount"],
     summary: function (values) { return "remove " + values.amount + "% of the hits"; },
     run: function (pattern, values) {
       return mapRows(pattern, function (row) {
@@ -256,7 +280,8 @@ var FUNCTIONS = [
   { name: "ghosts", kind: "modifier",
     info: "Adds ghost notes (quiet hits, patterns.md B5) on rests: first just before a hit (as P6's ghost kicks " +
           "before beats 2 and 4), then on the weakest places in the bar.",
-    params: [{ name: "amount", min: 0, max: 100, initial: 25, unit: "%", info: "The share of each row's rests that become ghosts." }],
+    params: [{ name: "amount", min: 0, max: 100, initial: 0, unit: "%", info: "The share of each row's rests that become ghosts." }],
+    order: ["amount"],
     summary: function (values) { return values.amount + "% of the rests"; },
     run: function (pattern, values) {
       return mapRows(pattern, function (row) {
@@ -273,10 +298,12 @@ var FUNCTIONS = [
 
   { name: "fill", kind: "modifier",
     info: "A fill at the end of the bar (Elektron's FILL, patterns.md B2): hits on the rests of the last steps, " +
-          "spread evenly (Toussaint, P11). Run it, hear it, Undo it.",
+          "spread evenly (Toussaint, P11).",
     params: [
       { name: "steps", min: 1, max: 16, initial: 4, unit: "int", info: "How many of the bar's last steps: 4 = the last beat, 8 = the last half bar." },
-      { name: "density", min: 0, max: 100, initial: 50, unit: "%", info: "The share of those steps that get a hit." }],
+      { name: "density", min: 0, max: 100, initial: 0, unit: "%", info: "The share of those steps that get a hit." }],
+    // density fastest: one step of it adds or takes one hit at most; steps moves where the fill starts
+    order: ["density", "steps"],
     summary: function (values) { return "last " + values.steps + " steps, " + values.density + "%"; },
     run: function (pattern, values) {
       var onsets = euclidean(countOf(values.density, values.steps), values.steps), first = STEPS - values.steps;
@@ -286,10 +313,12 @@ var FUNCTIONS = [
       });
     } },
 
-  { name: "open hh", kind: "modifier", needs: ["ch", "oh"],
+  { name: "open hh", kind: "modifier", reads: "ch", writes: "oh",
     info: "Turns closed hats into open hats (the CH row's hits move to the OH row; patterns.md B5 swaps them for " +
-          "variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places.",
-    params: [{ name: "amount", min: 0, max: 100, initial: 50, unit: "%", info: "The share of the closed hat's hits that open." }],
+          "variation): offbeat 8ths first, where the sourced kits put the open hat (P1, P2), then the weakest places. " +
+          "On one row it reads CH and writes only OH, whichever row Voice picks; on all, the hits move.",
+    params: [{ name: "amount", min: 0, max: 100, initial: 0, unit: "%", info: "The share of the closed hat's hits that open." }],
+    order: ["amount"],
     summary: function (values) { return values.amount + "% of the closed hats"; },
     run: function (pattern, values) {
       var out = copyPattern(pattern), ch = voiceIndexOf("ch"), oh = voiceIndexOf("oh"), hits = [];
@@ -311,6 +340,8 @@ var FUNCTIONS = [
     params: [
       { name: "every", min: 1, max: 16, initial: 4, unit: "int", info: "Hits from one accent to the next (an accent counts as a hit; 1 = every hit)." },
       { name: "offset", min: 0, max: 15, initial: 0, unit: "int", info: "Hits before the first accent." }],
+    // offset fastest: it moves the accents to the next hit and keeps how many there are; every changes that
+    order: ["offset", "every"],
     summary: function (values) { return "every " + values.every + (values.offset ? ", from hit " + (values.offset + 1) : ""); },
     run: function (pattern, values) {
       return mapRows(pattern, function (row) {
@@ -325,7 +356,7 @@ var FUNCTIONS = [
     } }
 ];
 
-/** The hand edit (a click on a step) is a modifier too, outside the panel: values {voice, step, grade}. */
+/** The hand edit (a click on a step) is a modifier too, outside the registry: values {voice, step, grade}. */
 var HAND_EDIT = {
   name: "edit", kind: "modifier",
   run: function (pattern, values) {
@@ -334,6 +365,61 @@ var HAND_EDIT = {
     return out;
   }
 };
+
+// ---- the variants: every combination of a function's settings, as one list Seed walks ------------------------
+// A reflected mixed-radix order (a Gray code): the finest setting (the first in `order`) runs up, then back down
+// while the next one takes a step, and so on. Neighbours differ in exactly one setting by one step, so a plain
+// mixed-radix jump (the finest from its top straight back to its bottom) never happens.
+
+/** The settings in `fn.order`, finest first: [{index (in fn.params), radix (how many values)}]. */
+function settingsFinestFirst(fn) {
+  var out = [];
+  for (var o = 0; o < fn.order.length; o++) {
+    for (var p = 0; p < fn.params.length; p++) {
+      if (fn.params[p].name === fn.order[o]) out.push({ index: p, radix: fn.params[p].max - fn.params[p].min + 1 });
+    }
+  }
+  return out;
+}
+function variantCount(fn) {
+  var settings = settingsFinestFirst(fn), count = 1;
+  for (var i = 0; i < settings.length; i++) count *= settings[i].radix;
+  return count;
+}
+/** Variant `position` (0 .. variantCount - 1) as the function's settings, in fn.params order. */
+function variantSettings(fn, position) {
+  var settings = settingsFinestFirst(fn), values = [], higher = position;
+  if (!(position >= 0 && position < variantCount(fn) && Math.round(position) === position)) {
+    throw new Error(DEVICE_NAME + ": " + fn.name + " has no variant " + position + " (0-" + (variantCount(fn) - 1) + ")");
+  }
+  for (var i = 0; i < settings.length; i++) {
+    var plain = higher % settings[i].radix;
+    higher = Math.floor(higher / settings[i].radix);     // the coarser settings as one number: its parity flips this one
+    var digit = higher % 2 === 0 ? plain : settings[i].radix - 1 - plain;
+    values[settings[i].index] = fn.params[settings[i].index].min + digit;
+  }
+  return values;
+}
+/** Where the settings `values` (fn.params order) are in the list: the inverse of variantSettings. */
+function variantPosition(fn, values) {
+  var settings = settingsFinestFirst(fn), higher = 0;
+  for (var i = settings.length - 1; i >= 0; i--) {
+    var param = fn.params[settings[i].index], digit = values[settings[i].index] - param.min;
+    if (!(digit >= 0 && digit < settings[i].radix)) throw new Error(DEVICE_NAME + ": " + fn.name + " " + param.name + " = " + values[settings[i].index]);
+    higher = higher * settings[i].radix + (higher % 2 === 0 ? digit : settings[i].radix - 1 - digit);
+  }
+  return higher;
+}
+// Seed is one Live parameter for every function, a float 0-100 (%) of the way through the active function's list.
+// Live may keep it as a 32-bit float, which holds the position exactly while a list has fewer than 2^24 variants
+// (the registry check holds every function to that).
+var SEED_RANGE = 100;
+var MOST_VARIANTS_SEED_HOLDS = 16777216;
+function seedOfPosition(fn, position) { var count = variantCount(fn); return count > 1 ? position / (count - 1) * SEED_RANGE : 0; }
+function positionOfSeed(fn, seed) {
+  var count = variantCount(fn);
+  return Math.max(0, Math.min(count - 1, Math.round(seed / SEED_RANGE * (count - 1)))) || 0;
+}
 
 /** A broken registry is a broken device: say what is wrong, at build time (the build evaluates this) and load. */
 function checkFunctionRegistry() {
@@ -345,8 +431,9 @@ function checkFunctionRegistry() {
     if (entry.kind !== "generator" && entry.kind !== "modifier") throw new Error(where + ": kind is '" + entry.kind + "'");
     if (!entry.info) throw new Error(where + ": has no Info text");
     if (typeof entry.run !== "function" || typeof entry.summary !== "function") throw new Error(where + ": needs run and summary");
-    var needs = entry.needs || [];
-    for (var n = 0; n < needs.length; n++) voiceIndexOf(needs[n]);
+    if ((entry.reads === undefined) !== (entry.writes === undefined)) throw new Error(where + ": reads and writes go together");
+    if (entry.writes !== undefined) { voiceIndexOf(entry.reads); voiceIndexOf(entry.writes); }
+    if (!entry.params || !entry.params.length) throw new Error(where + ": needs a setting (Seed walks its settings)");
     var names = {};
     for (var p = 0; p < entry.params.length; p++) {
       var param = entry.params[p];
@@ -358,7 +445,15 @@ function checkFunctionRegistry() {
         throw new Error(where + " / " + param.name + ": min, max and initial must be whole numbers");
       }
       if (!param.info) throw new Error(where + " / " + param.name + ": has no Info text");
-      if (param.roll && param.min !== 0) throw new Error(where + " / " + param.name + ": a roll setting starts at 0 (= roll)");
+    }
+    var ordered = {};
+    for (var o = 0; o < (entry.order || []).length; o++) {
+      if (!names[entry.order[o]] || ordered[entry.order[o]]) throw new Error(where + ": order names '" + entry.order[o] + "' wrongly");
+      ordered[entry.order[o]] = 1;
+    }
+    if (!entry.order || entry.order.length !== entry.params.length) throw new Error(where + ": order must list every setting once, finest first");
+    if (variantCount(entry) > MOST_VARIANTS_SEED_HOLDS) {
+      throw new Error(where + ": " + variantCount(entry) + " variants, more than Seed holds exactly (" + MOST_VARIANTS_SEED_HOLDS + ")");
     }
   }
 }

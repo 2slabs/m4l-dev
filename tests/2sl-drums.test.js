@@ -1,7 +1,8 @@
 // Tests for 2sl drums' generated scripts, in plain node (no packages): node tests/2sl-drums.test.js
 // Run src/2sl-drums.py first: these load devices/2sl-drums/*.js as the device does, with Max's globals stubbed.
 // The functions are tested against references/drums/patterns.md (P1, P10, P11, F, B1, B3) and their Info text;
-// the engine against the design in PLANS/2026-10-15-2sl-drums-functions.md (Run, Undo, the history, selection).
+// the engine against the design in PLANS/2026-10-15-2sl-drums-knobs.md (Voice / Function / Seed, applied live,
+// commits, Undo) on PLANS/2026-10-15-2sl-drums-functions.md's function model.
 "use strict";
 const vm = require("vm");
 const fs = require("fs");
@@ -24,12 +25,26 @@ function test(name, body) { tests.push({ name, body }); }
 // ---- Max stubs: the shared sandbox ----------------------------------------------------------------------
 const { sandbox, deliverMessage } = require(path.join(ROOT, "tools", "max_sandbox.js"));
 
-function loadBrain(seed) {
+/** The brain in a sandbox. `echoes` is what Live's parameters do with a value the brain sends them (outlet 5):
+ *  "now" (the default, Max's way: the live.dial outputs it at once, back into the brain, inside the brain's
+ *  outlet call) or "later" (held in brain.heldEchoes until brain.releaseEchoes()). Seed's echo comes back as a
+ *  32-bit float, as Live may keep it. */
+function loadBrain(seed, echoes) {
   const { context, record } = sandbox(seed === undefined ? 1 : seed);
   vm.runInContext(BRAIN_SOURCE, context, { filename: "2sl-drums.js" });
+  const recordOutlet = context.outlet;
   const brain = {
-    context, record,
+    context, record, heldEchoes: [],
     send(name) { deliverMessage(context, 1, name, Array.prototype.slice.call(arguments, 1)); },
+    echo(name, value) {
+      if (name === context.SEED_PARAMETER) { brain.send("seed", Math.fround(value)); return; }
+      for (let f = 0; f < context.SETTING_PARAMETERS.length; f++) {
+        const p = context.SETTING_PARAMETERS[f].indexOf(name);
+        if (p >= 0) { brain.send("param", f, p, value); return; }
+      }
+      throw new Error("the brain sent an unknown Live parameter " + name);
+    },
+    releaseEchoes() { const held = brain.heldEchoes.splice(0); for (const [name, value] of held) brain.echo(name, value); },
     note(pitch, velocity) { context.inlet = 0; context.list(pitch, velocity); },
     clear() { record.outlets.length = 0; record.posts.length = 0; },
     lastRows() {
@@ -42,23 +57,24 @@ function loadBrain(seed) {
       assert.ok(found.length, "the brain sent no " + name);
       return found[found.length - 1].slice(2);
     },
-    /** Pick function `name`, set its settings {name: value}, select `rows` (voice ids, or all), Run. */
-    runFunction(name, settings, rows) {
+    historyAt() { return brain.lastOf(2, "history").slice(0, 2); },
+    sentToLive() { return record.outlets.filter((o) => o[0] === 5).map((o) => [o[1], o[2]]); },
+    /** Function `name` and Voice `voiceId` ("all" for every row), as the dials send them. */
+    choose(name, voiceId) {
       const f = context.FUNCTIONS.findIndex((entry) => entry.name === name);
       assert.ok(f >= 0, "no function " + name);
       brain.send("function", f);
-      for (const key in settings || {}) {
-        const p = context.FUNCTIONS[f].params.findIndex((param) => param.name === key);
-        assert.ok(p >= 0, name + " has no setting " + key);
-        brain.send("param", f, p, settings[key]);
-      }
-      if (rows) brain.selectOnly(rows);
-      brain.send("run");
+      if (voiceId !== undefined) brain.send("voice", voiceId === "all" ? VOICE_IDS.length : VOICE_IDS.indexOf(voiceId));
     },
-    selectOnly(ids) {
-      const c = context;
-      for (let v = 0; v < c.VOICES.length; v++) c.selected[v] = ids.indexOf(c.VOICES[v].id) >= 0 ? 1 : 0;
+    /** The active function's setting `name` turned to `value` (its dial). */
+    setting(name, value) {
+      const f = context.functionIndex, p = context.FUNCTIONS[f].params.findIndex((param) => param.name === name);
+      assert.ok(p >= 0, context.FUNCTIONS[f].name + " has no setting " + name);
+      brain.send("param", f, p, value);
     },
+    /** Seed turned to the active function's variant `position`. */
+    seedTo(position) { brain.send("seed", context.seedOfPosition(context.FUNCTIONS[context.functionIndex], position)); },
+    settings() { return Array.from(context.functionSettings[context.functionIndex]); },
     /** Play `bars` bars from song 16th `from`; returns [{sixteenth, voice, velocity, delay}] in order. */
     play(bars, from) {
       const start = from || 0, hits = [];
@@ -82,10 +98,16 @@ function loadBrain(seed) {
       return hits;
     },
   };
+  context.outlet = function (n, name, value) {
+    recordOutlet.apply(null, arguments);
+    if (n !== 5) return;
+    if (echoes === "later") brain.heldEchoes.push([name, value]);
+    else brain.echo(name, value);
+  };
   return brain;
 }
-function readyBrain(seed) {
-  const brain = loadBrain(seed);
+function readyBrain(seed, echoes) {
+  const brain = loadBrain(seed, echoes);
   brain.send("ready");
   brain.send("tempo", 120);
   brain.send("playing", 1);
@@ -94,6 +116,7 @@ function readyBrain(seed) {
 function noErrors(brain) { assert.deepStrictEqual(brain.record.errors, [], "errors: " + brain.record.errors.join(" | ")); }
 
 const VOICE_IDS = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];
+const ALL = VOICE_IDS.length;
 const REST = "................";
 const P1 = ["x...x...x...x...", "....x.......x...", REST, "....x.......x...", REST, "..x...x...x...x.", REST];
 
@@ -109,57 +132,84 @@ function call(brain, name, settings, patternTexts) {
   return Array.from(made, (row) => (row === null ? null : c.rowText(row)));     // a node array (the brain's is another realm's)
 }
 function patternWith(rowsById) { return VOICE_IDS.map((id) => rowsById[id] || REST); }
+function storedOutlets(brain) { const stored = {}; for (const o of brain.record.outlets) if (o[0] === 4) stored[o[1]] = o[2]; return stored; }
 
 // ---- start-up, storage ------------------------------------------------------------------------------------
-test("the Init pattern is P1 (Basic Channel-style), every row selected, the history one step long", () => {
+test("the Init pattern is P1 (Basic Channel-style), Voice on all, the history one step long", () => {
   const brain = loadBrain();
   brain.send("ready");
   assert.deepStrictEqual(brain.lastRows(), P1);
-  assert.deepStrictEqual(brain.lastOf(1, "selected"), [1, 1, 1, 1, 1, 1, 1]);
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [1, 1]);
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [ALL]);
+  assert.deepStrictEqual(brain.historyAt(), [1, 1]);
+  assert.deepStrictEqual(brain.lastOf(2, "head"), ["all | canned | seed 1/120"]);
+  assert.deepStrictEqual(brain.sentToLive(), [], "Seed already agrees with the initial settings: nothing to send");
   noErrors(brain);
 });
 
-test("the stored values' initial values in the patch restore P1 and the full selection", () => {
+test("the stored values' initial values in the patch restore P1", () => {
   const brain = loadBrain(7);
-  brain.runFunction("random", { seed: 5 });                      // something else first
-  const stored = BOXES.filter((b) => /^steps_|^selected$/.test(b.varname || ""));
-  assert.strictEqual(stored.length, 15);
-  for (const b of stored) brain.send(b.varname, b.saved_attribute_attributes.valueof.parameter_initial[0]);
   brain.send("ready");
-  assert.deepStrictEqual(brain.lastRows(), P1);
-  assert.deepStrictEqual(brain.lastOf(1, "selected"), [1, 1, 1, 1, 1, 1, 1]);
-  noErrors(brain);
+  brain.choose("random", "all");
+  brain.setting("seed", 5);                                       // something else first
+  const stored = BOXES.filter((b) => /^steps_/.test(b.varname || ""));
+  assert.strictEqual(stored.length, 14);
+  const fresh = loadBrain(8);
+  for (const b of stored) fresh.send(b.varname, b.saved_attribute_attributes.valueof.parameter_initial[0]);
+  fresh.send("ready");
+  assert.deepStrictEqual(fresh.lastRows(), P1);
+  noErrors(brain); noErrors(fresh);
 });
 
-test("persistence: the stored pattern and selection come back in a new device; its history starts there", () => {
+test("persistence: the pattern (live or committed), Voice, Function and the settings come back in a new device", () => {
   const brain = readyBrain(3);
-  brain.runFunction("euclid", { hits: 5, rotation: 2 }, ["rs"]);
-  brain.send("edit", 1, 15);
-  brain.send("edit", 6, 3, 1);
-  brain.send("select", 4, 0);
-  brain.send("select", 0, 1);
-  const rows = brain.lastRows(), selection = brain.lastOf(1, "selected");
-  const stored = {};
-  for (const o of brain.record.outlets) if (o[0] === 4) stored[o[1]] = o[2];
-  assert.strictEqual(Object.keys(stored).length, 15);
+  brain.choose("euclid", "rs");
+  brain.setting("hits", 5);
+  brain.setting("rotation", 2);
+  brain.send("edit", 1, 15);                                      // commits the euclid, then an edit
+  brain.choose("shift", "bd");
+  brain.setting("steps", 3);                                      // live, not committed: what plays is saved
+  const rows = brain.lastRows(), head = brain.lastOf(2, "head"), settings = brain.lastOf(2, "settings");
+  const stored = storedOutlets(brain);
+  assert.strictEqual(Object.keys(stored).length, 14);
+  // what Live saved: every Live parameter's last value (the dials' echoes included), and the hidden steps
+  const live = { voice: VOICE_IDS.indexOf("bd"), function: brain.context.functionIndex, seed: null, params: [] };
+  for (const o of brain.record.outlets) if (o[0] === 5 && o[1] === "seed") live.seed = Math.fround(o[2]);
+  brain.context.FUNCTIONS.forEach((fn, f) => fn.params.forEach((param, p) => live.params.push([f, p, brain.context.functionSettings[f][p]])));
   const reopened = loadBrain(99);
-  reopened.runFunction("random", { seed: 9 });
   for (const name in stored) reopened.send(name, stored[name]);
+  reopened.send("seed", live.seed);                               // Live restores in its own order
+  for (const [f, p, value] of live.params) reopened.send("param", f, p, value);
+  reopened.send("function", live.function);
+  reopened.send("voice", live.voice);
   reopened.send("ready");
   assert.deepStrictEqual(reopened.lastRows(), rows);
-  assert.deepStrictEqual(reopened.lastOf(1, "selected"), selection);
-  assert.deepStrictEqual(selection, [1, 0, 0, 0, 1, 0, 0]);
-  assert.deepStrictEqual(reopened.lastOf(2, "history").slice(0, 2), [1, 1], "the history isn't saved: it restarts");
+  assert.deepStrictEqual(reopened.lastOf(2, "head"), head);
+  assert.deepStrictEqual(reopened.lastOf(2, "settings"), settings);
+  assert.deepStrictEqual(reopened.historyAt(), [1, 1], "the history isn't saved: it restarts");
+  assert.deepStrictEqual(reopened.sentToLive(), [], "Seed was saved agreeing with the settings: nothing to send");
+  assert.deepStrictEqual(reopened.lastOf(1, "chosen"), [0]);
   noErrors(brain); noErrors(reopened);
+});
+
+test("at ready, a Seed that disagrees with the restored settings is set from them (the settings are the truth)", () => {
+  const brain = loadBrain(4);
+  brain.send("function", 2);                                      // euclid
+  brain.send("param", 2, 0, 7);
+  brain.send("seed", 0);                                          // Live's Seed, from before (or another function)
+  brain.send("ready");
+  const fn = brain.context.FUNCTIONS[2], position = brain.context.variantPosition(fn, brain.context.functionSettings[2]);
+  assert.deepStrictEqual(brain.sentToLive(), [["seed", brain.context.seedOfPosition(fn, position)]]);
+  assert.deepStrictEqual(brain.historyAt(), [1, 1]);
+  noErrors(brain);
 });
 
 test("the stored values echoing back after a change change nothing (and don't redraw)", () => {
   const brain = readyBrain();
-  brain.runFunction("euclid", { hits: 3 }, ["rd"]);
-  const stored = brain.record.outlets.filter((o) => o[0] === 4);
+  brain.choose("euclid", "rd");
+  brain.setting("hits", 3);
+  const stored = storedOutlets(brain);                            // what each hidden parameter got last
   brain.clear();
-  for (const o of stored) brain.send(o[1], o[2]);
+  for (const name in stored) brain.send(name, stored[name]);
   assert.strictEqual(brain.record.outlets.length, 0, "an unchanged stored value redrew or stored again");
   noErrors(brain);
 });
@@ -167,49 +217,93 @@ test("the stored values echoing back after a change change nothing (and don't re
 // ---- the registry: one source for the functions and their Live parameters -----------------------------------
 function longName(entry, param) { return entry.name[0].toUpperCase() + entry.name.slice(1) + " " + param.name[0].toUpperCase() + param.name.slice(1); }
 function varnameOf(name) { return name.toLowerCase().replace(/ /g, "_"); }
+function boxNamed(varname) { const box = BOXES.find((b) => b.varname === varname); assert.ok(box, "no box " + varname); return box; }
+function wiredInto(box) { return LINES.filter((l) => l.source[0] === box.id).map((l) => BOXES.find((b) => b.id === l.destination[0])); }
+function reachesBrainInlet1(prepend) {
+  const brainBox = BOXES.find((b) => b.text === "js 2sl-drums.js");
+  return LINES.some((l) => l.source[0] === prepend.id && l.destination[0] === brainBox.id && l.destination[1] === 1);
+}
 
-test("registry -> Live parameters: every setting is one live.numbox with the registry's range, initial, unit, Info", () => {
+test("registry -> Live parameters: every setting is one live.dial with the registry's range, initial, unit, Info", () => {
   const c = loadBrain().context, UNIT = { int: 0, "%": 5 };
   const brainBox = BOXES.find((b) => b.text === "js 2sl-drums.js");
-  const tab = BOXES.find((b) => b.varname === "function");
-  assert.deepStrictEqual(tab.saved_attribute_attributes.valueof.parameter_enum, Array.from(c.FUNCTIONS, (f) => f.name));
+  const route = BOXES.find((b) => /^route seed /.test(b.text || ""));
+  assert.ok(LINES.some((l) => l.source[0] === brainBox.id && l.source[1] === 5 && l.destination[0] === route.id), "outlet 5 -> route");
+  const routeNames = route.text.split(" ").slice(1);
+  const ui = loadUi();
   let settings = 0;
   c.FUNCTIONS.forEach((entry, f) => {
     entry.params.forEach((param, p) => {
       settings++;
-      const name = longName(entry, param), box = BOXES.find((b) => b.varname === varnameOf(name));
-      assert.ok(box, "no Live parameter " + name);
-      assert.strictEqual(box.maxclass, "live.numbox", name);
+      const name = longName(entry, param), box = boxNamed(varnameOf(name));
+      assert.strictEqual(box.maxclass, "live.dial", name);
       const saved = box.saved_attribute_attributes.valueof;
       assert.strictEqual(saved.parameter_longname, name);
+      assert.strictEqual(saved.parameter_type, param.max - param.min <= 255 ? 1 : 0, name + ": Int, or a float shown as Int");
       assert.strictEqual(saved.parameter_mmin, param.min, name + " min");
       assert.strictEqual(saved.parameter_mmax, param.max, name + " max");
       assert.deepStrictEqual(saved.parameter_initial, [param.initial], name + " initial");
       assert.strictEqual(saved.parameter_unitstyle, UNIT[param.unit], name + " unit");
       assert.ok(saved.parameter_info.indexOf(param.info) >= 0 && saved.parameter_info.indexOf(entry.info) >= 0, name + " Info");
-      assert.strictEqual(box.hidden, undefined, name + " must show with the pattern page");
-      // its value reaches the brain as `param f p value`
-      const prepend = LINES.filter((l) => l.source[0] === box.id).map((l) => BOXES.find((b) => b.id === l.destination[0]));
+      assert.strictEqual(c.SETTING_PARAMETERS[f][p], box.varname, name + ": the brain addresses it by its scripting name");
+      // its value reaches the brain as `param f p value`; the brain sets it through the route
+      const prepend = wiredInto(box);
       assert.deepStrictEqual(prepend.map((b) => b.text), ["prepend param " + f + " " + p], name + " wiring");
-      assert.ok(LINES.some((l) => l.source[0] === prepend[0].id && l.destination[0] === brainBox.id && l.destination[1] === 1));
+      assert.ok(reachesBrainInlet1(prepend[0]));
+      const routeOutlet = routeNames.indexOf(box.varname);
+      assert.ok(LINES.some((l) => l.source[0] === route.id && l.source[1] === routeOutlet && l.destination[0] === box.id), name + " from the route");
+      // shown only while Function picks its function
+      assert.strictEqual(box.hidden, f === 0 ? undefined : 1, name + " starts shown only for the first function");
+      assert.ok(ui.context.GROUPS.function.members[f].indexOf(box.varname) >= 0, name + " in its function's group");
     });
   });
-  const numboxes = BOXES.filter((b) => b.maxclass === "live.numbox" && b.presentation === 1 && b.varname !== "volume");
-  assert.strictEqual(numboxes.length, settings, "a live.numbox no registry setting made");
-  // presets leave the functions alone
-  const ui = loadUi();
-  for (const preset of ui.context.PRESETS) for (const name in preset) assert.ok(!/^(canned|grids|euclid|random|shift|thin|ghosts|fill|open_hh|accent)_/.test(name), name);
+  const dials = BOXES.filter((b) => b.maxclass === "live.dial" && ui.context.PAGES.pattern.indexOf(b.varname) >= 0);
+  assert.strictEqual(dials.length, settings + 3, "the pattern page's dials: Voice, Function, Seed and the settings");
+  for (const preset of ui.context.PRESETS) for (const name in preset) {
+    assert.ok(!/^(canned|grids|euclid|random|shift|reverse|thin|ghosts|fill|open_hh|accent)_|^(voice|function|seed)$/.test(name), name);
+  }
+});
+
+test("Voice, Function and Seed: dials, Voice the voices then all, Function the registry, Seed a float 0-100%", () => {
+  const c = loadBrain().context;
+  const voice = boxNamed("voice").saved_attribute_attributes.valueof;
+  assert.strictEqual(boxNamed("voice").maxclass, "live.dial");
+  assert.deepStrictEqual(voice.parameter_enum, VOICE_IDS.concat(["all"]));
+  assert.deepStrictEqual(voice.parameter_initial, [ALL]);
+  const fn = boxNamed("function").saved_attribute_attributes.valueof;
+  assert.deepStrictEqual(fn.parameter_enum, Array.from(c.FUNCTIONS, (f) => f.name));
+  assert.deepStrictEqual(fn.parameter_initial, [0]);
+  const seed = boxNamed("seed").saved_attribute_attributes.valueof;
+  assert.strictEqual(seed.parameter_type, 0, "a float: Live's Int type holds 256 values");
+  assert.strictEqual(seed.parameter_mmin, 0);
+  assert.strictEqual(seed.parameter_mmax, 100);
+  const first = c.FUNCTIONS[0];
+  assert.deepStrictEqual(seed.parameter_initial, [c.seedOfPosition(first, c.variantPosition(first, first.params.map((p) => p.initial)))]);
+  for (const [name, message] of [["voice", "voice"], ["function", "function"], ["seed", "seed"]]) {
+    const prepends = wiredInto(boxNamed(name)).filter((b) => b.text === "prepend " + message);
+    assert.strictEqual(prepends.length, 1, name + " -> brain");
+    assert.ok(reachesBrainInlet1(prepends[0]));
+  }
+  assert.ok(wiredInto(boxNamed("function")).some((b) => b.text === "prepend group function"), "Function picks the settings shown");
 });
 
 test("a broken registry entry is a loud failure (the build and the device run this check)", () => {
   const c = loadBrain().context;
   const good = c.FUNCTIONS.slice();
+  const setting = (extra) => Object.assign({ name: "a", min: 0, max: 4, initial: 1, unit: "int", info: "i" }, extra || {});
   const broken = [
-    { name: "x", kind: "neither", info: "i", params: [], run() {}, summary() {} },
-    { name: "x", kind: "modifier", info: "i", params: [{ name: "a", min: 0, max: 4, initial: 9, unit: "int", info: "i" }], run() {}, summary() {} },
-    { name: "x", kind: "modifier", info: "i", params: [{ name: "a", min: 0, max: 4, initial: 1, unit: "dB", info: "i" }], run() {}, summary() {} },
-    { name: "x", kind: "modifier", info: "", params: [], run() {}, summary() {} },
-    { name: "canned", kind: "modifier", info: "i", params: [], run() {}, summary() {} },
+    { name: "x", kind: "neither", info: "i", params: [setting()], order: ["a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting({ initial: 9 })], order: ["a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting({ unit: "dB" })], order: ["a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "", params: [setting()], order: ["a"], run() {}, summary() {} },
+    { name: "canned", kind: "modifier", info: "i", params: [setting()], order: ["a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [], order: [], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting()], order: [], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting()], order: ["b"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting(), setting({ name: "b" })], order: ["a", "a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", writes: "oh", params: [setting()], order: ["a"], run() {}, summary() {} },
+    { name: "x", kind: "modifier", info: "i", params: [setting({ max: 9999 }), setting({ name: "b", max: 9999 })], order: ["a", "b"],
+      run() {}, summary() {} },
   ];
   for (const entry of broken) {
     c.FUNCTIONS.length = 0;
@@ -219,13 +313,382 @@ test("a broken registry entry is a loud failure (the build and the device run th
   }
 });
 
+// ---- the variants: Seed and the settings are one state ---------------------------------------------------------
+const ORDERS = { canned: ["kit", "from"], grids: ["density", "x", "y"], euclid: ["rotation", "hits", "steps"],
+                 random: ["seed", "accent", "density"], shift: ["steps"], reverse: ["span"], thin: ["amount"],
+                 ghosts: ["amount"], fill: ["density", "steps"], "open hh": ["amount"], accent: ["offset", "every"] };
+const COUNTS = { canned: 120, grids: 6619136, euclid: 4352, random: 10201000, shift: 31, reverse: 16, thin: 101,
+                 ghosts: 101, fill: 1616, "open hh": 101, accent: 256 };
+
+test("every function's order (finest first) and variant count are as declared", () => {
+  const c = loadBrain().context;
+  assert.deepStrictEqual(Array.from(c.FUNCTIONS, (f) => f.name), Object.keys(ORDERS));
+  for (const fn of c.FUNCTIONS) {
+    assert.deepStrictEqual(Array.from(fn.order), ORDERS[fn.name], fn.name + " order");
+    assert.strictEqual(c.variantCount(fn), COUNTS[fn.name], fn.name + " count");
+  }
+});
+
+/** Every position of a function with up to 100000 variants; for the big ones (grids, random), the first and last
+ *  20000, 2000 around every turn of the second-finest setting and 20000 spread evenly (a full pass takes a minute). */
+function positionsToCheck(fn, c) {
+  const count = c.variantCount(fn), positions = [];
+  if (count <= 100000) { for (let p = 0; p < count; p++) positions.push(p); return positions; }
+  for (let p = 0; p < 20000; p++) positions.push(p, count - 1 - p);
+  const block = fn.params.find((param) => param.name === fn.order[0]), radix = block.max - block.min + 1;
+  const second = fn.params.find((param) => param.name === fn.order[1]), turn = radix * (second.max - second.min + 1);
+  for (let k = 1; k * turn < count && k < 1000; k++) positions.push(k * turn - 1, k * turn);
+  for (let p = 0; p < 20000; p++) positions.push(Math.floor(p * (count - 1) / 19999));
+  return positions;
+}
+
+test("mixed radix round trip for every function: position -> settings -> position, and via Seed", () => {
+  const c = loadBrain().context;
+  for (const fn of c.FUNCTIONS) {
+    const count = c.variantCount(fn), seen = new Set();
+    for (const position of positionsToCheck(fn, c)) {
+      const settings = c.variantSettings(fn, position);
+      fn.params.forEach((param, p) => assert.ok(settings[p] >= param.min && settings[p] <= param.max, fn.name + " " + param.name));
+      if (count <= 5000) seen.add(settings.join(","));
+      if (c.variantPosition(fn, settings) !== position) assert.fail(fn.name + ": " + position + " -> " + settings + " -> " + c.variantPosition(fn, settings));
+      // Seed: a float of 0-100%, which Live may keep as a 32-bit float
+      if (c.positionOfSeed(fn, Math.fround(c.seedOfPosition(fn, position))) !== position) assert.fail(fn.name + ": Seed loses " + position);
+    }
+    if (count <= 5000) assert.strictEqual(seen.size, count, fn.name + ": every combination once");
+    assert.throws(() => c.variantSettings(fn, count), /no variant/);
+  }
+});
+
+test("neighbours differ in one setting by one step: the finest, except where it turns round", () => {
+  const c = loadBrain().context;
+  for (const fn of c.FUNCTIONS) {
+    const finest = fn.params.findIndex((param) => param.name === fn.order[0]);
+    const radix = fn.params[finest].max - fn.params[finest].min + 1, count = c.variantCount(fn);
+    let previous = c.variantSettings(fn, 0);
+    for (let position = 1; position < Math.min(count, 50000); position++) {
+      const settings = c.variantSettings(fn, position), changed = [];
+      for (let p = 0; p < settings.length; p++) if (settings[p] !== previous[p]) changed.push(p);
+      if (changed.length !== 1 || Math.abs(settings[changed[0]] - previous[changed[0]]) !== 1) {
+        assert.fail(fn.name + " " + (position - 1) + " -> " + position + ": " + previous + " -> " + settings);
+      }
+      if ((changed[0] === finest) !== (position % radix !== 0)) assert.fail(fn.name + " " + position + ": the finest setting should change");
+      previous = settings;
+    }
+  }
+});
+
+// ---- the knobs: live application, commits, Undo ----------------------------------------------------------------
+test("turning Seed shows f(base, position) at once (grid, status, playback) and adds no history step", () => {
+  const brain = readyBrain();
+  brain.choose("euclid", "rs");
+  const before = brain.historyAt();
+  const fn = brain.context.FUNCTIONS[2];
+  const start = brain.context.variantPosition(fn, brain.settings());
+  for (const position of [start + 1, start + 2, start + 40, 17]) {
+    brain.clear();
+    brain.seedTo(position);
+    const settings = brain.context.variantSettings(fn, position), values = {};
+    fn.params.forEach((param, p) => { values[param.name] = settings[p]; });
+    const expected = P1.slice();
+    expected[2] = call(brain, "euclid", values)[2];
+    assert.deepStrictEqual(brain.lastRows(), expected, "seed " + position);
+    assert.deepStrictEqual(brain.settings(), Array.from(settings), "Seed moved the settings");
+    assert.deepStrictEqual(brain.lastOf(2, "head"), ["rs | euclid | seed " + (position + 1) + "/4352"]);
+    assert.ok(/^live: E\(/.test(brain.lastOf(2, "note")[0]), brain.lastOf(2, "note")[0]);
+    assert.deepStrictEqual(brain.historyAt(), before, "no history step while turning");
+    const rim = brain.play(1).filter((h) => h.voice === "rs").map((h) => h.sixteenth % 16);
+    assert.deepStrictEqual(rim, expected[2].split("").map((g, s) => (g === "." ? -1 : s)).filter((s) => s >= 0), "it plays");
+  }
+  brain.seedTo(start);
+  const startRows = P1.slice();
+  startRows[2] = call(brain, "euclid", {})[2];
+  assert.deepStrictEqual(brain.lastRows(), startRows, "back where the turning started: f(base, start), not the base");
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["live: E(4,16)", 0]);
+  brain.send("undo");
+  assert.deepStrictEqual(brain.lastRows(), P1, "Undo brings the base back");
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["the base: turn Seed or a setting", 0]);
+  assert.deepStrictEqual(brain.historyAt(), before);
+  noErrors(brain);
+});
+
+test("turning a setting moves Seed and shows the result; the base is the pattern when the turning started", () => {
+  const brain = readyBrain();
+  brain.choose("shift", "bd");
+  brain.clear();
+  brain.setting("steps", 2);
+  const fn = brain.context.FUNCTIONS[4];
+  assert.deepStrictEqual(brain.sentToLive(), [["seed", brain.context.seedOfPosition(fn, 17)]], "Seed follows (steps -15..15: +2 is 17)");
+  assert.strictEqual(brain.lastRows()[0], "..x...x...x...x.");
+  brain.setting("steps", 3);
+  assert.strictEqual(brain.lastRows()[0], "...x...x...x...x", "f(base, +3), not +3 on +2");
+  brain.setting("steps", 0);
+  assert.deepStrictEqual(brain.lastRows(), P1, "shift 0 changes nothing: the base");
+  assert.deepStrictEqual(brain.historyAt(), [1, 1]);
+  noErrors(brain);
+});
+
+test("moving Voice or Function commits what is shown as one step, and it is the next base", () => {
+  const brain = readyBrain();
+  brain.choose("shift", "bd");
+  brain.setting("steps", 1);
+  brain.setting("steps", 2);
+  brain.send("voice", 1);                                        // sd: commit
+  assert.deepStrictEqual(brain.historyAt(), [2, 2]);
+  assert.ok(/shift \+2 steps on bd/.test(brain.lastOf(2, "history")[2]), brain.lastOf(2, "history")[2]);
+  const committed = brain.lastRows();
+  assert.strictEqual(committed[0], "..x...x...x...x.");
+  brain.setting("steps", 3);                                     // sd now; the shift remembers +2, the turning starts there
+  assert.strictEqual(brain.lastRows()[1], ".......x.......x", "f(new base, +3) on sd");
+  assert.strictEqual(brain.lastRows()[0], committed[0], "bd stays as committed");
+  brain.choose("thin");                                          // Function: commit
+  assert.deepStrictEqual(brain.historyAt(), [3, 3]);
+  brain.send("voice", ALL);                                      // nothing turned since: no step
+  brain.choose("reverse");
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "a commit with nothing changed is no step");
+  brain.setting("span", 4);
+  brain.setting("span", 1);                                      // span 1 changes nothing: the base
+  brain.send("voice", 0);
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "turned to a setting that changes nothing: no step");
+  noErrors(brain);
+});
+
+test("touching any knob applies the function, the starting settings too: canned kit 3 onto sd", () => {
+  const brain = readyBrain();
+  brain.choose("canned", "bd");
+  brain.setting("kit", 3);                                        // P1 + rim 16ths: bd's row (P1's anyway)
+  brain.send("voice", VOICE_IDS.indexOf("rs"));                   // commit; canned remembers kit 3
+  assert.deepStrictEqual(brain.lastRows()[2], REST, "Voice only commits, it applies nothing");
+  brain.setting("kit", 4);
+  brain.setting("kit", 3);                                        // back to the starting settings
+  assert.strictEqual(brain.lastRows()[2], brain.context.CANNED_KITS[2].rows.rs, "kit 3's rim row on rs");
+  brain.send("voice", 1);
+  assert.strictEqual(brain.lastRows()[2], brain.context.CANNED_KITS[2].rows.rs, "committed");
+  noErrors(brain);
+});
+
+test("each function remembers its settings; switching back doesn't re-apply them (the base is the pattern now)", () => {
+  const brain = readyBrain();
+  brain.choose("euclid", "rd");
+  brain.setting("hits", 5);
+  brain.choose("shift");                                          // commits euclid on rd
+  const now = brain.lastRows();
+  brain.choose("euclid");
+  assert.deepStrictEqual(brain.settings().slice(0, 1), [5], "euclid kept hits 5");
+  assert.deepStrictEqual(brain.lastRows(), now, "coming back shows the pattern as it is");
+  const fn = brain.context.FUNCTIONS[2];
+  assert.deepStrictEqual(brain.sentToLive().pop(), ["seed", brain.context.seedOfPosition(fn, brain.context.variantPosition(fn, brain.settings()))],
+                         "Seed follows the function");
+  noErrors(brain);
+});
+
+test("Undo: first drops what isn't committed (settings back, no step), then steps back through commits", () => {
+  const brain = readyBrain();
+  brain.choose("euclid", "rs");
+  brain.setting("hits", 5);
+  brain.choose("shift", "bd");                                    // commit 1 (euclid on rs)
+  const p1 = brain.lastRows();
+  brain.send("edit", 6, 0);                                       // commit 2 (an edit)
+  const p2 = brain.lastRows();
+  brain.setting("steps", 4);                                      // live
+  brain.setting("steps", 5);
+  assert.deepStrictEqual(brain.historyAt(), [3, 3]);
+  brain.clear();
+  brain.send("undo");
+  assert.deepStrictEqual(brain.lastRows(), p2, "back to the base");
+  assert.deepStrictEqual(brain.settings(), [0], "the settings back where the turning started");
+  const fn = brain.context.FUNCTIONS[4];
+  assert.deepStrictEqual(brain.sentToLive(), [["shift_steps", 0], ["seed", brain.context.seedOfPosition(fn, 15)]]);
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "dropping isn't a step back");
+  brain.send("undo"); assert.deepStrictEqual(brain.lastRows(), p1);
+  brain.send("undo"); assert.deepStrictEqual(brain.lastRows(), P1);
+  assert.deepStrictEqual(brain.historyAt(), [1, 3]);
+  brain.clear();
+  brain.send("undo");
+  assert.ok(brain.record.posts.some((p) => /oldest pattern kept/.test(p)));
+  assert.ok(!brain.record.outlets.some((o) => o[0] === 4), "an Undo past the start stored something");
+  // a commit after an Undo drops the undone steps (no redo)
+  brain.setting("steps", 2);
+  brain.send("voice", 1);
+  assert.deepStrictEqual(brain.historyAt(), [2, 2]);
+  noErrors(brain);
+});
+
+test("hand edit: commits what is turned first, then is its own step; a click cycles rest -> hit -> accent -> rest", () => {
+  const brain = readyBrain();
+  brain.choose("shift", "bd");
+  brain.setting("steps", 1);
+  brain.send("edit", 6, 5);
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "the shift, then the edit");
+  assert.strictEqual(brain.lastRows()[0], ".x...x...x...x..", "the shift is kept");
+  assert.strictEqual(brain.lastRows()[6][5], "x");
+  brain.send("edit", 6, 5); assert.strictEqual(brain.lastRows()[6][5], "X");
+  brain.send("edit", 6, 5); assert.strictEqual(brain.lastRows()[6][5], ".");
+  brain.send("edit", 6, 9, 1); assert.strictEqual(brain.lastRows()[6][9], "o");
+  brain.send("edit", 6, 9); assert.strictEqual(brain.lastRows()[6][9], "x");
+  assert.ok(/edit rd step 10 x/.test(brain.lastOf(2, "history")[2]));
+  brain.send("undo"); assert.strictEqual(brain.lastRows()[6][9], "o");
+  brain.setting("steps", 2);                                      // the next turning starts on the edited pattern
+  assert.strictEqual(brain.lastRows()[6][9], "o");
+  noErrors(brain);
+});
+
+test("echoes: values the brain sends Live's parameters come back at once and change nothing more", () => {
+  const brain = readyBrain(1, "now");
+  brain.choose("euclid", "rs");
+  brain.clear();
+  brain.seedTo(1234);
+  const sent = brain.sentToLive();
+  const fn = brain.context.FUNCTIONS[2], settings = brain.context.variantSettings(fn, 1234);
+  const changedSettings = Array.from(fn.params, (param, p) => [brain.context.SETTING_PARAMETERS[2][p], settings[p]])
+    .filter(([name, value], p) => value !== fn.params[p].initial);
+  assert.ok(changedSettings.length >= 2, "the test needs a variant that moves several settings");
+  assert.deepStrictEqual(sent, changedSettings, "each changed setting once, nothing else");
+  assert.deepStrictEqual(brain.historyAt(), [1, 1]);
+  const rows = brain.lastRows(), shows = brain.record.outlets.filter((o) => o[0] === 1 && o[1] === "rows").length;
+  assert.strictEqual(shows, 1, "the echoes redrew");
+  brain.clear();
+  brain.setting("hits", 3);
+  assert.deepStrictEqual(brain.sentToLive().map((s) => s[0]), ["seed"]);
+  assert.strictEqual(brain.record.outlets.filter((o) => o[0] === 1 && o[1] === "rows").length, 1);
+  brain.send("voice", 0);
+  assert.deepStrictEqual(brain.historyAt(), [2, 2], "one commit");
+  brain.send("undo");
+  brain.send("undo");
+  assert.deepStrictEqual(brain.lastRows(), P1);
+  assert.notDeepStrictEqual(rows, P1);
+  noErrors(brain);
+});
+
+test("echoes that come late (after the next turns) are recognised and change nothing", () => {
+  const brain = readyBrain(1, "later");
+  brain.choose("euclid", "rs");
+  brain.seedTo(300);
+  brain.seedTo(301);
+  brain.seedTo(2000);
+  brain.send("undo");                                             // the settings go back: more sent, all held
+  brain.seedTo(900);
+  const settings = brain.settings(), rows = brain.lastRows(), head = brain.lastOf(2, "head");
+  brain.clear();
+  brain.releaseEchoes();
+  assert.deepStrictEqual(brain.settings(), settings, "a late echo moved the settings back");
+  assert.strictEqual(brain.record.outlets.length, 0, "a late echo redrew, stored or sent something");
+  brain.send("voice", 0);
+  assert.deepStrictEqual(brain.historyAt(), [2, 2]);
+  assert.strictEqual(brain.lastOf(2, "history")[2].indexOf("E(") >= 0, true);
+  assert.ok(rows && head);
+  noErrors(brain);
+});
+
+test("Live sending a parameter the value it has (no change) does nothing; a hidden function's setting is kept", () => {
+  const brain = readyBrain(1, "now");
+  brain.choose("euclid", "rs");
+  brain.clear();
+  brain.setting("hits", 4);                                       // the value it has
+  brain.send("seed", brain.context.liveParameterValues.seed);
+  assert.strictEqual(brain.record.outlets.length, 0);
+  brain.send("param", 4, 0, 6);                                   // shift's steps, automated while euclid shows
+  assert.strictEqual(brain.record.outlets.length, 0, "a hidden function's setting changes nothing now");
+  brain.choose("shift");
+  assert.deepStrictEqual(brain.settings(), [6]);
+  noErrors(brain);
+});
+
+test("all: generators make the whole kit, modifiers change every row; one row: only that row", () => {
+  const brain = readyBrain();
+  const tresillo = brain.context.CANNED_KITS.findIndex((kit) => kit.name === "P11 tresillo") + 1;
+  brain.choose("canned", "all");
+  brain.setting("kit", tresillo);
+  assert.deepStrictEqual(brain.lastRows(), call(brain, "canned", { kit: tresillo }));
+  brain.choose("shift");
+  brain.setting("steps", 1);
+  assert.deepStrictEqual(brain.lastRows(), call(brain, "shift", { steps: 1 }, call(brain, "canned", { kit: tresillo })));
+  brain.choose("canned", "sd");
+  brain.setting("kit", 1);                                        // tresillo has no sd: P1's sd on sd only
+  const rows = brain.lastRows(), before = call(brain, "shift", { steps: 1 }, call(brain, "canned", { kit: tresillo }));
+  assert.strictEqual(rows[1], P1[1]);
+  rows.forEach((row, v) => { if (v !== 1) assert.strictEqual(row, before[v], VOICE_IDS[v] + " changed"); });
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [1]);
+  noErrors(brain);
+});
+
+test("open hh on one row reads ch and writes only oh; on ch (or another row) it says loudly; on all the hits move", () => {
+  const brain = readyBrain();
+  brain.choose("canned", "all");
+  const p4 = brain.context.CANNED_KITS.findIndex((kit) => kit.name === "P2 motor city") + 1;
+  brain.setting("kit", p4);                                       // ch .x.x.x.x.x.x.x.x, oh ..x...x...x...x.
+  brain.choose("open hh", "oh");
+  const base = brain.lastRows();
+  brain.setting("amount", 100);
+  const made = call(brain, "open hh", { amount: 100 }, base);
+  assert.strictEqual(brain.lastRows()[5], made[5], "oh written");
+  assert.strictEqual(brain.lastRows()[4], base[4], "ch only read");
+  brain.clear();
+  brain.send("voice", VOICE_IDS.indexOf("ch"));                   // commits; now on ch
+  assert.ok(brain.record.posts.some((p) => /open hh writes oh, not ch \(it reads ch\)/.test(p)), brain.record.posts.join(" | "));
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["open hh writes oh, not ch (it reads ch)", 1]);
+  brain.setting("amount", 50);
+  assert.strictEqual(brain.lastRows()[4], base[4], "on ch it still writes oh, not ch");
+  brain.send("voice", ALL);
+  brain.setting("amount", 100);
+  const moved = brain.lastRows();
+  assert.strictEqual(moved[4], REST, "on all the closed hats move");
+  noErrors(brain);
+});
+
+test("the history keeps the last HISTORY_LIMIT patterns; the oldest go", () => {
+  const brain = readyBrain(), limit = brain.context.HISTORY_LIMIT;
+  assert.strictEqual(limit, 100);
+  brain.choose("shift", "bd");
+  for (let i = 0; i < limit + 30; i++) {                          // each a new base: turn, then commit with Voice
+    brain.setting("steps", i % 2 ? 1 : 2);
+    brain.send("voice", (i + 1) % 2);
+  }
+  assert.strictEqual(brain.context.history.length, limit);
+  for (let i = 0; i < limit - 1; i++) brain.send("undo");
+  assert.deepStrictEqual(brain.historyAt(), [1, limit]);
+  brain.clear();
+  brain.send("undo");
+  assert.ok(brain.record.posts.some((p) => /oldest pattern kept \(100 at most\)/.test(p)));
+  noErrors(brain);
+});
+
+test("the status line: voice | function | seed n/count, the settings, what is shown, the history", () => {
+  const brain = readyBrain();
+  brain.choose("euclid", "ch");
+  assert.deepStrictEqual(brain.lastOf(2, "head"), ["ch | euclid | seed 4288/4352"]);
+  assert.deepStrictEqual(brain.lastOf(2, "settings"), ["hits 4  rotation 0  steps 16"]);
+  brain.setting("hits", 9);
+  brain.setting("steps", 4);
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["live: E(4,4)  (only 4 hits fit)", 0]);
+  assert.deepStrictEqual(brain.lastOf(2, "history"), [1, 1, "the saved pattern (+ live)"]);
+  brain.choose("random");
+  assert.deepStrictEqual(brain.lastOf(2, "settings"), ["density 30%  accent 10%  seed 0"]);
+  assert.deepStrictEqual(brain.lastOf(2, "history"), [2, 2, "euclid E(4,4)  (only 4 hits fit) on ch"]);
+  noErrors(brain);
+});
+
+test("a function that fails is a loud error and shows the base", () => {
+  const brain = readyBrain();
+  brain.context.FUNCTIONS[4].run = function () { return [[1, 2]]; };
+  brain.choose("shift", "bd");
+  brain.clear();
+  brain.setting("steps", 3);
+  assert.strictEqual(brain.record.errors.length, 1);
+  assert.ok(/shift \+3 steps on bd failed: .* made 1 rows/.test(brain.record.errors[0]), brain.record.errors[0]);
+  assert.deepStrictEqual(brain.lastRows(), P1);
+  brain.send("voice", 1);
+  assert.deepStrictEqual(brain.historyAt(), [1, 1], "the base was shown: no step");
+});
+
 // ---- the functions, each on its own ------------------------------------------------------------------------
 test("every function is pure: the same input gives the same output, and the input is left as it was", () => {
   const brain = loadBrain(), c = brain.context;
   const input = patternWith({ bd: "x..ox...x..ox...", ch: "xxXxxxXxxxXxxxXx", oh: "..x...x...x...x.", sd: "....X..o....x..." });
   for (const fn of c.FUNCTIONS) {
     const values = {};
-    fn.params.forEach((param) => { values[param.name] = param.roll ? 7 : param.initial; });
+    // the middle variant: away from the modifiers' do-nothing initial settings
+    const middle = c.variantSettings(fn, Math.floor(c.variantCount(fn) / 2));
+    fn.params.forEach((param, p) => { values[param.name] = middle[p]; });
     const pattern = input.map((t) => c.parseRow(t, "test"));
     const before = JSON.stringify(pattern);
     const first = fn.kind === "generator" ? fn.run(values) : fn.run(pattern, values);
@@ -273,14 +736,20 @@ test("grids: rows at the map's nodes match patterns.md F's decoding; CP = SD acc
   assert.ok(call(brain, "grids", { density: 0 }).every((row) => row === null || row === REST), "density 0 plays nothing");
 });
 
-test("grids: Run keeps the rows Grids has no channel for, and says so", () => {
+test("grids on all keeps the rows Grids has no channel for, and says so; on rs alone it says so loudly", () => {
   const brain = readyBrain();
   brain.send("edit", 2, 5);                                      // a rim hit
   const rim = brain.lastRows()[2];
   brain.clear();
-  brain.runFunction("grids", { density: 80 });
+  brain.choose("grids", "all");
+  brain.setting("density", 80);
   assert.strictEqual(brain.lastRows()[2], rim);
-  assert.ok(brain.record.posts.some((p) => /nothing for rs, rd/.test(p)), brain.record.posts.join(" | "));
+  assert.ok(brain.record.posts.some((p) => /grids has nothing for rs rd: kept as they are/.test(p)), brain.record.posts.join(" | "));
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["grids has nothing for rs rd: kept as they are", 1]);
+  brain.clear();
+  brain.choose("grids", "rs");
+  assert.deepStrictEqual(brain.lastOf(2, "note"), ["grids has nothing for rs: kept as it is", 1]);
+  assert.ok(brain.record.posts.some((p) => /grids has nothing for rs: kept as it is/.test(p)), "posted when the target changes");
   noErrors(brain);
 });
 
@@ -315,19 +784,6 @@ test("random: a seed gives the same rows every time, another seed others; densit
   assert.ok(share > 0.26 && share < 0.34, "density 30% gave " + (100 * share).toFixed(1) + "% hits");
 });
 
-test("random: seed 0 rolls a new seed each Run, and the label says which, so it can be dialled back", () => {
-  const brain = readyBrain(5);
-  brain.runFunction("random", { seed: 0, density: 50 });
-  const first = brain.lastRows(), label = brain.lastOf(2, "history")[2];
-  const seed = Number(/seed (\d+)/.exec(label)[1]);
-  assert.ok(seed >= 1 && seed <= 999, label);
-  brain.send("run");
-  assert.notDeepStrictEqual(brain.lastRows(), first, "a second roll made the same rows");
-  brain.runFunction("random", { seed, density: 50 });
-  assert.deepStrictEqual(brain.lastRows(), first, "dialling the rolled seed must give its rows back");
-  noErrors(brain);
-});
-
 test("shift: later for +, earlier for -, wrapping (Ableton's Rhythm Shift, B3); +n then -n is the identity", () => {
   const brain = loadBrain();
   const row = "x..ox...X..o....";
@@ -339,12 +795,19 @@ test("shift: later for +, earlier for -, wrapping (Ableton's Rhythm Shift, B3); 
   }
 });
 
-test("reverse: backwards from the downbeat (step 1 stays); twice is the identity; P1 is its own reverse", () => {
+test("reverse: each span backwards from its first step; span 16 = the bar (step 1 stays); 1 and 2 change nothing", () => {
   const brain = loadBrain();
-  assert.deepStrictEqual(call(brain, "reverse", {}, ["xX..o..........."]), ["x...........o..X"]);
-  assert.deepStrictEqual(call(brain, "reverse", {}, P1), P1);
+  assert.deepStrictEqual(call(brain, "reverse", { span: 16 }, ["xX..o..........."]), ["x...........o..X"]);
+  assert.deepStrictEqual(call(brain, "reverse", { span: 16 }, P1), P1);
+  assert.deepStrictEqual(call(brain, "reverse", { span: 4 }, ["xXo.x..o........"]), ["x.oXxo.........."]);
+  assert.deepStrictEqual(call(brain, "reverse", { span: 5 }, ["xXo.x.x........X"]), ["xx.oX....x.....X"],
+                         "groups of 5, 5, 5 and the last step alone");
   const row = "x..ox...X..o..x.";
-  assert.strictEqual(call(brain, "reverse", {}, call(brain, "reverse", {}, [row]))[0], row);
+  for (let span = 1; span <= 16; span++) {
+    assert.strictEqual(call(brain, "reverse", { span }, call(brain, "reverse", { span }, [row]))[0], row, "twice, span " + span);
+  }
+  assert.strictEqual(call(brain, "reverse", { span: 1 }, [row])[0], row);
+  assert.strictEqual(call(brain, "reverse", { span: 2 }, [row])[0], row);
 });
 
 test("thin: ghosts go first, then hits, then accents, the weakest place in the bar first (Grids' density, B1)", () => {
@@ -362,7 +825,8 @@ test("ghosts: rests just before a hit first (P6's ghost kicks), then the weakest
   const brain = readyBrain();
   assert.strictEqual(call(brain, "ghosts", { amount: 25 }, ["x...x...x...x..."])[0], "x..ox..ox..ox...");
   assert.strictEqual(call(brain, "ghosts", { amount: 100 }, ["x...x...x...x..."])[0], "xoooxoooxoooxooo");
-  brain.runFunction("ghosts", { amount: 25 }, ["bd"]);
+  brain.choose("ghosts", "bd");
+  brain.setting("amount", 25);
   const kicks = brain.play(1).filter((h) => h.voice === "bd");
   assert.deepStrictEqual(kicks.map((h) => [h.sixteenth % 16, +h.velocity.toFixed(3)]),
                          [[0, 0.7], [3, 0.2], [4, 0.7], [7, 0.2], [8, 0.7], [11, 0.2], [12, 0.7]]);
@@ -377,8 +841,8 @@ test("fill: hits on the rests of the bar's last steps, spread evenly (B2's FILL,
   assert.strictEqual(call(brain, "fill", { steps: 4, density: 0 }, [REST])[0], REST);
 });
 
-test("open hh: closed hats' hits move to the open hat, offbeat 8ths first; it needs both rows selected", () => {
-  const brain = readyBrain();
+test("open hh (the function): closed hats' hits move to the open hat, offbeat 8ths first", () => {
+  const brain = loadBrain();
   const input = patternWith({ ch: "x.x.x.x.x.x.x.x.", oh: REST });
   const half = call(brain, "open hh", { amount: 50 }, input);
   assert.strictEqual(half[4], "x...x...x...x...");
@@ -387,14 +851,6 @@ test("open hh: closed hats' hits move to the open hat, offbeat 8ths first; it ne
   assert.strictEqual(all[4], REST);
   assert.strictEqual(all[5], "x.x.x.x.x.x.x.x.");
   assert.deepStrictEqual(half.filter((row, v) => v !== 4 && v !== 5), input.filter((row, v) => v !== 4 && v !== 5));
-  const before = brain.lastRows();
-  brain.clear();
-  brain.runFunction("open hh", { amount: 100 }, ["ch"]);
-  assert.ok(brain.record.posts.some((p) => /works on ch and oh/.test(p)), brain.record.posts.join(" | "));
-  assert.ok(!brain.record.outlets.some((o) => o[0] === 1 && o[1] === "rows"), "the pattern changed");
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [1, 1]);
-  assert.deepStrictEqual(before, P1);
-  noErrors(brain);
 });
 
 test("accent: every Nth hit is an accent, the others plain hits, ghosts untouched (Ableton's Accent Frequency, B3)", () => {
@@ -405,123 +861,11 @@ test("accent: every Nth hit is an accent, the others plain hits, ghosts untouche
   assert.strictEqual(call(brain, "accent", { every: 16, offset: 0 }, ["X.X.X.X........."])[0], "X.x.x.x.........");
 });
 
-// ---- Run, Undo, the history, the selection -------------------------------------------------------------------
-test("Run applies the function to the selected rows only; the others pass through", () => {
-  const brain = readyBrain();
-  brain.runFunction("euclid", { hits: 3, steps: 8 }, ["rs", "rd"]);
-  const rows = brain.lastRows();
-  assert.strictEqual(rows[2], "x..x..x.x..x..x.");
-  assert.strictEqual(rows[6], "x..x..x.x..x..x.");
-  [0, 1, 3, 4, 5].forEach((v) => assert.strictEqual(rows[v], P1[v], VOICE_IDS[v] + " changed"));
-  assert.ok(/euclid E\(3,8\) on rs rd/.test(brain.lastOf(2, "history")[2]));
-  noErrors(brain);
-});
-
-test("Run with no row selected, or that changes nothing, says so and adds no step", () => {
-  const brain = readyBrain();
-  brain.selectOnly([]);
-  brain.clear();
-  brain.send("run");
-  assert.ok(brain.record.posts.some((p) => /no row is selected/.test(p)));
-  brain.runFunction("canned", { kit: 1 }, VOICE_IDS);           // P1 again: no change
-  assert.ok(brain.record.posts.some((p) => /changed nothing/.test(p)));
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [1, 1]);
-  noErrors(brain);
-});
-
-test("Undo steps back through every Run and edit; Run after Undo drops the undone steps (no redo)", () => {
-  const brain = readyBrain();
-  const p0 = brain.lastRows();
-  brain.runFunction("euclid", { hits: 5 }, ["rs"]);
-  const p1 = brain.lastRows();
-  brain.send("edit", 6, 0);
-  const p2 = brain.lastRows();
-  brain.runFunction("reverse", {}, ["rs"]);
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [4, 4]);
-  brain.send("undo"); assert.deepStrictEqual(brain.lastRows(), p2);
-  brain.send("undo"); assert.deepStrictEqual(brain.lastRows(), p1);
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [2, 4]);
-  brain.runFunction("shift", { steps: 2 }, ["bd"]);
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [3, 3], "Run after Undo must drop the undone steps");
-  brain.send("undo"); brain.send("undo");
-  assert.deepStrictEqual(brain.lastRows(), p0);
-  brain.clear();
-  brain.send("undo");
-  assert.ok(brain.record.posts.some((p) => /oldest pattern kept/.test(p)));
-  assert.ok(!brain.record.outlets.some((o) => o[0] === 4), "an Undo past the start stored something");
-  noErrors(brain);
-});
-
-test("the history keeps the last HISTORY_LIMIT patterns; the oldest go", () => {
-  const brain = readyBrain(), limit = brain.context.HISTORY_LIMIT;
-  assert.strictEqual(limit, 100);
-  for (let i = 0; i < limit + 30; i++) brain.runFunction("shift", { steps: 1 }, ["bd"]);    // P1's kick moves every time
-  assert.strictEqual(brain.context.history.length, limit);
-  for (let i = 0; i < limit - 1; i++) brain.send("undo");
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [1, limit]);
-  brain.clear();
-  brain.send("undo");
-  assert.ok(brain.record.posts.some((p) => /oldest pattern kept \(100 at most\)/.test(p)));
-  noErrors(brain);
-});
-
-test("hand edit: a click cycles rest -> hit -> accent -> rest, shift sets a ghost; each is a history step", () => {
-  const brain = readyBrain();
-  brain.send("edit", 6, 5); assert.strictEqual(brain.lastRows()[6][5], "x");
-  brain.send("edit", 6, 5); assert.strictEqual(brain.lastRows()[6][5], "X");
-  brain.send("edit", 6, 5); assert.strictEqual(brain.lastRows()[6][5], ".");
-  brain.send("edit", 6, 9, 1); assert.strictEqual(brain.lastRows()[6][9], "o");
-  brain.send("edit", 6, 9); assert.strictEqual(brain.lastRows()[6][9], "x");
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [6, 6]);
-  assert.ok(/edit rd step 10 x/.test(brain.lastOf(2, "history")[2]));
-  brain.send("undo"); assert.strictEqual(brain.lastRows()[6][9], "o");
-  brain.selectOnly(["bd"]);
-  brain.send("edit", 6, 0);
-  assert.strictEqual(brain.lastRows()[6][0], "x", "a click edits its own step whatever is selected");
-  noErrors(brain);
-});
-
-test("selection: a click selects only that row, again selects every row; shift-click toggles; it is stored", () => {
-  const brain = readyBrain();
-  const sel = () => brain.lastOf(1, "selected");
-  const storedSelection = () => brain.record.outlets.filter((o) => o[0] === 4 && o[1] === "selected").pop()[2];
-  brain.send("select", 2, 0); assert.deepStrictEqual(sel(), [0, 0, 1, 0, 0, 0, 0]); assert.strictEqual(storedSelection(), 4);
-  brain.send("select", 5, 1); assert.deepStrictEqual(sel(), [0, 0, 1, 0, 0, 1, 0]);
-  brain.send("select", 2, 1); assert.deepStrictEqual(sel(), [0, 0, 0, 0, 0, 1, 0]);
-  brain.send("select", 5, 0); assert.deepStrictEqual(sel(), [1, 1, 1, 1, 1, 1, 1], "a click on the only selected row: every row");
-  brain.send("select", 0, 0); brain.send("select", 0, 1);
-  assert.deepStrictEqual(sel(), [0, 0, 0, 0, 0, 0, 0]);
-  assert.ok(/no row/.test(brain.lastOf(2, "next")[0]));
-  noErrors(brain);
-});
-
-test("the status line says what Run will do, and follows the function, its settings and the selection", () => {
-  const brain = readyBrain();
-  brain.send("function", 2);
-  brain.send("param", 2, 0, 7);
-  assert.strictEqual(brain.lastOf(2, "next")[0], "euclid E(7,16) on every row");
-  brain.send("select", 4, 0);
-  assert.strictEqual(brain.lastOf(2, "next")[0], "euclid E(7,16) on ch");
-  brain.send("function", 0);
-  brain.send("param", 0, 1, 3);
-  assert.strictEqual(brain.lastOf(2, "next")[0], "canned P1 basic channel, rs's row on ch");
-  noErrors(brain);
-});
-
-test("a function that fails is a loud error and changes nothing", () => {
-  const brain = readyBrain();
-  brain.context.FUNCTIONS[4].run = function () { return [[1, 2]]; };
-  brain.send("function", 4);
-  brain.send("run");
-  assert.strictEqual(brain.record.errors.length, 1);
-  assert.ok(/shift failed: .* made 1 rows/.test(brain.record.errors[0]), brain.record.errors[0]);
-  assert.deepStrictEqual(brain.lastOf(2, "history").slice(0, 2), [1, 1]);
-});
-
 // ---- playback -------------------------------------------------------------------------------------------------
 test("playback: every non-rest step plays at its grade's velocity, every bar the same", () => {
   const brain = readyBrain();
-  brain.runFunction("canned", { kit: brain.context.CANNED_KITS.findIndex((k) => k.name === "P6 rolling") + 1 });
+  brain.choose("canned", "all");
+  brain.setting("kit", brain.context.CANNED_KITS.findIndex((k) => k.name === "P6 rolling") + 1);
   const hits = brain.play(4);
   for (let bar = 0; bar < 4; bar++) {
     const kicks = hits.filter((h) => h.voice === "bd" && Math.floor(h.sixteenth / 16) === bar);
@@ -600,13 +944,16 @@ test("Failures are loud: unknown messages and out-of-range values go to the Max 
   brain.send("nonsense", 1);
   brain.send("function", 99);
   brain.send("param", 2, 0, 400);
-  brain.send("param", 5, 0, 1);                                  // reverse has no settings
+  brain.send("param", 5, 3, 1);                                  // reverse has one setting
   brain.send("steps_zz_a", 1);
-  brain.send("select", 12);
-  brain.context.inlet = 0; brain.context.messagename = "run"; brain.context.anything();
-  assert.strictEqual(brain.record.errors.length, 7, brain.record.errors.join(" | "));
+  brain.send("voice", 12);
+  brain.send("seed", 140);
+  brain.send("select", 1);                                       // multi-select is gone
+  brain.context.inlet = 0; brain.context.messagename = "undo"; brain.context.anything();
+  assert.strictEqual(brain.record.errors.length, 9, brain.record.errors.join(" | "));
   assert.strictEqual(brain.context.functionIndex, brain.context.FUNCTIONS.length - 1);
-  assert.strictEqual(brain.context.functionValues[2][0], 16, "euclid hits clamps to its max");
+  assert.strictEqual(brain.context.chosenVoice, ALL);
+  assert.strictEqual(brain.context.functionSettings[2][0], 16, "euclid hits clamps to its max");
   assert.throws(() => brain.context.parseRow("x..", "test"), /not 16 steps/);
 });
 
@@ -667,7 +1014,7 @@ test("UI: the Voice buttons show one voice's controls on the kit page, and nothi
   assert.strictEqual(hiddenNow(record, "view_bd"), 0);
   assert.strictEqual(hiddenNow(record, "bd_tune"), 0);
   assert.strictEqual(hiddenNow(record, "hat_tune"), 1);
-  context.messagename = "group"; context.anything("voice", 4);
+  context.messagename = "group"; context.anything("kit_voice", 4);
   assert.strictEqual(hiddenNow(record, "view_bd"), 1);
   assert.strictEqual(hiddenNow(record, "bd_tune"), 1);
   assert.strictEqual(hiddenNow(record, "view_hats"), 0);
@@ -680,6 +1027,21 @@ test("UI: the Voice buttons show one voice's controls on the kit page, and nothi
   assert.strictEqual(record.errors.length, 1, record.errors.join(" | "));
   // the patch starts as the UI does: the voice groups after the first hidden
   for (const name of ["view_sd", "sd_tune", "view_rd"]) assert.strictEqual(BOXES.find((b) => b.varname === name).hidden, 1, name);
+});
+
+test("UI: Function shows only its function's setting dials on the pattern page", () => {
+  const { context, record } = loadUi();
+  context.messagename = "ready"; context.anything();
+  assert.strictEqual(hiddenNow(record, "canned_kit"), 0);
+  assert.strictEqual(hiddenNow(record, "euclid_hits"), 1);
+  deliverMessage(context, 0, "group", ["function", 2]);
+  assert.strictEqual(hiddenNow(record, "canned_kit"), 1);
+  for (const name of ["euclid_hits", "euclid_rotation", "euclid_steps", "voice", "function", "seed"]) {
+    assert.strictEqual(hiddenNow(record, name), 0, name);
+  }
+  deliverMessage(context, 0, "page", [1]);
+  assert.strictEqual(hiddenNow(record, "euclid_hits"), 1, "not on the kit page");
+  assert.deepStrictEqual(record.errors, []);
 });
 
 // ---- the displays ---------------------------------------------------------------------------------------------
@@ -707,7 +1069,7 @@ test("Every display draws with its Init values, takes its messages; the grid's c
   }
   const grid = loadView("grid");
   grid.send("rows", ...P1);
-  grid.send("selected", 0, 1, 0, 0, 1, 0, 0);
+  grid.send("chosen", 4);
   grid.send("pos", 3);
   grid.send("hit", 0, 3);
   grid.context.paint();
@@ -715,12 +1077,16 @@ test("Every display draws with its Init values, takes its messages; the grid's c
   assert.strictEqual(g.cellW, 16);
   assert.strictEqual(g.rowH, 19);
   const clicks = [[g.stepsX + 2 * g.cellW + 2, 1 + 1 * g.rowH + 3, 0], [g.stepsX + 5 * g.cellW + 2, 1 + 2 * g.rowH + 3, 1],
-                  [5, 1 + 4 * g.rowH + 3, 0], [5, 1 + 6 * g.rowH + 3, 1]];
+                  [5, 1 + 4 * g.rowH + 3, 0]];
   for (const [x, y, shift] of clicks) grid.context.onclick(x, y, 1, 0, shift, 0, 0, 0);
-  assert.deepStrictEqual(grid.record.outlets.map((o) => o.slice(1)),
-                         [["edit", 1, 2], ["edit", 2, 5, 1], ["select", 4, 0], ["select", 6, 1]]);
-  const status = loadView("status", [458, 33]);
-  status.send("next", "euclid E(5,16) +3 on bd sd ch, and a very long tail that must be cut to fit the status line's width");
+  assert.deepStrictEqual(grid.record.outlets.map((o) => o.slice(1)), [["edit", 1, 2], ["edit", 2, 5, 1]],
+                         "a click on a name does nothing (Voice picks the row)");
+  grid.send("chosen", 7);
+  grid.context.paint();
+  const status = loadView("status", [446, 64]);
+  status.send("head", "rs | euclid | seed 4288/4352");
+  status.send("settings", "hits 4  rotation 0  steps 16, and a very long tail that must be cut to fit the status line");
+  status.send("note", "open hh writes oh, not ch (it reads ch)", 1);
   status.send("history", 3, 12, "edit", "rd", "step", "10", "x");
   status.context.paint();
   assert.ok(status.context.fitted("x".repeat(200), 100).length <= 17);

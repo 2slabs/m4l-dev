@@ -14,7 +14,10 @@
   drift. Proper: generate both from one table of voice constants in the generator.
 - 2026-10-15: 2sl drums' step triggers come from [js] (the low-priority thread), like 2sl stab's machine; only the
   swing delay is sample-accurate (in gen~). Proper, if Live shows jitter: sequence in gen~ from Live's beat phase.
-- 2026-10-15: 2sl drums' brain changes the pattern playing in place when a stored step value arrives after `ready`
-  that differs from it (only Live's own undo of the hidden parameters could send one), instead of making it a
-  history step. Proper, if Live does send them: treat it as a step ("from Live's undo") or keep the hidden
-  parameters out of Live's undo.
+- 2026-10-15: 2sl drums' brain changes the pattern in place when a stored step value arrives after `ready` that
+  differs from what plays (only Live's own undo of the hidden parameters could send one): it commits what is being
+  turned, then changes the committed pattern, instead of making it a history step. Proper, if Live does send them:
+  treat it as a step ("from Live's undo") or keep the hidden parameters out of Live's undo.
+- 2026-10-15: 2sl drums stores the pattern playing in its 14 hidden parameters on every turn of Seed or a setting
+  (so a set saved mid-turn keeps what you hear), which may flood Live's undo history with hidden-parameter steps.
+  Proper, if Live shows it: store on commit and on Live's save only, or keep the hidden parameters out of undo.
