@@ -1,7 +1,6 @@
-// 2sl stab: pages, presets and theme. Generated from src/2sl-stab-ui.template.js by src/2sl-stab.py; edit there.
+// 2sl stab: pages and theme. Generated from src/2sl-stab-ui.template.js by src/2sl-stab.py; edit there.
 //   page i      show the play (0), osc (1) or shape (2) page
-//   int i       Preset menu: set every control to preset i
-//   ready       sent once the device has loaded (Live has restored the saved values by then)
+//   ready       sent once the device has loaded: show the page, colour the controls
 //   theme       Live's colour theme changed (from live.colors): recolour controls, redraw displays
 //   stop        turn Freeze off (part of the Stop action)
 // out 0: messages for [thispatcher]
@@ -9,12 +8,10 @@ inlets = 1;
 outlets = 1;
 
 var PAGES = /*PAGES*/;
-var PRESETS = /*PRESETS*/;
 var CONTROLS = /*CONTROLS*/;
 var VIEWS = /*VIEWS*/;
-var THEMES = /*THEMES*/;
+/*THEME_FROM_LIVE*/
 var current = 0;
-var ready = 0;
 
 function show() {
   var names = ["play", "osc", "shape"];
@@ -25,41 +22,29 @@ function show() {
 }
 
 function page(i) {
-  current = Math.max(0, Math.min(2, Math.round(i)));
+  if (!(i >= 0 && i <= 2)) error("2sl stab: page " + i + " doesn't exist (0-2): showing the nearest\n");
+  current = Math.max(0, Math.min(2, Math.round(i))) || 0;
   show();
 }
 
-function msg_int(i) {
-  // Ignore the Preset menu while Live restores the set, so saved tweaks win.
-  if (!ready || i < 0 || i >= PRESETS.length) return;
-  var p = PRESETS[i];
-  for (var name in p) {
-    var obj = this.patcher.getnamed(name);
-    if (obj) obj.message(p[name]);
-  }
-}
-
-function msg_float(v) {
-  msg_int(Math.round(v));
+/** The patch object named `name` (its scripting name). The names come from the build, which checks them
+ *  against the patch, so a missing one is a broken build: say which. */
+function named(name, purpose) {
+  var obj = this.patcher.getnamed(name);
+  if (!obj) error("2sl stab: no object named '" + name + "' in the patch (" + purpose + ")\n");
+  return obj;
 }
 
 // ---- 2sl colours on Live's controls ---------------------------------------------------------
 
-function tokens() {
-  var bg = null;
-  try { bg = max.getcolor("live_surface_bg"); } catch (e) { bg = null; }
-  var lum = bg && bg.length >= 3 ? 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] : 0.15;
-  return lum > 0.5 ? THEMES.light : THEMES.dark;
-}
-
 function paint(name, attrs) {
-  var obj = this.patcher.getnamed(name);
+  var obj = named(name, "recolouring");
   if (!obj) return;
   for (var a in attrs) obj.message([a].concat(attrs[a]));
 }
 
 function recolor() {
-  var t = tokens();
+  var t = themeFromLive("controls");
   var clear = [0, 0, 0, 0];
   var i;
   // dials: an ink arc on an unlit track, labels in the label colour, focus in "now" blue
@@ -87,14 +72,14 @@ function recolor() {
     activetricolor: t.ink, focusbordercolor: t.now
   });
   for (i = 0; i < VIEWS.length; i++) {
-    var v = this.patcher.getnamed(VIEWS[i]);
+    var v = named(VIEWS[i], "redrawing for the theme");
     if (v) v.message("theme");
   }
 }
 
 function anything() {
   if (messagename === "stop") {
-    var f = this.patcher.getnamed("freeze");
+    var f = named("freeze", "Stop turns Freeze off");
     if (f) f.message(0);
     return;
   }
@@ -103,7 +88,6 @@ function anything() {
     return;
   }
   if (messagename === "ready") {
-    ready = 1;
     show();
     recolor();
   }

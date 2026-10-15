@@ -2,21 +2,26 @@
 //   in 0: note list (pitch velocity), velocity 0 = note off
 //   in 1: control messages
 //     shape i       Chord menu: 0 poly, 1 minor, 2 m7, 3 m9, 4 m11, 5 sus4, 6 fifths, 7 dark
-//     inkey i       1 = build chords from Live's scale instead of a fixed (parallel) shape
+//     inkey i       1 = build chords from Live's scale instead of a fixed (parallel) shape (a scale under
+//                   5 notes falls back to the fixed shapes, and the chord display says so)
 //     root i / intervals ...   Live's Scale Mode key
 //     drift f       0..1: chance each stab gets a different voicing
 //     machine i / latch i
 //     pattern i     load a pattern (a starting point; steps can then be edited)
-//     edit i        cycle step i: rest -> hit -> accent -> rest (from the step display)
+//     edit i        cycle the step shown at display position i: rest -> hit -> accent -> rest (from the step display)
+//     shift i       0..15: play (and show) the stored pattern i 16ths later, wrapping; the stored steps don't change
 //     stepbits i / accbits i   the pattern as stored with the set (two hidden parameters)
-//     density f, throws f, length i (16ths)
-//     tick bar beat units       from [transport], once per 16th while Live plays
+//     density f, throws f, length i (Gate: 1-4 16ths)
+//     tick ticks    Live's song position in ticks (480 per quarter note), from [transport] on each 16th
+//                   metro bang while Live plays: the step is the song position in 16ths, mod 16
 //     playing i / tempo f       Live's transport; stopped, the machine runs on its own clock
 //     ready         Live has finished restoring the set
-//     stop          release everything and clear the latch (Stop button, or Live's transport stopping)
+//     stop          release everything and clear the latch (the Stop button only; Live stopping lets tails ring out)
 // out 0: note lists for midiformat
 // out 1: bang = throw
 // out 2: to the step display     out 3: to the chord display     out 4: stepbits/accbits to store
+// A control value outside its range can only come from a wiring or message error: it is logged in the Max
+// window, then clamped. (Clamping that is behaviour, like velocity math, uses clampi directly.)
 inlets = 2;
 outlets = 5;
 
@@ -35,14 +40,19 @@ var PATTERNS = [
 
 var shape = 1, inkey = 0, root = 0, intervals = [], drift = 0;
 var machine = 0, latch = 0, density = 0.8, throws = 0, length = 1, ready = 0;
-var steps = parse(PATTERNS[0]);
+var steps = parse(PATTERNS[0]);   // the pattern as stored (unshifted)
+var shift = 0;                    // 16ths the pattern plays later than stored
 
 var keys = {};      // physically held keys -> velocity
+var keyHolds = {};  // held key -> note-ons not yet released (a key can be held twice: two clips, two controllers)
 var latched = {};   // latched chord: key -> velocity
 var sent = {};      // played key -> pitches it sent (direct play)
 var count = {};     // sounding pitch -> how many holders
 var pending = [];   // machine notes waiting for their note-off: {pitches, left}
 var playing = 0, tempo = 120, ownStep = 0;
+var TICKS_PER_SIXTEENTH = 120;        // Max: 480 ticks per quarter note, whatever the time signature
+var ON_SIXTEENTH_TOLERANCE = 0.25;    // a bang within a quarter of a 16th of one is on it (clock jitter)
+var lastPlayedSixteenth = null;       // song position (in 16ths) of the last step played while Live plays
 
 var clock = new Task(function () {
   step16(ownStep);
@@ -56,11 +66,36 @@ function parse(str) {
   for (var i = 0; i < 16; i++) { var c = str.charAt(i); a.push(c === "X" ? 2 : c === "x" ? 1 : 0); }
   return a;
 }
+/** The stored step that plays at `position` (0..15) with the pattern shifted `shift` 16ths later. */
+function storedIndexAt(position) { return (position - shift + 16) % 16; }
+/** The pattern as it plays: one character per playing position, Shift applied. */
 function patternString() {
-  return steps.map(function (s) { return s === 2 ? "X" : s === 1 ? "x" : "."; }).join("");
+  var shown = "";
+  for (var position = 0; position < 16; position++) {
+    var s = steps[storedIndexAt(position)];
+    shown += s === 2 ? "X" : s === 1 ? "x" : ".";
+  }
+  return shown;
 }
 function clampi(v, lo, hi) { return Math.max(lo, Math.min(hi, Math.round(v))); }
-function clampf(v) { return Math.max(0, Math.min(1, v)); }
+/** A control's integer value, lo..hi. Out of range (or not a number) is a wiring error: logged, then clamped. */
+function controlInt(control, v, lo, hi) {
+  if (!(v >= lo && v <= hi)) {
+    error("2sl stab: " + control + " got " + v + ", outside " + lo + ".." + hi + " (a wiring or message error): using " +
+          (clampi(v, lo, hi) || lo) + "\n");
+    return clampi(v, lo, hi) || lo;
+  }
+  return Math.round(v);
+}
+/** A control's 0..1 value. Out of range (or not a number) is a wiring error: logged, then clamped. */
+function controlUnit(control, v) {
+  if (!(v >= 0 && v <= 1)) {
+    var used = Math.max(0, Math.min(1, v)) || 0;
+    error("2sl stab: " + control + " got " + v + ", outside 0..1 (a wiring or message error): using " + used + "\n");
+    return used;
+  }
+  return v;
+}
 
 function send(p, v) { if (p >= 0 && p <= 127) outlet(0, p, v); }
 function sound(pitches, v) {
@@ -110,7 +145,25 @@ function chordName(pitches) {
   return NAMES[best] + q + (best !== low ? "/" + NAMES[low] : "");
 }
 
+var intervalsKnown = false;   // Live's scale has been reported (until then In Key can't be judged)
 function scaleOk() { return inkey && intervals.length >= 5; }
+
+/** In Key with Live's scale under 5 notes: the chords fall back to the fixed shapes. That is the behaviour,
+ *  but it must show: the chord display says so, and the Max window logs each change. */
+var fixedShapesNoticeShown = false;
+function updateInKeyNotice() {
+  var fallingBack = !!(inkey && SHAPES[shape] && intervalsKnown && intervals.length < 5);
+  if (fallingBack === fixedShapesNoticeShown) return;
+  fixedShapesNoticeShown = fallingBack;
+  if (fallingBack) {
+    post("2sl stab: In Key: Live's scale has " + intervals.length + " notes, under 5: chords use the fixed shapes\n");
+    outlet(3, "notice", "scale <5 notes: fixed shapes");
+  } else {
+    post("2sl stab: In Key: " + (inkey && SHAPES[shape] ? "chords from Live's scale again (" + intervals.length + " notes)"
+                                                       : "off, or poly: the fixed-shape notice is gone") + "\n");
+    outlet(3, "notice");
+  }
+}
 
 /** Stack scale tones on `key` (snapped down into Live's scale): steps are scale steps above it. */
 function chordInKey(key, st) {
@@ -149,7 +202,9 @@ function chordFor(key) {
 
 // ---- what the displays show -----------------------------------------------------------
 
-function machineChord() { return latch ? latched : keys; }
+/** The chord the machine plays: the latched chord while Live plays; with Live stopped only the keys you
+ *  hold (to audition), so stopping Live stops the machine the way it stops a clip. */
+function machineChord() { return latch && playing ? latched : keys; }
 
 /** The chord the machine plays (all held or latched keys, without drift), for the status line. */
 function heldName() {
@@ -194,9 +249,13 @@ function sentPitches() {
 }
 
 function list(pitch, vel) {
-  if (inlet === 1) return;
+  if (inlet === 1) {
+    error("2sl stab: the brain's control inlet got a bare list (" + arrayfromargs(arguments).join(" ") + "): ignored\n");
+    return;
+  }
   if (vel > 0) {
     var anyHeld = Object.keys(keys).length > 0;
+    keyHolds[pitch] = (keyHolds[pitch] || 0) + 1;
     keys[pitch] = vel;
     if (machine) {
       if (latch) {
@@ -211,6 +270,9 @@ function list(pitch, vel) {
     sound(sent[pitch], vel);
     showChord(sentPitches());
   } else {
+    // only the key's last note-off releases it: a second hold keeps the chord (and the machine's key) going
+    if (keyHolds[pitch] > 1) { keyHolds[pitch]--; return; }
+    delete keyHolds[pitch];
     delete keys[pitch];
     if (sent[pitch]) {
       silence(sent[pitch]);
@@ -228,9 +290,29 @@ function updateClock() {
   } else if (clock.running) clock.cancel();
 }
 
-function tick(bar, beat, units) {
+/** A clock bang while Live plays, with Live's song position in ticks. Every 16th of the song plays exactly
+ *  once: a second bang on the same 16th is ignored, and a bang between 16ths (the metro's immediate bang
+ *  when Live starts mid-16th) plays nothing, since that 16th began before we heard it. The step is the
+ *  song position in 16ths mod 16, so the pattern stays on Live's grid in any time signature. */
+function tick(ticks) {
   if (!playing) return;
-  step16(((beat - 1) * 4 + Math.round(units / 120)) % 16);
+  if (!isFinite(ticks)) {
+    error("2sl stab: the machine's clock got a song position of " + ticks + " ticks: step skipped\n");
+    return;
+  }
+  var position = ticks / TICKS_PER_SIXTEENTH;
+  var nearest = Math.round(position);
+  if (Math.abs(position - nearest) > ON_SIXTEENTH_TOLERANCE) {
+    lastPlayedSixteenth = Math.floor(position);
+    return;
+  }
+  if (nearest === lastPlayedSixteenth) return;
+  if (lastPlayedSixteenth !== null && nearest > lastPlayedSixteenth + 1) {
+    post("2sl stab: the machine's song position jumped from 16th " + lastPlayedSixteenth + " to " + nearest +
+         " (a locate, or a late clock): the steps between were not played\n");
+  }
+  lastPlayedSixteenth = nearest;
+  step16(((nearest % 16) + 16) % 16);
 }
 
 function step16(step) {
@@ -242,10 +324,10 @@ function step16(step) {
   var chord = machineChord();
   var held = Object.keys(chord);
   if (!held.length) return;
-  var s = steps[step], hit = false;
+  var s = steps[storedIndexAt(step)], hit = false;   // `step` is the playing position
   if (s === 2) hit = Math.random() < Math.min(1, density * 1.4);
   else if (s === 1) hit = Math.random() < density;
-  else if (density > 0.7 && step % 2 === 1) hit = Math.random() < (density - 0.7) * 0.5; // the odd extra
+  else if (density > 0.7 && step % 2 === 1) hit = Math.random() < (density - 0.7) * 0.5; // the odd extra, on offbeats as heard
   if (!hit) return;
   var all = [];
   for (var k = 0; k < held.length; k++) {
@@ -273,15 +355,22 @@ function panic() {
 }
 
 function anything() {
-  if (inlet !== 1) return;
+  if (inlet !== 1) {
+    error("2sl stab: the brain's note inlet got '" + messagename + "' (it takes pitch velocity lists): ignored\n");
+    return;
+  }
   var a = arrayfromargs(arguments);
   var v = a[0];
   switch (messagename) {
-    case "shape": panic(); shape = clampi(v, 0, SHAPES.length - 1); showSteps(); break;
-    case "inkey": inkey = v ? 1 : 0; showSteps(); break;
-    case "root": root = clampi(v, 0, 11); break;
-    case "intervals": intervals = a.map(function (x) { return Math.round(x); }); break;
-    case "drift": drift = clampf(v); break;
+    case "shape": panic(); shape = controlInt("Chord", v, 0, SHAPES.length - 1); updateInKeyNotice(); showSteps(); break;
+    case "inkey": inkey = v ? 1 : 0; updateInKeyNotice(); showSteps(); break;
+    case "root": root = controlInt("Live's scale root", v, 0, 11); break;
+    case "intervals":
+      intervals = a.map(function (x) { return Math.round(x); });
+      intervalsKnown = true;
+      updateInKeyNotice();
+      break;
+    case "drift": drift = controlUnit("Drift", v); break;
     case "machine":
       machine = v ? 1 : 0;
       panic();
@@ -298,30 +387,34 @@ function anything() {
       break;
     case "pattern":
       if (!ready) break; // while Live restores the set, the stored steps win
-      steps = parse(PATTERNS[clampi(v, 0, PATTERNS.length - 1)]);
+      steps = parse(PATTERNS[controlInt("Pattern", v, 0, PATTERNS.length - 1)]);
       showSteps();
       store();
       break;
     case "edit":
-      var i = clampi(v, 0, 15);
+      var i = storedIndexAt(controlInt("the step display's edit", v, 0, 15));   // v is the display position
       steps[i] = (steps[i] + 1) % 3;
       showSteps();
       store();
       break;
-    case "stepbits": storedHits = clampi(v, 0, 65535); fromStore(); break;
-    case "accbits": storedAcc = clampi(v, 0, 65535); fromStore(); break;
-    case "density": density = clampf(v); break;
-    case "throws": throws = clampf(v); break;
-    case "length": length = clampi(v, 1, 8); break;
-    case "playing": playing = v ? 1 : 0; updateClock(); break;
+    case "stepbits": storedHits = controlInt("the stored Steps", v, 0, 65535); fromStore(); break;
+    case "accbits": storedAcc = controlInt("the stored Accents", v, 0, 65535); fromStore(); break;
+    case "shift": shift = controlInt("Shift", v, 0, 15); showSteps(); break;
+    case "density": density = controlUnit("Density", v); break;
+    case "throws": throws = controlUnit("Throws", v); break;
+    case "length": length = controlInt("Gate", v, 1, 4); break;   // the Gate dial and its Info text: 1-4
+    case "playing": playing = v ? 1 : 0; lastPlayedSixteenth = null; updateClock(); break;
     case "tempo": tempo = v; updateClock(); break;
     case "ready": ready = 1; showSteps(); break;
     case "stop":
       panic();
       latched = {};
       keys = {};
+      keyHolds = {};
       outlet(2, "pos", -1);
       showSteps();
       break;
+    default:
+      error("2sl stab: the brain doesn't know the message '" + messagename + "': ignored\n");
   }
 }

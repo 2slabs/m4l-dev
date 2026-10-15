@@ -1,0 +1,1693 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="12.0_12402" SchemaChangeCount="5" Creator="Ableton Live 12.4.6" Revision="0de5c8fa9a692293676cb7700a15afb2046ee1f7">
+	<MxDeviceInstrument>
+		<LomId Value="0" />
+		<LomIdView Value="0" />
+		<IsExpanded Value="true" />
+		<BreakoutIsExpanded Value="false" />
+		<On>
+			<LomId Value="0" />
+			<Manual Value="true" />
+			<AutomationTarget Id="0">
+				<LockEnvelope Value="0" />
+			</AutomationTarget>
+			<MidiCCOnOffThresholds>
+				<Min Value="64" />
+				<Max Value="127" />
+			</MidiCCOnOffThresholds>
+		</On>
+		<ModulationSourceCount Value="0" />
+		<ParametersListWrapper LomId="0" />
+		<Pointee Id="0" />
+		<LastSelectedTimeableIndex Value="12" />
+		<LastSelectedClipEnvelopeIndex Value="12" />
+		<LastPresetRef>
+			<Value />
+		</LastPresetRef>
+		<LockedScripts />
+		<IsFolded Value="false" />
+		<ShouldShowPresetName Value="true" />
+		<UserName Value="" />
+		<Annotation Value="" />
+		<SourceContext>
+			<Value />
+		</SourceContext>
+		<MpePitchBendUsesTuning Value="true" />
+		<ViewData Value="{}" />
+		<OverwriteProtectionNumber Value="3076" />
+		<AudioOutputsListWrapper LomId="0" />
+		<AudioInputsListWrapper LomId="0" />
+		<MidiOutputsListWrapper LomId="0" />
+		<MidiInputsListWrapper LomId="0" />
+		<PatchSlot>
+			<Value>
+				<MxPatchRef Id="11">
+					<FileRef>
+						<RelativePathType Value="3" />
+						<RelativePath Value="Presets/Instruments/Max Instrument/Imported/2sl-stab.amxd" />
+						<Path Value="/Users/cibo/audio-projects/instuments/m4l-dev/devices/2sl-stab/2sl-stab Project/Presets/Instruments/Max Instrument/Imported/2sl-stab.amxd" />
+						<Type Value="2" />
+						<LivePackName Value="" />
+						<LivePackId Value="" />
+						<OriginalFileSize Value="208637" />
+						<OriginalCrc Value="19576" />
+						<SourceHint Value="" />
+					</FileRef>
+					<LastModDate Value="1792095629" />
+					<SourceContext />
+					<SampleUsageHint Value="0" />
+				</MxPatchRef>
+			</Value>
+		</PatchSlot>
+		<ParameterList>
+			<ParameterList>
+				<MxDFloatParameter Id="249">
+					<Index Value="0" />
+					<Type Value="0" />
+					<Name Value="Attack" />
+					<ShortName Value="Attack" />
+					<MinValue Value="0.5" />
+					<MaxValue Value="4000" />
+					<Default Value="288.925873" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="288.925873" />
+						<MidiControllerRange>
+							<Min Value="0.5" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="250">
+					<Index Value="1" />
+					<Type Value="2" />
+					<Name Value="Chord" />
+					<ShortName Value="Chord" />
+					<MinValue Value="0" />
+					<MaxValue Value="7" />
+					<Default Value="1" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="5" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="poly" />
+						</Name>
+						<Name Id="1">
+							<Name Value="minor" />
+						</Name>
+						<Name Id="2">
+							<Name Value="m7" />
+						</Name>
+						<Name Id="3">
+							<Name Value="m9" />
+						</Name>
+						<Name Id="4">
+							<Name Value="m11" />
+						</Name>
+						<Name Id="5">
+							<Name Value="sus4" />
+						</Name>
+						<Name Id="6">
+							<Name Value="fifths" />
+						</Name>
+						<Name Id="7">
+							<Name Value="dark" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="251">
+					<Index Value="2" />
+					<Type Value="0" />
+					<Name Value="Cutoff" />
+					<ShortName Value="Cutoff" />
+					<MinValue Value="40" />
+					<MaxValue Value="12000" />
+					<Default Value="4593.396" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="2992.45117" />
+						<MidiControllerRange>
+							<Min Value="40" />
+							<Max Value="40" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="252">
+					<Index Value="3" />
+					<Type Value="2" />
+					<Name Value="DCO1 Octave" />
+					<ShortName Value="Oct 1" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="1" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="16'" />
+						</Name>
+						<Name Id="1">
+							<Name Value="8'" />
+						</Name>
+						<Name Id="2">
+							<Name Value="4'" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDEnumParameter Id="253">
+					<Index Value="4" />
+					<Type Value="2" />
+					<Name Value="DCO1 Wave" />
+					<ShortName Value="Wave 1" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="2" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="15">
+							<Name Value="saw" />
+						</Name>
+						<Name Id="16">
+							<Name Value="pulse" />
+						</Name>
+						<Name Id="17">
+							<Name Value="both" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDEnumParameter Id="254">
+					<Index Value="5" />
+					<Type Value="2" />
+					<Name Value="DCO2 Octave" />
+					<ShortName Value="Oct 2" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="1" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="16'" />
+						</Name>
+						<Name Id="1">
+							<Name Value="8'" />
+						</Name>
+						<Name Id="2">
+							<Name Value="4'" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDEnumParameter Id="255">
+					<Index Value="6" />
+					<Type Value="2" />
+					<Name Value="DCO2 Wave" />
+					<ShortName Value="Wave 2" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="saw" />
+						</Name>
+						<Name Id="1">
+							<Name Value="pulse" />
+						</Name>
+						<Name Id="2">
+							<Name Value="tri" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="256">
+					<Index Value="7" />
+					<Type Value="0" />
+					<Name Value="Decay" />
+					<ShortName Value="Decay" />
+					<MinValue Value="5" />
+					<MaxValue Value="6000" />
+					<Default Value="2097.69629" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="2097.69629" />
+						<MidiControllerRange>
+							<Min Value="5" />
+							<Max Value="5" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="257">
+					<Index Value="8" />
+					<Type Value="0" />
+					<Name Value="Density" />
+					<ShortName Value="Density" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="80" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="80" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="258">
+					<Index Value="9" />
+					<Type Value="0" />
+					<Name Value="Drift" />
+					<ShortName Value="Drift" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="47.2440948" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="259">
+					<Index Value="10" />
+					<Type Value="0" />
+					<Name Value="Drive" />
+					<ShortName Value="Drive" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="25" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="62.0078735" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="260">
+					<Index Value="11" />
+					<Type Value="0" />
+					<Name Value="Dub" />
+					<ShortName Value="Dub" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="81.1023636" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="261">
+					<Index Value="12" />
+					<Type Value="2" />
+					<Name Value="Echo Time" />
+					<ShortName Value="Time" />
+					<MinValue Value="0" />
+					<MaxValue Value="5" />
+					<Default Value="2" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="2" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="1/16" />
+						</Name>
+						<Name Id="1">
+							<Name Value="1/8" />
+						</Name>
+						<Name Id="2">
+							<Name Value="1/8d" />
+						</Name>
+						<Name Id="3">
+							<Name Value="1/4" />
+						</Name>
+						<Name Id="4">
+							<Name Value="1/4d" />
+						</Name>
+						<Name Id="5">
+							<Name Value="1/2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="262">
+					<Index Value="13" />
+					<Type Value="0" />
+					<Name Value="Env Amount" />
+					<ShortName Value="Env" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="50" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="24.015749" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="263">
+					<Index Value="14" />
+					<Type Value="0" />
+					<Name Value="Fine" />
+					<ShortName Value="Fine" />
+					<MinValue Value="0" />
+					<MaxValue Value="50" />
+					<Default Value="10" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="10" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="264">
+					<Index Value="15" />
+					<Type Value="2" />
+					<Name Value="Freeze" />
+					<ShortName Value="Freeze" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="265">
+					<Index Value="16" />
+					<Type Value="0" />
+					<Name Value="Gate" />
+					<ShortName Value="Gate" />
+					<MinValue Value="1" />
+					<MaxValue Value="4" />
+					<Default Value="1" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<MidiControllerRange>
+							<Min Value="1" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="266">
+					<Index Value="17" />
+					<Type Value="2" />
+					<Name Value="In Key" />
+					<ShortName Value="In Key" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="267">
+					<Index Value="18" />
+					<Type Value="0" />
+					<Name Value="Key Track" />
+					<ShortName Value="Key" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="50" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="50" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="268">
+					<Index Value="19" />
+					<Type Value="0" />
+					<Name Value="LFO Filter" />
+					<ShortName Value="Filter" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="11.8110237" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="269">
+					<Index Value="20" />
+					<Type Value="0" />
+					<Name Value="LFO Rate" />
+					<ShortName Value="Rate" />
+					<MinValue Value="0.05000000075" />
+					<MaxValue Value="12" />
+					<Default Value="4.0554328" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="3.67905474" />
+						<MidiControllerRange>
+							<Min Value="0.05000000075" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="270">
+					<Index Value="21" />
+					<Type Value="2" />
+					<Name Value="Latch" />
+					<ShortName Value="Latch" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="271">
+					<Index Value="22" />
+					<Type Value="0" />
+					<Name Value="Length" />
+					<ShortName Value="Length" />
+					<MinValue Value="-100" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="44.0944901" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="272">
+					<Index Value="23" />
+					<Type Value="2" />
+					<Name Value="Machine" />
+					<ShortName Value="Machine" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="273">
+					<Index Value="24" />
+					<Type Value="0" />
+					<Name Value="Noise" />
+					<ShortName Value="Noise" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="8" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="274">
+					<Index Value="25" />
+					<Type Value="0" />
+					<Name Value="OSC 1" />
+					<ShortName Value="OSC 1" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="80" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="63.4645653" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="275">
+					<Index Value="26" />
+					<Type Value="0" />
+					<Name Value="OSC 2" />
+					<ShortName Value="OSC 2" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="80" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="62.2047234" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="276">
+					<Index Value="27" />
+					<Type Value="0" />
+					<Name Value="PW" />
+					<ShortName Value="PW" />
+					<MinValue Value="50" />
+					<MaxValue Value="95" />
+					<Default Value="70" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="68.2283478" />
+						<MidiControllerRange>
+							<Min Value="50" />
+							<Max Value="50" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="277">
+					<Index Value="28" />
+					<Type Value="0" />
+					<Name Value="PWM" />
+					<ShortName Value="PWM" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="278">
+					<Index Value="29" />
+					<Type Value="2" />
+					<Name Value="Page" />
+					<ShortName Value="Page" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="play" />
+						</Name>
+						<Name Id="1">
+							<Name Value="osc" />
+						</Name>
+						<Name Id="2">
+							<Name Value="shape" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDEnumParameter Id="279">
+					<Index Value="30" />
+					<Type Value="2" />
+					<Name Value="Pattern" />
+					<ShortName Value="Pattern" />
+					<MinValue Value="0" />
+					<MaxValue Value="5" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="dub dotted" />
+						</Name>
+						<Name Id="1">
+							<Name Value="one &amp; three+" />
+						</Name>
+						<Name Id="2">
+							<Name Value="offbeat chops" />
+						</Name>
+						<Name Id="3">
+							<Name Value="skank" />
+						</Name>
+						<Name Id="4">
+							<Name Value="deep stab" />
+						</Name>
+						<Name Id="5">
+							<Name Value="3-3-2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDEnumParameter Id="280">
+					<Index Value="31" />
+					<Type Value="2" />
+					<Name Value="Preset" />
+					<ShortName Value="Preset" />
+					<MinValue Value="0" />
+					<MaxValue Value="22" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="init" />
+						</Name>
+						<Name Id="1">
+							<Name Value="chain stab" />
+						</Name>
+						<Name Id="2">
+							<Name Value="m-stab" />
+						</Name>
+						<Name Id="3">
+							<Name Value="deep haze" />
+						</Name>
+						<Name Id="4">
+							<Name Value="fog" />
+						</Name>
+						<Name Id="5">
+							<Name Value="wash" />
+						</Name>
+						<Name Id="6">
+							<Name Value="skank" />
+						</Name>
+						<Name Id="7">
+							<Name Value="roots chop" />
+						</Name>
+						<Name Id="8">
+							<Name Value="sub stab" />
+						</Name>
+						<Name Id="9">
+							<Name Value="tape chord" />
+						</Name>
+						<Name Id="10">
+							<Name Value="ambient dub" />
+						</Name>
+						<Name Id="11">
+							<Name Value="throw dub" />
+						</Name>
+						<Name Id="12">
+							<Name Value="hypnotic loop" />
+						</Name>
+						<Name Id="13">
+							<Name Value="dark machine" />
+						</Name>
+						<Name Id="14">
+							<Name Value="chord memory" />
+						</Name>
+						<Name Id="15">
+							<Name Value="warehouse" />
+						</Name>
+						<Name Id="16">
+							<Name Value="pulse" />
+						</Name>
+						<Name Id="17">
+							<Name Value="rolling" />
+						</Name>
+						<Name Id="18">
+							<Name Value="dark fifths" />
+						</Name>
+						<Name Id="19">
+							<Name Value="throw machine" />
+						</Name>
+						<Name Id="20">
+							<Name Value="detroit strings" />
+						</Name>
+						<Name Id="21">
+							<Name Value="deep house keys" />
+						</Name>
+						<Name Id="22">
+							<Name Value="pump pad" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="281">
+					<Index Value="32" />
+					<Type Value="0" />
+					<Name Value="Pump" />
+					<ShortName Value="Depth" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="53.5433083" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="282">
+					<Index Value="33" />
+					<Type Value="0" />
+					<Name Value="Pump Attack" />
+					<ShortName Value="Attack" />
+					<MinValue Value="1" />
+					<MaxValue Value="40" />
+					<Default Value="14.9642401" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="14.9642401" />
+						<MidiControllerRange>
+							<Min Value="1" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="283">
+					<Index Value="34" />
+					<Type Value="0" />
+					<Name Value="Pump Curve" />
+					<ShortName Value="Curve" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="50" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="50" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="284">
+					<Index Value="35" />
+					<Type Value="2" />
+					<Name Value="Pump Rate" />
+					<ShortName Value="Rate" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="1/4" />
+						</Name>
+						<Name Id="1">
+							<Name Value="1/8" />
+						</Name>
+						<Name Id="2">
+							<Name Value="1/16" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="285">
+					<Index Value="36" />
+					<Type Value="0" />
+					<Name Value="Pump Release" />
+					<ShortName Value="Release" />
+					<MinValue Value="10" />
+					<MaxValue Value="95" />
+					<Default Value="55" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="55" />
+						<MidiControllerRange>
+							<Min Value="10" />
+							<Max Value="10" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="286">
+					<Index Value="37" />
+					<Type Value="0" />
+					<Name Value="Release" />
+					<ShortName Value="Release" />
+					<MinValue Value="5" />
+					<MaxValue Value="6000" />
+					<Default Value="2041.48901" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="2041.48901" />
+						<MidiControllerRange>
+							<Min Value="5" />
+							<Max Value="5" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="287">
+					<Index Value="38" />
+					<Type Value="0" />
+					<Name Value="Resonance" />
+					<ShortName Value="Reso" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="30" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="44.1732292" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="288">
+					<Index Value="39" />
+					<Type Value="0" />
+					<Name Value="Semi" />
+					<ShortName Value="Semi" />
+					<MinValue Value="-12" />
+					<MaxValue Value="12" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="289">
+					<Index Value="40" />
+					<Type Value="0" />
+					<Name Value="Shift" />
+					<ShortName Value="Shift" />
+					<MinValue Value="0" />
+					<MaxValue Value="15" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="290">
+					<Index Value="41" />
+					<Type Value="2" />
+					<Name Value="Stop" />
+					<ShortName Value="Stop" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="291">
+					<Index Value="42" />
+					<Type Value="0" />
+					<Name Value="Sub" />
+					<ShortName Value="Sub" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="292">
+					<Index Value="43" />
+					<Type Value="2" />
+					<Name Value="Sub Mode" />
+					<ShortName Value="Sub" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="-1 sq" />
+						</Name>
+						<Name Id="1">
+							<Name Value="-2 sq" />
+						</Name>
+						<Name Id="2">
+							<Name Value="-2 pls" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="293">
+					<Index Value="44" />
+					<Type Value="0" />
+					<Name Value="Sustain" />
+					<ShortName Value="Sustain" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDEnumParameter Id="294">
+					<Index Value="45" />
+					<Type Value="2" />
+					<Name Value="Throw" />
+					<ShortName Value="Throw" />
+					<MinValue Value="0" />
+					<MaxValue Value="1" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="val1" />
+						</Name>
+						<Name Id="1">
+							<Name Value="val2" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="295">
+					<Index Value="46" />
+					<Type Value="0" />
+					<Name Value="Throws" />
+					<ShortName Value="Throws" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="60.629921" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="296">
+					<Index Value="47" />
+					<Type Value="0" />
+					<Name Value="Tone" />
+					<ShortName Value="Tone" />
+					<MinValue Value="-100" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="-31.4960632" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="297">
+					<Index Value="48" />
+					<Type Value="0" />
+					<Name Value="Velocity Filter" />
+					<ShortName Value="Vel" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="50" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="50" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="298">
+					<Index Value="49" />
+					<Type Value="0" />
+					<Name Value="Vibrato" />
+					<ShortName Value="Vibrato" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDFloatParameter Id="299">
+					<Index Value="50" />
+					<Type Value="0" />
+					<Name Value="Volume" />
+					<ShortName Value="Volume" />
+					<MinValue Value="-36" />
+					<MaxValue Value="12" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="0" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+			</ParameterList>
+		</ParameterList>
+		<FileDropList>
+			<FileDropList />
+		</FileDropList>
+		<IdRefList>
+			<IdRefList />
+		</IdRefList>
+		<BlobSlot>
+			<Value>
+				<MxDBlob Id="17">
+					<Blob>
+						7B0A2020202022416363656E7473223A205B2031205D2C0A20202020225374657073223A205B2037
+						33205D0A7D00
+					</Blob>
+					<HasData Value="true" />
+				</MxDBlob>
+			</Value>
+		</BlobSlot>
+		<Routables>
+			<InRoutings>
+				<MxDInRoutable Id="0">
+					<Routable>
+						<Target Value="AudioIn/None" />
+						<UpperDisplayString Value="No Output" />
+						<LowerDisplayString Value="" />
+						<MpeSettings>
+							<ZoneType Value="0" />
+							<FirstNoteChannel Value="1" />
+							<LastNoteChannel Value="15" />
+						</MpeSettings>
+						<MpePitchBendUsesTuning Value="true" />
+					</Routable>
+					<LomId Value="0" />
+				</MxDInRoutable>
+			</InRoutings>
+			<OutRoutings>
+				<MxDOutRoutable Id="0">
+					<Routable>
+						<Target Value="AudioOut/None" />
+						<UpperDisplayString Value="No Output" />
+						<LowerDisplayString Value="" />
+						<MpeSettings>
+							<ZoneType Value="0" />
+							<FirstNoteChannel Value="1" />
+							<LastNoteChannel Value="15" />
+						</MpeSettings>
+						<MpePitchBendUsesTuning Value="true" />
+					</Routable>
+					<LomId Value="0" />
+				</MxDOutRoutable>
+			</OutRoutings>
+			<MidiInRoutings />
+			<MidiOutRoutings />
+		</Routables>
+		<MpeEnabled Value="false" />
+		<MpeTuningEnabled Value="false" />
+	</MxDeviceInstrument>
+</Ableton>

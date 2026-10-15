@@ -3,11 +3,11 @@
 //   link    the 2sl wordmark chip: hover shows 2sl.to, click opens it
 //   chord   big chord name, its notes, a lit keyboard            (from the chord brain)
 //   steps   the machine's 16 steps: click to edit; playhead, hits, throws, status line
-//   echo    the dub echo: repeats decaying (more and darker with Dub), throws, freeze, live level
+//   echo    the dub echo as measured: its last time rounds and the one now, throws, freeze, live level
 //   pump    the duck curve over a beat, with a moving playhead
+//   sub     the sub oscillator: its wave for Sub Mode, over DCO 1's two cycles
 //   osc1    DCO 1: its waveform (saw, pulse, both), pulse width, PWM
 //   osc2    DCO 2: its waveform (saw, pulse, triangle), interval and detune
-//   mixer   the four mixer levels as faders
 //   lfo     the LFO and where it goes
 //   filter  the low-pass response, and how far the envelope opens it
 //   env     the envelope shape (Length macro applied)
@@ -28,32 +28,47 @@ var COZETTE = {"32":[6,1,1,6,-1,0],"33":[6,1,8,3,0,128,128,128,128,128,128,0,128
 
 // ---- 2sl-ui tokens -----------------------------------------------------------------------------
 var THEMES = {"dark": {"pad": [0.149, 0.149, 0.149, 1], "well": [0.106, 0.106, 0.11, 1], "ink": [0.835, 0.847, 0.859, 1], "inverse": [0.149, 0.149, 0.149, 1], "label": [0.557, 0.58, 0.608, 1], "unlit": [0.494, 0.518, 0.545, 1], "mint": [0.447, 0.871, 0.761, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [1.0, 0.55, 0.2, 1], "rest": [0.2, 0.2, 0.21, 1], "beat": [0.26, 0.27, 0.28, 1], "key": [0.72, 0.73, 0.74, 1], "keyBlack": [0.07, 0.07, 0.08, 1]}, "light": {"pad": [0.835, 0.847, 0.859, 1], "well": [0.77, 0.78, 0.79, 1], "ink": [0.0, 0.0, 0.0, 1], "inverse": [1.0, 1.0, 1.0, 1], "label": [0.349, 0.369, 0.396, 1], "unlit": [0.451, 0.475, 0.502, 1], "mint": [0.12, 0.55, 0.45, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [0.85, 0.38, 0.0, 1], "rest": [0.7, 0.71, 0.73, 1], "beat": [0.62, 0.63, 0.65, 1], "key": [0.97, 0.97, 0.97, 1], "keyBlack": [0.12, 0.12, 0.13, 1]}};
-var T = THEMES.dark;
-function pickTheme() {
-  var bg = null;
-  try { bg = max.getcolor("live_surface_bg"); } catch (e) { bg = null; }
-  var lum = bg && bg.length >= 3 ? 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] : 0.15;
-  T = lum > 0.5 ? THEMES.light : THEMES.dark;
+var liveColourMissingReported = false;
+/** The 2sl tokens for Live's theme: light when Live's surface colour (live_surface_bg) is light. If Max can't
+ *  give that colour, dark, and the Max window says which colour was missing (once, until it is back). */
+function themeFromLive(who) {
+  var surface = null, failure = "";
+  try { surface = max.getcolor("live_surface_bg"); } catch (e) { failure = String(e); }
+  var usable = surface && surface.length >= 3 && isFinite(surface[0]) && isFinite(surface[1]) && isFinite(surface[2]);
+  if (!usable) {
+    if (!liveColourMissingReported) {
+      liveColourMissingReported = true;
+      error("2sl stab (" + who + "): Live colour live_surface_bg is missing (max.getcolor gave " +
+            (failure || JSON.stringify(surface)) + "): drawing in the dark theme\n");
+    }
+    return THEMES.dark;
+  }
+  liveColourMissingReported = false;
+  var luminance = 0.2126 * surface[0] + 0.7152 * surface[1] + 0.0722 * surface[2];
+  return luminance > 0.5 ? THEMES.light : THEMES.dark;
 }
+var T = THEMES.dark;
+function pickTheme() { T = themeFromLive("the " + MODE + " display"); }
 pickTheme();
 
+// What this display draws from. The controls' values start as the Init values send them, written
+// in by the build per display, so a display is right before Live recalls the controls (and they agree after).
 var S = {
   page: 0,
-  name: "", pitches: [],
+  name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
-  dub: 0, freeze: 0, level: 0, throwAt: 0,
-  depth: 0, rate: 1, phase: 0, curve: 0.5,
-  wave1: 2, pw: 0.7, pwm: 0, wave2: 0, semi: 0, fine: 10,
-  lvl1: 0.8, lvl2: 0.8, sub: 0, noise: 0.08,
-  lforate: 0.5, vib: 0, lfofilt: 0,
-  atk: 2, dec: 260, sus: 0, rel: 240, len: 0,
-  cutoff: 700, reso: 0.3, envamt: 0.5, tone: 0,
-  drive: 0.25
+  throwAt: 0, phase: 0,
+  tempo: 120                        // Live's tempo (the pump), until Live reports it
 };
+var VIEW_DEFAULTS = {"echo": {"freeze": 0, "send": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "sub": {"submode": 0}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
+(function () {
+  var defaults = VIEW_DEFAULTS[MODE] || {};
+  for (var key in defaults) S[key] = defaults[key];
+})();
 
 var anim = new Task(function () { mgraphics.redraw(); }, this);
 anim.interval = 33;
-if (MODE === "steps" || MODE === "echo" || MODE === "pump" || MODE === "lfo" || MODE === "osc1") anim.repeat();
+if (MODE === "steps" || MODE === "echo" || MODE === "pump" || MODE === "lfo" || MODE === "osc1" || MODE === "osc2") anim.repeat();
 
 function now() { return new Date().getTime(); }
 
@@ -65,11 +80,15 @@ function anything() {
   if (m === "theme") pickTheme();
   else if (m === "chord") { S.name = String(a[0]); S.pitches = a.slice(1); }
   else if (m === "clear") { S.name = ""; S.pitches = []; }
+  else if (m === "notice") S.notice = a.join(" ");
   else if (m === "pattern") S.pattern = String(a[0]);
   else if (m === "held") S.held = String(a[0]);
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
+  else if (m === "lfophase") recordLfoReading(a[0]);
+  else if (m === "echo") recordEchoReading(a);
   else if (m in S) S[m] = a[0];
+  else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
 }
 function bang() { pickTheme(); mgraphics.redraw(); }
@@ -85,10 +104,23 @@ function fade(t, ms) { return Math.max(0, 1 - (now() - t) / ms); }
 
 // ---- drawing: Cozette text ---------------------------------------------------------------------
 
+var missingGlyphsReported = {};
+/** The Cozette bitmap for a codepoint. One that tools/bdf2js.py didn't embed draws as "?", and says so once. */
+function glyph(codepoint) {
+  var found = COZETTE[codepoint];
+  if (found) return found;
+  if (!missingGlyphsReported[codepoint]) {
+    missingGlyphsReported[codepoint] = 1;
+    error("2sl stab: the " + MODE + " display has no Cozette glyph for U+" + codepoint.toString(16).toUpperCase() +
+          " (add it to tools/bdf2js.py's list): drawn as ?\n");
+  }
+  return COZETTE[63];
+}
+
 /** Width of `str` in pixels at scale 1 (13 px) or 2 (26 px). */
 function measure(str, scale) {
   var w = 0;
-  for (var i = 0; i < str.length; i++) { var g = COZETTE[str.charCodeAt(i)] || COZETTE[63]; w += g[0]; }
+  for (var i = 0; i < str.length; i++) { var g = glyph(str.charCodeAt(i)); w += g[0]; }
   return w * (scale || 1);
 }
 
@@ -99,7 +131,7 @@ function text(str, x, y, c, scale) {
   rgba(c);
   var pen = Math.round(x);
   for (var i = 0; i < str.length; i++) {
-    var g = COZETTE[str.charCodeAt(i)] || COZETTE[63];
+    var g = glyph(str.charCodeAt(i));
     var w = g[1], h = g[2], xo = g[3], yo = g[4];
     var nb = Math.ceil(w / 8) * 8;
     var top = Math.round(y) - (yo + h) * k;
@@ -142,14 +174,19 @@ function paint() {
   else if (MODE === "pump") pumpView(w, h);
   else if (MODE === "env") envView(w, h);
   else if (MODE === "filter") filterView(w, h);
+  else if (MODE === "sub") subView(w, h);
   else if (MODE === "osc1") oscView(w, h, 1);
   else if (MODE === "osc2") oscView(w, h, 2);
-  else if (MODE === "mixer") mixerView(w, h);
   else if (MODE === "lfo") lfoView(w, h);
   else if (MODE === "drive") driveView(w, h);
+  else if (!unknownModeReported) {
+    unknownModeReported = true;
+    error("2sl stab: a display was given the unknown mode '" + MODE + "' (jsarguments): it draws nothing\n");
+  }
 }
+var unknownModeReported = false;
 
-var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["click a step", 392, 136, "hint"], ["to change it", 392, 150, "hint"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [228, 456, 684], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 128, 143, "hint"], ["pwm: lfo on pw", 128, 157, "hint"], ["semi 7:", 356, 143, "hint"], ["a fifth up", 356, 157, "hint"], ["sub: square, 1 oct down", 468, 110, "hint"], ["one lfo for all voices", 696, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
+var LAYOUT = {"subtitle": 236, "version": "2.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["out", 800, 15, "label"], ["echo time", 644, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [136, 356, 576, 696], "labels": [["out", 800, 15, "label"], ["dco 1 divided down", 12, 143, "hint"], ["pw: pulse width", 256, 143, "hint"], ["pwm: lfo on pw", 256, 157, "hint"], ["semi 7:", 476, 143, "hint"], ["a fifth up", 476, 157, "hint"], ["mixer", 588, 40, "label"], ["one lfo for all voices", 708, 110, "hint"]]}, {"rules": [364, 668], "labels": [["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 
 var hover = 0;
 var SITE = "https://2sl.to";
@@ -189,13 +226,15 @@ function viewLabel(str, w) { text(str, 4, 12, T.label); }
 var NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 function chordView(w, h) {
-  viewLabel("chord");
+  // a notice from the brain (In Key falling back to the fixed shapes) takes the top line, in warm
+  if (S.notice) text(S.notice, 4, 12, T.warm);
+  else viewLabel("chord");
   if (!S.pitches.length) {
     text("play a key", 4, 36, T.unlit, 2);
   } else {
     text(S.name, 4, 38, T.ink, 2);
     var notes = S.pitches.slice().sort(function (a, b) { return a - b; }).map(function (p) { return NOTE[p % 12]; });
-    text(notes.join(" "), w - measure(notes.join(" ")) - 4, 12, T.label);
+    if (!S.notice) text(notes.join(" "), w - measure(notes.join(" ")) - 4, 12, T.label);
   }
   // two octaves of keys, from the C at or below the lowest note
   var lit = {};
@@ -249,31 +288,58 @@ function onclick(x, y) {
   outlet(0, "edit", Math.max(0, Math.min(15, Math.floor((x - 4) / ((w - 8) / 16)))));
 }
 
+// The echo as the FX measured it (|left| + |right|), read every 33 ms in one message: its level now, its peak so far
+// in the time round it is in, then its peaks over its last whole rounds, the newest first. The FX keeps those rounds
+// itself, so a reading always has all of them, however short the rounds or late the reading. Frozen or not, this is
+// what the display draws: what the loop really did, round by round, its filters and saturation and all. Stop
+// empties them in the FX (rounds since Stop read 0).
+var echoReading = { level: 0, roundNow: 0, wholeRounds: [] };    // nothing drawn until the first reading
+function recordEchoReading(values) {
+  for (var i = 0; i < values.length; i++) {
+    if (!(values[i] >= 0)) {
+      error("2sl stab: the echo display got a reading of " + values.join(" ") + " (not all levels): ignored\n");
+      return;
+    }
+  }
+  if (values.length < 3) {
+    error("2sl stab: the echo display got " + values.length + " values, not the level, the round now and whole " +
+          "rounds (a wiring error): ignored\n");
+    return;
+  }
+  echoReading = { level: values[0], roundNow: values[1], wholeRounds: values.slice(2) };
+}
+// Heights are in dB below the most the loop can carry: each side writes tanh(...) / 1.1 back, under 1 / 1.1, so
+// |left| + |right| stays under 2 / 1.1 (fresh sound sent in can go over: drawn full). ECHO_RANGE_DB below is the bottom.
+var ECHO_LOOP_CEILING = 2 / 1.1;
+var ECHO_RANGE_DB = 48;
+function echoRoundHeight(peak) {
+  var db = 20 * Math.log(Math.max(peak, 1e-9) / ECHO_LOOP_CEILING) / Math.LN10;
+  return Math.max(0, Math.min(1, 1 + db / ECHO_RANGE_DB));
+}
+
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
-  var fb = S.freeze ? 1 : Math.max(0.3 + S.dub * 0.62, thrown * 0.9);
-  var on = S.dub > 0 || thrown > 0 || S.freeze;
   viewLabel("echo");
-  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
+  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.send > 0 ? "send " + Math.round(S.send * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
-  var top = 18, base = h - 8, n = 10, gap = (w - 20) / n;
-  rect(6, top, 6, base - top, T.ink);                          // the stab
-  var amp = 1;
-  for (var i = 1; i <= n; i++) {                                // its repeats, darker each time round
-    amp *= fb;
-    var x = 6 + i * gap, bh = Math.max(1, (base - top) * amp);
-    var col = S.freeze ? T.mint : mix(T.mint, T.rest, Math.min(1, i / (2 + S.dub * 8)));
-    if (on) rect(x, base - bh, 6, bh, col);
-    else frame(x, base - bh, 6, bh, T.rest);
+  // the whole rounds, oldest on the left, then the round now on the far right, outlined (it is still growing)
+  var rounds = echoReading.wholeRounds.slice().reverse().concat([echoReading.roundNow]);
+  var top = 18, base = h - 8, gap = (w - 20) / Math.max(1, rounds.length - 1);
+  for (var i = 0; i < rounds.length; i++) {
+    var x = 6 + i * gap, bh = (base - top) * echoRoundHeight(rounds[i]);
+    var isRoundNow = i === rounds.length - 1;
+    if (bh < 1) rect(x, base - 1, 6, 1, T.rest);                  // silent: a dash
+    else if (isRoundNow) frame(x, base - bh, 6, bh, T.mint);
+    else rect(x, base - bh, 6, bh, T.mint);
   }
-  rect(4, h - 4, (w - 8) * Math.min(1, S.level * 3), 2, thrown > 0 ? T.warm : T.mint);  // tape level
+  rect(4, h - 4, (w - 8) * Math.min(1, echoReading.level * 3), 2, thrown > 0 ? T.warm : T.mint);  // tape level
   if (thrown > 0) frame(0, 0, w, h, T.warm, 2 * thrown);
 }
 
 // The pump's gain over a division: the same shape as the DSP (sine ramp in over Attack, recover over
 // Release with Curve). Pump attack arrives in ms, release as a fraction of the division.
 function pumpGain(ph) {
-  var divms = 60000 / 124 / S.rate;                       // display at a typical tempo
+  var divms = 60000 / Math.max(20, S.tempo) / S.rate;     // at Live's tempo, as the DSP
   var atkf = Math.max(0.001, Math.min(0.3, (S.atk === undefined ? 6 : S.atk) / divms));
   var relEnd = Math.max(S.rel === undefined ? 0.55 : S.rel, atkf + 0.05);
   var duck;
@@ -350,47 +416,116 @@ function filterView(w, h) {
   curve(fc, T.mint, 2, false);
 }
 
-var lfoT = 0;
-function lfoNow() { return Math.sin(2 * Math.PI * (now() / 1000) * S.lforate); }
+// The LFO's phase as read from the audio (snapshot~ of its phasor~, every 33 ms), with when each reading came,
+// kept for the last few seconds: the LFO display draws its history from these, so a Rate change shows from where
+// it happened. Phases are stored unwrapped (whole cycles counted), so the phase between two readings is a straight
+// line between them, as the phasor~ runs at a steady rate. A ring of fixed arrays: nothing allocated per frame.
+var LFO_READINGS_KEPT = 128;              // 4.2 s of readings at one per 33 ms: the display shows 2 s
+var LFO_READINGS_STALE_MS = 250;          // no reading for this long: the audio is off, so the LFO is not running
+var lfoReadingPhase = new Array(LFO_READINGS_KEPT);   // unwrapped, in cycles
+var lfoReadingTime = new Array(LFO_READINGS_KEPT);    // ms (now())
+var lfoReadingsCount = 0, lfoNewestReading = -1;
 
-/** One cycle of DCO 1 or 2 as set, drawn twice. */
+function recordLfoReading(phase) {
+  if (!(phase >= 0 && phase <= 1)) {
+    error("2sl stab: the " + MODE + " display got an LFO phase of " + phase + ", outside 0..1 (a wiring error): ignored\n");
+    return;
+  }
+  var time = now(), unwrapped = phase;
+  if (lfoReadingsCount > 0) {
+    var previousPhase = lfoReadingPhase[lfoNewestReading], previousTime = lfoReadingTime[lfoNewestReading];
+    var forward = phase - (previousPhase - Math.floor(previousPhase));
+    forward -= Math.floor(forward);                       // 0..1: how far the phasor moved, less whole cycles
+    // Whole cycles between readings: none at 33 ms and up to 12 Hz (0.4 of a cycle). After a longer gap (the UI
+    // held up), the current Rate says how many went by.
+    var wholeCycles = Math.max(0, Math.round(S.lforate * (time - previousTime) / 1000 - forward));
+    unwrapped = previousPhase + forward + wholeCycles;
+  }
+  lfoNewestReading = (lfoNewestReading + 1) % LFO_READINGS_KEPT;
+  lfoReadingPhase[lfoNewestReading] = unwrapped;
+  lfoReadingTime[lfoNewestReading] = time;
+  lfoReadingsCount = Math.min(lfoReadingsCount + 1, LFO_READINGS_KEPT);
+}
+
+/** The LFO's unwrapped phase at `time` (ms), from the readings: between two readings, the line between them;
+ *  after the newest, carried on at the current Rate (it is at most a reading old), and held where it was if the
+ *  readings stopped (the audio is off and the phasor~ with it). Before the oldest reading: null, nothing known. */
+function lfoPhaseAt(time) {
+  if (lfoReadingsCount === 0) return null;
+  var newestTime = lfoReadingTime[lfoNewestReading];
+  if (time >= newestTime) {
+    var carried = Math.min(time, newestTime + LFO_READINGS_STALE_MS) - newestTime;
+    return lfoReadingPhase[lfoNewestReading] + S.lforate * carried / 1000;
+  }
+  // newest to oldest: the first reading at or before `time`, and the one after it
+  for (var back = 1; back < lfoReadingsCount; back++) {
+    var earlier = (lfoNewestReading - back + LFO_READINGS_KEPT) % LFO_READINGS_KEPT;
+    if (lfoReadingTime[earlier] > time) continue;
+    var later = (earlier + 1) % LFO_READINGS_KEPT;
+    var span = lfoReadingTime[later] - lfoReadingTime[earlier];
+    var along = span > 0 ? (time - lfoReadingTime[earlier]) / span : 1;
+    return lfoReadingPhase[earlier] + (lfoReadingPhase[later] - lfoReadingPhase[earlier]) * along;
+  }
+  return null;
+}
+/** The LFO now, as cos~ makes it from the phase (the DCO displays' PWM). Before any reading: phase 0. */
+function lfoNow() {
+  var phase = lfoPhaseAt(now());
+  return Math.cos(2 * Math.PI * (phase === null ? 0 : phase));
+}
+
+/** DCO 1 or 2 as the voice makes it (without its anti-aliasing): two cycles of DCO 1, and DCO 2 over the same
+ *  time, so Semi shows as more or fewer cycles. Pulse is the voice's saw minus a saw shifted by the pulse width
+ *  (no DC: high 2 - 2w for a fraction w of the cycle, low -2w), and the width moves with PWM, on both DCOs. */
 function oscView(w, h, n) {
   var names1 = ["saw", "pulse", "saw + pulse"], names2 = ["saw", "pulse", "triangle"];
   viewLabel(n === 1 ? "dco 1" : "dco 2");
-  var info = n === 1 ? names1[S.wave1 | 0] + "  pw " + Math.round(S.pw * 100) : names2[S.wave2 | 0] +
+  var wave = n === 1 ? S.wave1 | 0 : S.wave2 | 0;
+  var usesWidth = n === 1 ? wave !== 0 : wave === 1;
+  var pwText = usesWidth ? "  pw " + Math.round(S.pw * 100) : "";
+  var info = n === 1 ? names1[wave] + pwText : names2[wave] + pwText +
     (S.semi ? "  " + (S.semi > 0 ? "+" : "") + S.semi + " st" : "") + "  +" + Math.round(S.fine) + " ct";
   text(info, w - measure(info) - 4, 12, T.label);
   var mid = 20 + (h - 24) / 2, amp = (h - 30) / 2;
-  var width = Math.max(0.05, Math.min(0.95, S.pw + (n === 1 ? S.pwm * 0.35 * lfoNow() : 0)));
+  var width = Math.max(0.05, Math.min(0.95, S.pw + S.pwm * 0.35 * lfoNow()));
   rgba(T.mint);
   mgraphics.set_line_width(2);
   var cycles = n === 2 ? 2 * Math.pow(2, S.semi / 12) : 2;
   for (var x = 4; x <= w - 4; x++) {
     var ph = (((x - 4) / (w - 8)) * cycles) % 1, v;
-    var saw = 2 * ph - 1, pulse = ph < width ? 1 : -1, tri = 2 * Math.abs(2 * ph - 1) - 1;
-    var wv = n === 1 ? S.wave1 | 0 : S.wave2 | 0;
-    if (wv === 0) v = saw;
-    else if (wv === 1) v = pulse * 0.9;
-    else v = n === 1 ? (saw + pulse) * 0.5 : tri;
-    var y = mid - amp * v;
+    var saw = 2 * ph - 1, shifted = (ph + width) % 1, pulse = saw - (2 * shifted - 1), tri = 2 * Math.abs(2 * ph - 1) - 1;
+    if (wave === 0) v = saw;
+    else if (wave === 1) v = pulse;
+    else v = n === 1 ? (saw + pulse) * 0.6 : tri;
+    var y = mid - amp * v / 2;                                     // +-2: the pulse's widest swing
     if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
   mgraphics.stroke();
 }
 
-/** The mixer as four faders: DCO 1, DCO 2, sub, noise. */
-function mixerView(w, h) {
-  viewLabel("mixer");
-  var levels = [S.lvl1, S.lvl2, S.sub, S.noise], names = ["dco1", "dco2", "sub", "noise"];
-  var top = 20, bot = h - 16, n = 4, cw = (w - 8) / n;
-  for (var i = 0; i < n; i++) {
-    var x = 4 + i * cw + cw / 2;
-    rect(x - 1, top, 2, bot - top, T.rest);                             // the slot
-    var y = bot - (bot - top) * Math.max(0, Math.min(1, levels[i]));
-    rect(x - 1, y, 2, bot - y, T.mint);                                  // the level
-    rect(x - 7, y - 2, 14, 4, T.ink);                                    // the cap
-    text(names[i], x - measure(names[i]) / 2, h - 3, T.label);
+/** The sub as the voice makes it: DCO 1 divided by 2 (-1 oct square) or 4 (-2 oct square, 25% pulse, the pulse
+ *  +1 for a quarter and -1 the rest, plus 0.5 as in the voice), over the same time as DCO 1's display (two DCO 1
+ *  cycles), so -1 oct shows one cycle and -2 oct half of one. The window starts on the DCO 1 cycle that puts
+ *  an edge of the sub in the middle, so the half cycle reads as the wave it is. */
+function subView(w, h) {
+  var names = ["square -1", "square -2", "pulse 25%"];
+  var mode = Math.max(0, Math.min(2, S.submode | 0));
+  viewLabel("sub");
+  text(names[mode], w - measure(names[mode]) - 4, 12, T.label);
+  var mid = 20 + (h - 24) / 2, amp = (h - 30) / 2;
+  var division = mode === 0 ? 2 : 4;                      // DCO 1 cycles per sub cycle
+  var firstCycle = mode === 0 ? 0 : mode === 1 ? 1 : 3;    // where the window starts (in DCO 1 cycles)
+  rgba(T.mint);
+  mgraphics.set_line_width(2);
+  for (var x = 4; x <= w - 4; x++) {
+    var dco1Cycles = firstCycle + ((x - 4) / (w - 8)) * 2;
+    var phase = (dco1Cycles / division) % 1, v;
+    if (mode === 2) v = (phase < 0.25 ? 1 : -1) + 0.5;
+    else v = phase < 0.5 ? 1 : -1;
+    var y = mid - amp * v / 2;                             // +-2, the DCO displays' scale
+    if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
+  mgraphics.stroke();
 }
 
 /** The LFO moving, and how much goes where. */
@@ -400,15 +535,17 @@ function lfoView(w, h) {
   var info = r + " Hz";
   text(info, w - measure(info) - 4, 12, T.label);
   var top = 20, bot = h - 18, mid = (top + bot) / 2, amp = (bot - top) / 2;
-  var t0 = now() / 1000;
   rgba(T.mint);
   mgraphics.set_line_width(2);
+  var drawingNow = now(), lineStarted = false;
   for (var x = 4; x <= w - 4; x++) {
-    var t = t0 - (w - 4 - x) / (w - 8) * 2;                          // the last two seconds, scrolling
-    var y = mid - amp * Math.sin(2 * Math.PI * t * S.lforate);
-    if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
+    var secondsAgo = (w - 4 - x) / (w - 8) * 2;                      // the last two seconds, scrolling
+    var phase = lfoPhaseAt(drawingNow - secondsAgo * 1000);
+    if (phase === null) continue;                                     // before the first reading: nothing known
+    var y = mid - amp * Math.cos(2 * Math.PI * phase);
+    if (!lineStarted) { mgraphics.move_to(x, y); lineStarted = true; } else mgraphics.line_to(x, y);
   }
-  mgraphics.stroke();
+  if (lineStarted) mgraphics.stroke();
   var targets = [["pwm", S.pwm], ["vibrato", S.vib], ["filter", S.lfofilt]];
   var x0 = 4;
   for (var i = 0; i < targets.length; i++) {
@@ -419,6 +556,8 @@ function lfoView(w, h) {
   }
 }
 
+/** The FX's drive as the DSP does it: out = tanh(in x (1 + 5 Drive)) / (1 + 2.2 Drive), for an input from -1 to
+ *  +1 (full scale) across and the output on the same scale up, so turning Drive up also shows it turning down. */
 function driveView(w, h) {
   viewLabel("drive");
   var top = 20, bot = h - 6, H = bot - top, x0 = 6, x1 = w - 6;
@@ -428,7 +567,7 @@ function driveView(w, h) {
   var g = 1 + S.drive * 5, norm = 1 / (1 + S.drive * 2.2);
   for (var x = x0; x <= x1; x++) {
     var vin = ((x - x0) / (x1 - x0)) * 2 - 1;
-    var vout = tanh(vin * 1.6 * g) * norm;
+    var vout = tanh(vin * g) * norm;
     var y = top + H / 2 - vout * (H / 2);
     if (x === x0) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
