@@ -1,0 +1,10 @@
+[
+ {"name": "init", "values": {}},
+ {"name": "basic dub", "values": {"Style": 0, "CP Bits": 6, "SD Level": 45, "CP Level": 45, "OH Decay": 420, "Volume": 0.5}},
+ {"name": "deep haze", "values": {"Style": 0, "BD Soft": 70, "BD Tune": 46, "BD Decay": 700, "BD Attack": 20, "SD Level": 30, "CP Bits": 6, "CP Level": 40, "Hat Bits": 5, "Hat Tune": 0.8, "OH Decay": 700, "OH Level": 40, "Variation": 15, "Fill": 2, "Volume": -1.0}},
+ {"name": "detroit 909", "values": {"Style": 2, "Swing": 2, "BD Decay": 380, "RS Level": 55, "CH Level": 40, "Variation": 10, "Fill": 1, "Volume": 1.0}},
+ {"name": "deep house", "values": {"Style": 1, "Swing": 2, "BD Soft": 30, "BD Decay": 500, "CP Level": 55, "CH Decay": 45, "Variation": 10, "Volume": 0.0}},
+ {"name": "dark rolling", "values": {"Style": 3, "Swing": 1, "BD Decay": 650, "BD Tune": 46, "RD Level": 30, "CH Level": 35, "Variation": 20, "Fill": 1, "Volume": -1.0}},
+ {"name": "grids drift", "values": {"Style": 5, "Variation": 40, "Density": 55, "Fill": 2, "BD Soft": 40, "Hat Bits": 5, "Volume": -2.5}},
+ {"name": "euclid", "values": {"Style": 4, "Variation": 10, "RS Level": 55, "Volume": 0.5}}
+]

@@ -2,3 +2,4 @@
 *.amxd.bak
 dist/
 __pycache__/
+references/drums/mirror/
