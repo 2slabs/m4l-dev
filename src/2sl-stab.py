@@ -412,7 +412,8 @@ INFO = {
     "Dub": ("Dub", "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. "
             "0 = no echo except throws."),
     "Throw": ("Throw", "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback."),
-    "Freeze": ("Freeze", "Holds the echo loop: nothing new goes in, and the repeats go round without fading. "
+    "Freeze": ("Freeze", "Holds the echo loop: nothing new goes in, and each time round it gets a little louder, "
+               "so it swells over tens of seconds until tape saturation holds it just under full level. "
                "Stop turns it off."),
     "Echo Time": ("Echo Time", "Echo time, synced to Live's tempo: 1/16 to 1/2 (default 1/8 dotted). "
                   "Left and right run slightly apart; a change glides like tape."),

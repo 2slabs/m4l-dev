@@ -2971,7 +2971,7 @@
 								0
 							],
 							"parameter_annotation_name": "Freeze",
-							"parameter_info": "Holds the echo loop: nothing new goes in, and the repeats go round without fading. Stop turns it off.",
+							"parameter_info": "Holds the echo loop: nothing new goes in, and each time round it gets a little louder, so it swells over tens of seconds until tape saturation holds it just under full level. Stop turns it off.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -2980,7 +2980,7 @@
 						}
 					},
 					"annotation_name": "Freeze",
-					"annotation": "Holds the echo loop: nothing new goes in, and the repeats go round without fading. Stop turns it off.",
+					"annotation": "Holds the echo loop: nothing new goes in, and each time round it gets a little louder, so it swells over tens of seconds until tape saturation holds it just under full level. Stop turns it off.",
 					"texton": "freeze",
 					"mode": 1
 				}
