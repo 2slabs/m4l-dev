@@ -60,7 +60,7 @@ var S = {
   throwAt: 0, phase: 0,
   tempo: 120                        // Live's tempo (the pump), until Live reports it
 };
-var VIEW_DEFAULTS = {"echo": {"freeze": 0, "dub": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "sub": {"submode": 0}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
+var VIEW_DEFAULTS = {"echo": {"freeze": 0, "send": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "sub": {"submode": 0}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
 (function () {
   var defaults = VIEW_DEFAULTS[MODE] || {};
   for (var key in defaults) S[key] = defaults[key];
@@ -320,7 +320,7 @@ function echoRoundHeight(peak) {
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
   viewLabel("echo");
-  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
+  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.send > 0 ? "send " + Math.round(S.send * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
   // the whole rounds, oldest on the left, then the round now on the far right, outlined (it is still growing)
   var rounds = echoReading.wholeRounds.slice().reverse().concat([echoReading.roundNow]);

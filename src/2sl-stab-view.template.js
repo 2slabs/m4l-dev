@@ -299,7 +299,7 @@ function echoRoundHeight(peak) {
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
   viewLabel("echo");
-  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
+  var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.send > 0 ? "send " + Math.round(S.send * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
   // the whole rounds, oldest on the left, then the round now on the far right, outlined (it is still growing)
   var rounds = echoReading.wholeRounds.slice().reverse().concat([echoReading.roundNow]);

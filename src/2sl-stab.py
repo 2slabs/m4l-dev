@@ -245,10 +245,11 @@ pump_duck(ph, atkf, release_end, curve) {
 	return duck;
 }
 
-// The echo is only for throws: silent until Dub, Throw or Freeze feeds it.
+// The echo is only for throws: silent until Send, Throw or Freeze feeds it.
 Param drive(0.25, min=0, max=1);        // tape saturation
 Param dtime(363, min=20, max=ECHO_LONGEST_MS);  // ms (Live's tempo x the Time menu): 1/2 at 20 BPM is the longest
-Param dub(0, min=0, max=1);             // the dub macro: send, feedback, darker, smeared
+Param echosend(0, min=0, max=1);        // the level every stab goes into the echo at
+Param dub(0, min=0, max=1);             // the echo's character: feedback, darker, smeared
 Param throwgate(0, min=0, max=1);       // 1 while a throw is open
 Param freeze(0, min=0, max=1);          // hold the loop
 Param pumpdepth(0, min=0, max=1);
@@ -289,7 +290,7 @@ x = tanh(in1 * gain) / (1 + drive * 2.2);
 
 // what goes into the echo, and how long it rings
 frz = frz + (freeze - frz) * freeze_glide;
-target_send = max(dub * dub * 0.9, throwgate) * (1 - freeze);
+target_send = max(echosend, throwgate) * (1 - freeze);
 sendsm = sendsm + (target_send - sendsm) * (target_send > sendsm ? send_rise : send_fall);
 target_fb = max(0.3 + dub * 0.62, throwgate * 0.9);
 fbsm = fbsm + (target_fb - fbsm) * (target_fb > fbsm ? feedback_rise : feedback_fall);
@@ -488,7 +489,8 @@ INFO = {
                   "bar at the far right is the round it is in now, growing. Repeats fall away round by round as the "
                   "filters and feedback take them; frozen, they rise while it swells and flatten where tape saturation "
                   "holds it. A throw shows as its repeats, with an orange frame. A dash: a silent round. Stop empties "
-                  "it. The line along the bottom is the echo's level now."),
+                  "it. The line along the bottom is the echo's level now. Top right: Send (\"throws only\" at 0), "
+                  "or throw or frozen."),
     "Pump view": ("Pump", "The output level over two beats at Live's tempo: each dip is a duck, mint while Depth "
                   "is above 0. The blue line is Live's position in the beat. Top right: Depth."),
     "Sub view": ("Sub", "The sub as the voice makes it for Sub Mode, in mint: DCO 1 divided by 2 or 4, drawn over "
@@ -541,8 +543,10 @@ INFO = {
     "Shift": ("Shift", "Rotates the pattern later by 0-15 16ths without changing it; the display shows the shifted "
               "pattern. Default 0."),
     # play: dub
-    "Dub": ("Dub", "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. "
-            "0 = no echo except throws."),
+    "Send": ("Send", "How much of every stab goes into the echo (100% = as much as a throw). The dial's travel is "
+             "squared, so the low end is fine. 0 = no echo except throws. Freeze closes it. Default 0."),
+    "Dub": ("Dub", "The echo's character: longer feedback (30% to 92%), each repeat darker and more smeared. "
+            "Sends nothing in: Send, Throw and Throws do."),
     "Throw": ("Throw", "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback."),
     "Freeze": ("Freeze", "Holds the echo loop: nothing new goes in, and each time round it gets a little louder, "
                "so it swells over tens of seconds until tape saturation holds it just under full level. "
@@ -1111,12 +1115,15 @@ wire(throwmsg, v_echo)
 frz = toggle("Freeze", "Freeze", C3 + 96, ROW_Y, 88, 15, "play")
 tell(frz, "freeze", fx)
 tell(frz, "freeze", v_echo)
-dial("Dub", "Dub", fx, "dub", 0, 100, 5, C3, DIAL_Y, "play", scale=0.01, views=[(v_echo, "dub")])
+dial("Dub", "Dub", fx, "dub", 0, 100, 5, C3, DIAL_Y, "play", scale=0.01)
 divs = menu("Echo Time", "Time", ["1/16", "1/8", "1/8d", "1/4", "1/4d", "1/2"], C3 + 64, DIAL_Y + 17, 64, "play")
 beats = box("expr ($i1==0)*0.25 + ($i1==1)*0.5 + ($i1==2)*0.75 + ($i1==3)*1. + ($i1==4)*1.5 + ($i1==5)*2.",
             rect=(1100, 700, 400, 22), ins=1, outs=1)
 wire(divs, beats)
 wire(beats, pak, 0, 1)
+# Send: the echo's level as the dial shows it (gain = Send / 100); exponent 2 squares the dial's travel, the curve
+# the echo send had when Dub set it (0.9 dub^2), so the low end is as fine as before
+dial("Send", "Send", fx, "echosend", 0, 100, 5, C3 + 136, DIAL_Y, "play", exp=2.0, scale=0.01, views=[(v_echo, "send")])
 
 v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play", info="Pump view")
 ph_snap = box("snapshot~ 33", rect=(250, 430, 80, 22), ins=2, outs=1, outtype=["float"])

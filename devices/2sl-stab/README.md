@@ -1,6 +1,6 @@
 # 2sl stab
 
-A dub techno chord machine: chord memory, a polyphonic analog-style voice, a stab pattern machine, and dub performance moves (throw, freeze, a dub macro, pump). It plays chord progressions' clips as they are (**poly**), or stacks a chord on one key and plays it for you.
+A dub techno chord machine: chord memory, a polyphonic analog-style voice, a stab pattern machine, and dub performance moves (throw, freeze, an echo send, a dub macro, pump). It plays chord progressions' clips as they are (**poly**), or stacks a chord on one key and plays it for you.
 
 A [2sl](https://2sl.to) project. The **2sl stab** chip in the device's header links back to 2sl.to: hover it to see the link, click to open it.
 
@@ -24,7 +24,7 @@ Three pages: switch with **play / osc / shape** in the header (the device opens 
 |---|---|---|
 | chord | the chord you're playing: name, notes, a lit keyboard | **Chord** (poly, minor, m7, m9, m11, sus4, fifths, dark), **In Key** (chords from Live's Scale Mode), **Tone** (brighter or darker), **Length** (shorter or longer tails), **Drift** (voicing varies stab to stab) |
 | machine | the 16-step pattern: **click a step** to cycle rest → hit → accent; the playhead, hits flashing, throws flashing orange; a status line | **Machine**, **Latch** (tap a chord and it keeps playing), **Pattern** (starting points), **Density**, **Throws**, **Gate**, **Shift** (moves every trigger 0–15 16ths later, wrapping; the display shows the shifted pattern, the saved pattern doesn't change, and picking a Pattern keeps it) |
-| dub | the echo as it really played, measured from its sound: the peak of each of its last ten time rounds (newest on the right) and of the round it's in now, frozen or not; throws show as their repeats with an orange frame; Stop empties it; a live tape level | **Dub** (0 = no echo), **Throw**, **Freeze**, echo **Time** |
+| dub | the echo as it really played, measured from its sound: the peak of each of its last ten time rounds (newest on the right) and of the round it's in now, frozen or not; throws show as their repeats with an orange frame; Stop empties it; a live tape level | **Dub** (the echo's character: feedback, darker and more smeared repeats; sends nothing), **Throw**, **Freeze**, echo **Time**, **Send** (how much of every stab goes into the echo; 0 = only throws) |
 | pump | the duck over two beats at Live's tempo, with the playhead | **Depth**, **Attack** (ms to full duck: a ramp, never a jump), **Release** (how much of the beat it takes to recover), **Curve** (linear to snappy), pump **Rate** |
 
 **Osc**: laid out like the voice sections of a Juno, Jupiter or Prophet.
