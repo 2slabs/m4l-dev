@@ -23,7 +23,7 @@ Three pages: switch with **play / osc / shape** in the header. The header also h
 
 | section | display | controls |
 |---|---|---|
-| sub | its wave for the Sub Mode, over the same time as DCO 1's two cycles (so one cycle at −1 oct, half of one at −2 oct) | **Sub Mode** switch as on the Roland SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (DCO 1 divided down, so it follows DCO 1's footage). Its level is **Sub** in the mixer |
+| sub | its wave for the Sub Mode, over the same time as DCO 1's two cycles (so one cycle at −1 oct, half of one at −2 oct) | **Sub Mode** switch: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (DCO 1 divided down, so it follows DCO 1's footage). Its level is **Sub** in the mixer |
 | dco 1 | its waveform, moving with PWM | wave buttons **saw / pulse / both**, footage **16′ / 8′ / 4′**, **PW**, **PWM** (the LFO on pulse width, the Juno shimmer) |
 | dco 2 | its waveform; on pulse, with PW's width, moving with PWM like DCO 1 | wave buttons **saw / pulse / tri**, footage, **Semi** (−12 to +12; 7 stacks a fifth), **Fine** (detune in cents) |
 | mixer | none: four level dials in a square | **OSC 1**, **OSC 2**, **Sub**, **Noise** |
@@ -82,7 +82,7 @@ Picking a preset sets every control, and you can tweak from there. When Live reo
   - Key tracking (Attack's Diva patch, about 65).
   - Fast attack, medium decay, low sustain.
   - Detuned oscillators (Brootle, Attack).
-  - The sub: DCO 1 divided by 2 or 4, three waves as on the Roland SH-101 ([Roland, SH-4d manual, SH-101 model](https://static.roland.com/manuals/sh-4d_v200/en-US/8651802786195467.html); the 25% pulse from [Electric Druid](https://electricdruid.net/a-study-of-sub-oscillators/); notes in `references/README.md`).
+  - The sub: DCO 1 divided by 2 or 4, three waves (sources in `references/README.md`).
 - **The chain order:** oscillators → filter → saturation → delay (AudioTent).
 - **The dub section.** Producers put the main delay on a send, so this has none. It keeps a small tape echo just for the performance moves the sources describe: throws, feedback rides and holding the loop ("dub delay is played, not dialled in"). It still follows the echo research:
   - **Filters in the feedback loop**, so each repeat gets darker and thinner ([Apple, Tape Delay](https://support.apple.com/kb/PH27575)).

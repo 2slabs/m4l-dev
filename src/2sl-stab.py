@@ -59,7 +59,7 @@ Param semi(0, min=-12, max=12);         // DCO 2 interval: 7 = a fifth up
 Param fine(10, min=0, max=50);          // DCO 2 detune, cents
 Param lvl1(0.8, min=0, max=1);          // mixer
 Param lvl2(0.8, min=0, max=1);
-Param sublvl(0, min=0, max=1);          // the sub: DCO 1 divided down, as on the SH-101
+Param sublvl(0, min=0, max=1);          // the sub: DCO 1 divided down
 Param submode(0, min=0, max=2);         // 0 square -1 oct, 1 square -2 oct, 2 25% pulse -2 oct
 Param noiseamt(0.08, min=0, max=1);
 Param pwmamt(0, min=0, max=1);          // LFO -> pulse width
@@ -165,7 +165,7 @@ pulse2 = saw2 - (2 * p2b - 1 - blep(p2b, dt2));
 tri2 = 2 * abs(2 * ph2 - 1) - 1;
 o2 = wave2 < 0.5 ? saw2 : (wave2 < 1.5 ? pulse2 : tri2);
 
-// sub: DCO 1 divided by 2 or 4 (the SH-101's flip-flops), so it stays locked to DCO 1 and follows its
+// sub: DCO 1 divided by 2 or 4 (like a flip-flop divider), so it stays locked to DCO 1 and follows its
 // footage. Its phase is DCO 1's phase plus the cycles counted so far. Square -1 oct, square -2 oct, or a
 // 25% pulse -2 oct (DC removed, so switching doesn't shift the level). Edges band-limited with blep.
 sub_phase_1oct = (wrap(dco1_cycle_count, 0, 2) + ph1) * 0.5;
@@ -567,7 +567,7 @@ INFO = {
     "OSC 1": ("OSC 1 Level", "DCO 1 level in the mixer. Default 80%."),
     "OSC 2": ("OSC 2 Level", "DCO 2 level in the mixer. Default 80%."),
     "Sub": ("Sub Level", "Level of the sub: DCO 1 divided down, an octave or two below it (Sub Mode). Default 0."),
-    "Sub Mode": ("Sub Mode", "The sub's wave, as on the SH-101: a square 1 octave below DCO 1, a square 2 octaves "
+    "Sub Mode": ("Sub Mode", "The sub's wave: a square 1 octave below DCO 1, a square 2 octaves "
                  "below, or a 25% pulse 2 octaves below (keeps a strong -1 octave). Default -1 oct square."),
     "Noise": ("Noise Level", "Level of white noise in the mix (the 'chuff'). Default 8%."),
     "LFO Rate": ("LFO Rate", "Speed of the sine LFO, 0.05 to 12 Hz (default 0.5). One LFO for all voices."),
@@ -1081,7 +1081,7 @@ if O4 + LFO_W != W - 12:
 OSC_RULES = [x - SECTION_GAP // 2 for x in (O1, O2, O3, O4)]
 DCO_WAVE_TABS_W, DCO_OCT_TABS_W = 120, 72                    # + 4 between = DCO_W
 
-# the sub: DCO 1 divided down, as on the SH-101 (its level is in the mixer)
+# the sub: DCO 1 divided down (its level is in the mixer)
 v_sub = view("sub", OS, VIEW_Y, SUB_W, VIEW_H, "osc", info="Sub view")
 sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], OS, ROW_Y, SUB_W, "osc")
 tell(sub_mode_tab, "submode", voice)
