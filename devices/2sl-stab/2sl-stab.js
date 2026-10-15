@@ -43,6 +43,7 @@ var steps = parse(PATTERNS[0]);   // the pattern as stored (unshifted)
 var shift = 0;                    // 16ths the pattern plays later than stored
 
 var keys = {};      // physically held keys -> velocity
+var keyHolds = {};  // held key -> note-ons not yet released (a key can be held twice: two clips, two controllers)
 var latched = {};   // latched chord: key -> velocity
 var sent = {};      // played key -> pitches it sent (direct play)
 var count = {};     // sounding pitch -> how many holders
@@ -250,6 +251,7 @@ function list(pitch, vel) {
   }
   if (vel > 0) {
     var anyHeld = Object.keys(keys).length > 0;
+    keyHolds[pitch] = (keyHolds[pitch] || 0) + 1;
     keys[pitch] = vel;
     if (machine) {
       if (latch) {
@@ -264,6 +266,9 @@ function list(pitch, vel) {
     sound(sent[pitch], vel);
     showChord(sentPitches());
   } else {
+    // only the key's last note-off releases it: a second hold keeps the chord (and the machine's key) going
+    if (keyHolds[pitch] > 1) { keyHolds[pitch]--; return; }
+    delete keyHolds[pitch];
     delete keys[pitch];
     if (sent[pitch]) {
       silence(sent[pitch]);
@@ -381,6 +386,7 @@ function anything() {
       panic();
       latched = {};
       keys = {};
+      keyHolds = {};
       outlet(2, "pos", -1);
       showSteps();
       break;
