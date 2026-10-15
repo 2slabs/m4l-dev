@@ -21,7 +21,16 @@ ROOT = os.path.dirname(HERE)
 
 # ---- DSP (genexpr) -------------------------------------------------------------------
 
-VOICE = r"""
+# Every per-sample smoother is a one-pole with a time constant in ms, converted with the sample rate here,
+# so it sounds the same at 44.1 and 192 kHz. Written into both gen~ patches (gen wants functions first).
+GEN_SMOOTHING_FUNCTION = r"""
+// one-pole smoothing coefficient for a time constant in ms (63% of the way there in that time)
+smoothing_coefficient(time_constant_ms, sample_rate) {
+	return 1 - exp(-1000 / (max(time_constant_ms, 0.001) * sample_rate));
+}
+"""
+
+VOICE = GEN_SMOOTHING_FUNCTION + r"""
 // One voice. in1: frequency (Hz). in2: gate = velocity 0..1, 0 = release. in3: the LFO (-1..1, shared).
 // Two oscillators, a sub and noise into a mixer, like the Juno / Jupiter / Prophet voices of the time.
 // (gen requires functions before everything else, declarations included.)
@@ -67,6 +76,7 @@ Param lenmac(0, min=-1, max=1);         // Play page Length: decay and release x
 Param panic(0);                         // Stop: every new number ramps the voice to silence
 
 History env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);
+History velo_smoothed(0);   // velo, glided: a stolen voice's new velocity mustn't jump the gain (a click)
 History ph1(0), ph2(0), dco1_cycle_count(0), s1(0), s2(0), s3(0), s4(0);
 
 lfo = in3;
@@ -97,6 +107,9 @@ if (fadeleft > 0) {
 	env = fadeleft > 0 ? max(env - fadestep, 0) : 0;
 	lastgate = 0;
 }
+
+// the velocity glides to a new value over ~2 ms (time constant 0.5 ms: 98% there in 2 ms)
+velo_smoothed = velo_smoothed + (velo - velo_smoothed) * smoothing_coefficient(0.5, sr);
 
 // analog-style ADSR: the attack aims past 1, decay and release are exponential
 stretch = pow(4, lenmac);
@@ -162,7 +175,7 @@ subosc = submode < 0.5 ? sub_square_1oct : (submode < 1.5 ? sub_square_2oct : su
 osc = (o1 * lvl1 + o2 * lvl2 + subosc * sublvl) * 0.5 + noise() * noiseamt * 0.4;
 
 // 4-pole ladder low-pass with saturated feedback
-vel_env = clamp(envamt + 0.25 * tonemac, 0, 1) * (1 - velfilt + velfilt * velo);
+vel_env = clamp(envamt + 0.25 * tonemac, 0, 1) * (1 - velfilt + velfilt * velo_smoothed);
 fc = cutoff * pow(2, 2.5 * tonemac) * pow(2, keytrack * log2(note / 261.63)) * pow(2, 6 * vel_env * env)
 	* pow(2, 3 * lfofilt * lfo);
 fc = clamp(fc, 20, sr * 0.45);
@@ -175,7 +188,7 @@ s3 = s3 + g * (s2 - s3);
 s4 = s4 + g * (s3 - s4);
 y = s4 * (1 + k * 0.4);
 
-out1 = y * env * (0.35 + 0.65 * velo) * level;
+out1 = y * env * (0.35 + 0.65 * velo_smoothed) * level;
 """
 
 FX = r"""
