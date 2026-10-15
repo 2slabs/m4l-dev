@@ -199,7 +199,7 @@ ECHO_BUFFER_SECONDS = 6.25
 if ECHO_LONGEST_MS * 1.031 * 1.0012 / 1000.0 >= ECHO_BUFFER_SECONDS - 0.01:
     raise SystemExit("2sl-stab.py: the echo buffer is shorter than the longest echo time")
 
-FX = r"""
+FX = GEN_SMOOTHING_FUNCTION + r"""
 // in1: the voices, mono. in2: Live's beat ramp (plugphasor~). out1/out2: left/right.
 // soft clip: clean below 0.8, rounding off above (gen needs functions first)
 sclip(v) {
@@ -229,31 +229,40 @@ Param panic(0);                         // Stop: every new number empties the ec
 
 Delay dl(samplerate * ECHO_BUFFER_SECONDS);   // samplerate is a constant to gen~, so the size follows it
 Delay dr(samplerate * ECHO_BUFFER_SECONDS);
-Delay al1(2000);
-Delay al2(2000);
-Delay ar1(2000);
-Delay ar2(2000);
+Delay al1(samplerate * 0.02);           // the diffusion allpasses: up to 14 ms
+Delay al2(samplerate * 0.02);
+Delay ar1(samplerate * 0.02);
+Delay ar2(samplerate * 0.02);
 History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
 History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
 History lastpanic(0), elapsed(1e9), pressfade(0);
 
 sr = samplerate;
+// Smoothing time constants in ms (each was a per-sample coefficient; the times are what it gave at 44.1 kHz).
+freeze_glide = smoothing_coefficient(11.3, sr);
+send_rise = smoothing_coefficient(1.12, sr);
+send_fall = smoothing_coefficient(15.1, sr);
+feedback_rise = smoothing_coefficient(2.26, sr);
+feedback_fall = smoothing_coefficient(567, sr);
+echo_time_glide = smoothing_coefficient(56.7, sr);
+level_meter_fall = smoothing_coefficient(75.6, sr);
+pump_gain_glide = smoothing_coefficient(0.442, sr);
 gain = 1 + drive * 5;
 x = tanh(in1 * gain) / (1 + drive * 2.2);
 
 // what goes into the echo, and how long it rings
-frz = frz + (freeze - frz) * 0.002;
+frz = frz + (freeze - frz) * freeze_glide;
 target_send = max(dub * dub * 0.9, throwgate) * (1 - freeze);
-sendsm = sendsm + (target_send - sendsm) * (target_send > sendsm ? 0.02 : 0.0015);
+sendsm = sendsm + (target_send - sendsm) * (target_send > sendsm ? send_rise : send_fall);
 target_fb = max(0.3 + dub * 0.62, throwgate * 0.9);
-fbsm = fbsm + (target_fb - fbsm) * (target_fb > fbsm ? 0.01 : 0.00004);
+fbsm = fbsm + (target_fb - fbsm) * (target_fb > fbsm ? feedback_rise : feedback_fall);
 fb = fbsm * (1 - frz) + 1.05 * frz;
 looplp = (4500 - dub * 3100) * (1 - frz) + 9000 * frz;
 loophp = (90 + dub * 160) * (1 - frz) + 50 * frz;
 diffuse = 0.2 + dub * 0.45;
 
 // tape echo: time glides when it changes, wow and flutter, L/R slightly apart
-ts = ts + (dtime - ts) * 0.0004;
+ts = ts + (dtime - ts) * echo_time_glide;
 wph = wrap(wph + 0.53 / sr, 0, 1);
 wph2 = wrap(wph2 + 0.137 / sr, 0, 1);
 wow = (sin(twopi * wph) * 0.6 + sin(twopi * wph2) * 0.4) * 0.0012;
@@ -298,19 +307,19 @@ hpr = hpr + hpk * (lpr2 - hpr);
 fr = lpr2 - hpr;
 
 // diffusion: two allpasses per side
-d1 = al1.read(373);
+d1 = al1.read(mstosamps(8.458));          // 373, 587, 401 and 613 samples at 44.1 kHz
 v1 = fl + diffuse * d1;
 al1.write(v1 * clean);
 fl = d1 - diffuse * v1;
-d2 = al2.read(587);
+d2 = al2.read(mstosamps(13.311));
 v2 = fl + diffuse * d2;
 al2.write(v2 * clean);
 fl = d2 - diffuse * v2;
-d3 = ar1.read(401);
+d3 = ar1.read(mstosamps(9.093));
 v3 = fr + diffuse * d3;
 ar1.write(v3 * clean);
 fr = d3 - diffuse * v3;
-d4 = ar2.read(613);
+d4 = ar2.read(mstosamps(13.900));
 v4 = fr + diffuse * d4;
 ar2.write(v4 * clean);
 fr = d4 - diffuse * v4;
@@ -335,9 +344,9 @@ if (ph < atkf) {
 	duck = pow(1 - r, 1 + pumpcurve * 3);
 }
 target_g = 1 - pumpdepth * duck;
-gsm = gsm + (target_g - gsm) * 0.05;   // ~1 ms smoother: no steps, ever
+gsm = gsm + (target_g - gsm) * pump_gain_glide;   // ~1 ms to 90%: no steps, ever
 
-lvl = max(abs(rl) + abs(rr), lvl * 0.9997);
+lvl = max(abs(rl) + abs(rr), lvl * (1 - level_meter_fall));
 out3 = lvl;
 gain = dbtoa(volume) * 2;              // +6 dB over the old level; the soft clip catches overs
 out1 = sclip((x + rl * 1.2) * gsm * gain);
