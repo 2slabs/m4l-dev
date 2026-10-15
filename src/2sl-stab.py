@@ -356,6 +356,27 @@ INFO = {
                    "top: accent (full velocity, fires at Density x1.4). Dim: hit (softer, fires at Density). Empty "
                    "steps: the lighter ones start each beat. Blue outline: the step playing now. Orange outline: "
                    "that stab was thrown into the echo."),
+    "Link view": ("2sl.to", "Opens 2sl.to in your browser."),
+    "Chord view": ("Chord", "The chord sounding now: its name, its notes (top right), and two octaves of keys with "
+                   "those notes lit mint. With Machine on, the last stab the machine played."),
+    "Echo view": ("Echo", "The stab (left) and its repeats, each lower by the feedback, mint fading as they go round "
+                  "(slower with more Dub). Outlines only while the echo is silent. Frozen: every repeat full and mint. A throw flashes "
+                  "an orange frame. The line along the bottom is the echo's level now."),
+    "Pump view": ("Pump", "The output level over two beats: each dip is a duck, mint while Depth is above 0. "
+                  "The blue line is Live's position in the beat. Top right: Depth."),
+    "DCO1 view": ("DCO 1", "Two cycles of DCO 1's waveform as set (saw, pulse or both), in mint. Top right: the wave "
+                  "and pulse width. With PWM up, the pulse width moves with the LFO."),
+    "DCO2 view": ("DCO 2", "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, "
+                  "so Semi shows as more or fewer cycles. Top right: the wave, Semi and Fine."),
+    "Mixer view": ("Mixer", "The four mixer levels as faders: DCO 1, DCO 2, sub and noise, mint up to the cap."),
+    "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint; its rate top right. Along the bottom, "
+                 "where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off."),
+    "Filter view": ("Filter", "The low-pass response from 20 Hz to 20 kHz in mint, with the resonance peak, at the "
+                    "cutoff (top right, Tone included). Grey: how far the envelope opens it at full velocity."),
+    "Envelope view": ("Envelope", "The envelope in mint: attack, decay to Sustain, a held stretch, then release. "
+                      "Times are on a squashed scale and include the Length macro."),
+    "Drive view": ("Drive", "The saturation curve in mint: input level across, output up. More Drive bends it into "
+                   "a steeper middle and flatter ends."),
     # header
     "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working."),
     "Preset": ("Preset", "Sets every control (and the machine's pattern) to a preset; tweak from there. "
@@ -610,6 +631,9 @@ def view(mode, x, y, w, h, page, background=False, info=None):
         title, text = INFO[info]
         INFO_USED.add(info)
         extra.update(annotation_name=title, annotation=text)
+    elif not background:
+        # only the background (it ignores clicks, so it is never hovered) may go without
+        raise SystemExit(f"2sl-stab.py: view {mode!r} has no Info View text: pass info= with an INFO key")
     b = box(cls="jsui", rect=(1500 + x, 1000 + y, w, h), ins=1, outs=1, filename="2sl-stab-view.js",
             jsarguments=[mode], presentation=1, presentation_rect=[float(x), float(y), float(w), float(h)], border=0,
             **extra)
@@ -709,7 +733,7 @@ wire(thememsg, ui)
 
 # ---- header (all pages) ----
 # the 2sl wordmark chip, a link back to 2sl.to (hover shows it, click opens it)
-link = view("link", 12, 3, 56, 15, None)
+link = view("link", 12, 3, 56, 15, None, info="Link view")
 page_tabs = param("live.tab", "Page", "Page", (1500, 560, 144, 15), 2, (80.0, 3.0, 144.0, 15.0),
                   parameter_enum=PAGE_NAMES, parameter_mmax=2, parameter_initial_enable=1, parameter_initial=[0])
 find(page_tabs).update(num_lines_patching=1, num_lines_presentation=1, varname="page")
@@ -748,7 +772,7 @@ for dst in (voice, fx):
 
 # ================= PLAY: chord | machine | dub | pump =================
 C1, C2, C3, C4 = 12, 220, 524, 732
-v_chord = view("chord", C1, VIEW_Y, 184, VIEW_H, "play")
+v_chord = view("chord", C1, VIEW_Y, 184, VIEW_H, "play", info="Chord view")
 chordm = menu("Chord", "Chord", ["poly", "minor", "m7", "m9", "m11", "sus4", "fifths", "dark"], 1, C1, ROW_Y, 112, "play")
 tell(chordm, "shape", memory, 1)
 ink = toggle("In Key", "In Key", C1 + 116, ROW_Y, 68, 15, "play")
@@ -781,7 +805,7 @@ wire(memory, bitroute, 4, 0)
 wire(bitroute, sbits, 0, 0)
 wire(bitroute, abits, 1, 0)
 
-v_echo = view("echo", C3, VIEW_Y, 184, VIEW_H, "play")
+v_echo = view("echo", C3, VIEW_Y, 184, VIEW_H, "play", info="Echo view")
 lvl_snap = box("snapshot~ 33", rect=(160, 470, 80, 22), ins=2, outs=1, outtype=["float"])
 wire(fx, lvl_snap, 2, 0)
 tell(lvl_snap, "level", v_echo)
@@ -800,7 +824,7 @@ beats = box("expr ($i1==0)*0.25 + ($i1==1)*0.5 + ($i1==2)*0.75 + ($i1==3)*1. + (
 wire(divs, beats)
 wire(beats, pak, 0, 1)
 
-v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play")
+v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play", info="Pump view")
 ph_snap = box("snapshot~ 33", rect=(250, 430, 80, 22), ins=2, outs=1, outtype=["float"])
 wire(beat, ph_snap)
 tell(ph_snap, "phase", v_pump)
@@ -816,7 +840,7 @@ dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 50, 5, C4 + 168, DIAL_Y, "p
 
 # ================= OSC: DCO 1 | DCO 2 | mixer | LFO =================
 O1, O2, O3, O4 = 12, 240, 468, 696
-v_osc1 = view("osc1", O1, VIEW_Y, 204, VIEW_H, "osc")
+v_osc1 = view("osc1", O1, VIEW_Y, 204, VIEW_H, "osc", info="DCO1 view")
 w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], 0, O1, ROW_Y, 124, "osc")
 tell(w1, "wave1", voice)
 tell(w1, "wave1", v_osc1)
@@ -827,7 +851,7 @@ tell(o1m, "oct1", voice)
 dial("PW", "PW", voice, "pw", 50, 95, 70, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
 pwm_dial = dial("PWM", "PWM", voice, "pwmamt", 0, 100, 0, 5, O1 + 56, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pwm")])
 
-v_osc2 = view("osc2", O2, VIEW_Y, 204, VIEW_H, "osc")
+v_osc2 = view("osc2", O2, VIEW_Y, 204, VIEW_H, "osc", info="DCO2 view")
 w2 = tabs("DCO2 Wave", "Wave 2", ["saw", "pulse", "tri"], 0, O2, ROW_Y, 124, "osc")
 tell(w2, "wave2", voice)
 tell(w2, "wave2", v_osc2)
@@ -838,13 +862,13 @@ tell(o2m, "oct2", voice)
 dial("Semi", "Semi", voice, "semi", -12, 12, 0, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
 dial("Fine", "Fine", voice, "fine", 0, 50, 10, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
 
-v_mix = view("mixer", O3, VIEW_Y, 204, VIEW_H, "osc")
+v_mix = view("mixer", O3, VIEW_Y, 204, VIEW_H, "osc", info="Mixer view")
 dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 80, 5, O3, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "lvl1")])
 dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 80, 5, O3 + 54, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "lvl2")])
 dial("Sub", "Sub", voice, "sublvl", 0, 100, 0, 5, O3 + 108, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "sub")])
 dial("Noise", "Noise", voice, "noiseamt", 0, 100, 8, 5, O3 + 160, DIAL_Y, "osc", scale=0.01, views=[(v_mix, "noise")])
 
-v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc")
+v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
 dial("LFO Rate", "Rate", lfo, None, 0.05, 12, 0.5, 3, O4, DIAL_Y, "osc", exp=3.0, views=[(v_lfo, "lforate")])
 dial("Vibrato", "Vibrato", voice, "vibamt", 0, 100, 0, 5, O4 + 64, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "vib")])
@@ -852,20 +876,20 @@ dial("LFO Filter", "Filter", voice, "lfofilt", 0, 100, 0, 5, O4 + 128, DIAL_Y, "
 
 # ================= SHAPE: filter | envelope | drive =================
 F, E, D = 12, 376, 680
-v_filter = view("filter", F, VIEW_Y, 340, VIEW_H, "shape")
+v_filter = view("filter", F, VIEW_Y, 340, VIEW_H, "shape", info="Filter view")
 dial("Cutoff", "Cutoff", voice, "cutoff", 40, 12000, 700, 3, F, DIAL_Y, "shape", exp=3.0, views=[(v_filter, "cutoff")])
 dial("Resonance", "Reso", voice, "reso", 0, 100, 30, 5, F + 68, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "reso")])
 dial("Env Amount", "Env", voice, "envamt", 0, 100, 50, 5, F + 136, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "envamt")])
 dial("Key Track", "Key", voice, "keytrack", 0, 100, 50, 5, F + 204, DIAL_Y, "shape", scale=0.01)
 dial("Velocity Filter", "Vel", voice, "velfilt", 0, 100, 50, 5, F + 272, DIAL_Y, "shape", scale=0.01)
 
-v_env = view("env", E, VIEW_Y, 280, VIEW_H, "shape")
+v_env = view("env", E, VIEW_Y, 280, VIEW_H, "shape", info="Envelope view")
 dial("Attack", "Attack", voice, "atk", 0.5, 4000, 2, 2, E, DIAL_Y, "shape", exp=3.0, views=[(v_env, "atk")])
 dial("Decay", "Decay", voice, "dec", 5, 6000, 260, 2, E + 70, DIAL_Y, "shape", exp=3.0, views=[(v_env, "dec")])
 dial("Sustain", "Sustain", voice, "sus", 0, 100, 0, 5, E + 140, DIAL_Y, "shape", scale=0.01, views=[(v_env, "sus")])
 dial("Release", "Release", voice, "rel", 5, 6000, 240, 2, E + 210, DIAL_Y, "shape", exp=3.0, views=[(v_env, "rel")])
 
-v_drive = view("drive", D, VIEW_Y, 268, VIEW_H, "shape")
+v_drive = view("drive", D, VIEW_Y, 268, VIEW_H, "shape", info="Drive view")
 dial("Drive", "Drive", fx, "drive", 0, 100, 25, 5, D, DIAL_Y, "shape", scale=0.01, views=[(v_drive, "drive")])
 
 width = W
@@ -1018,7 +1042,7 @@ pbox = next(x["box"] for x in boxes if x["box"]["id"] == preset)
 pbox["saved_attribute_attributes"]["valueof"].update(parameter_enum=[n for n, _ in PRESETS], parameter_mmax=len(PRESETS) - 1)
 
 if set(INFO) - INFO_USED:
-    raise SystemExit(f"2sl-stab.py: INFO has text for no parameter: {sorted(set(INFO) - INFO_USED)}")
+    raise SystemExit(f"2sl-stab.py: INFO has text for no parameter or view: {sorted(set(INFO) - INFO_USED)}")
 
 presets_js = [{VALUES[k]: v for k, v in {**BASE, **p}.items()} for _, p in PRESETS]
 

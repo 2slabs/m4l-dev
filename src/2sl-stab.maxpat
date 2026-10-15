@@ -1399,6 +1399,8 @@
 						15.0
 					],
 					"border": 0,
+					"annotation_name": "2sl.to",
+					"annotation": "Opens 2sl.to in your browser.",
 					"varname": "view_link"
 				}
 			},
@@ -1752,6 +1754,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Chord",
+					"annotation": "The chord sounding now: its name, its notes (top right), and two octaves of keys with those notes lit mint. With Machine on, the last stab the machine played.",
 					"varname": "view_chord"
 				}
 			},
@@ -2762,6 +2766,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Echo",
+					"annotation": "The stab (left) and its repeats, each lower by the feedback, mint fading as they go round (slower with more Dub). Outlines only while the echo is silent. Frozen: every repeat full and mint. A throw flashes an orange frame. The line along the bottom is the echo's level now.",
 					"varname": "view_echo"
 				}
 			},
@@ -3166,6 +3172,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Pump",
+					"annotation": "The output level over two beats: each dip is a duck, mint while Depth is above 0. The blue line is Live's position in the beat. Top right: Depth.",
 					"varname": "view_pump"
 				}
 			},
@@ -3771,6 +3779,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "DCO 1",
+					"annotation": "Two cycles of DCO 1's waveform as set (saw, pulse or both), in mint. Top right: the wave and pulse width. With PWM up, the pulse width moves with the LFO.",
 					"varname": "view_osc1",
 					"hidden": 1
 				}
@@ -4216,6 +4226,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "DCO 2",
+					"annotation": "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, so Semi shows as more or fewer cycles. Top right: the wave, Semi and Fine.",
 					"varname": "view_osc2",
 					"hidden": 1
 				}
@@ -4589,6 +4601,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Mixer",
+					"annotation": "The four mixer levels as faders: DCO 1, DCO 2, sub and noise, mint up to the cap.",
 					"varname": "view_mixer",
 					"hidden": 1
 				}
@@ -5096,6 +5110,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "LFO",
+					"annotation": "The LFO's last two seconds, scrolling, in mint; its rate top right. Along the bottom, where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off.",
 					"varname": "view_lfo",
 					"hidden": 1
 				}
@@ -5466,6 +5482,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Filter",
+					"annotation": "The low-pass response from 20 Hz to 20 kHz in mint, with the resonance peak, at the cutoff (top right, Tone included). Grey: how far the envelope opens it at full velocity.",
 					"varname": "view_filter",
 					"hidden": 1
 				}
@@ -5984,6 +6002,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Envelope",
+					"annotation": "The envelope in mint: attack, decay to Sustain, a held stretch, then release. Times are on a squashed scale and include the Length macro.",
 					"varname": "view_env",
 					"hidden": 1
 				}
@@ -6383,6 +6403,8 @@
 						64.0
 					],
 					"border": 0,
+					"annotation_name": "Drive",
+					"annotation": "The saturation curve in mint: input level across, output up. More Drive bends it into a steeper middle and flatter ends.",
 					"varname": "view_drive",
 					"hidden": 1
 				}
