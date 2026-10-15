@@ -211,6 +211,17 @@ sclip(v) {
 	return y;
 }
 
+// the pump's duck (0..1) at phase ph of a division: a sine ramp in over atkf, then a recovery shaped by curve
+pump_duck(ph, atkf, release_end, curve) {
+	duck = 0;
+	if (ph < atkf) {
+		duck = sin(1.5707963 * ph / atkf);
+	} else {
+		duck = pow(1 - clamp((ph - atkf) / (release_end - atkf), 0, 1), 1 + curve * 3);
+	}
+	return duck;
+}
+
 // The echo is only for throws: silent until Dub, Throw or Freeze feeds it.
 Param drive(0.25, min=0, max=1);        // tape saturation
 Param dtime(363, min=20, max=ECHO_LONGEST_MS);  // ms (Live's tempo x the Time menu): 1/2 at 20 BPM is the longest
@@ -236,6 +247,7 @@ Delay ar2(samplerate * 0.02);
 History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
 History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
 History lastpanic(0), elapsed(1e9), pressfade(0);
+History live_clock_weight(0);           // 0 = the pump runs on its own clock, 1 = on Live's beat
 
 sr = samplerate;
 // Smoothing time constants in ms (each was a per-sample coefficient; the times are what it gave at 44.1 kHz).
@@ -329,20 +341,16 @@ dr.write(x * sendsm + clean * tanh(fr * fb * 1.1) / 1.1);
 
 // pump: a sidechain-style duck on every beat division. Live's beat while it plays, our own clock when
 // stopped. The duck ramps in over Attack (never a jump, so no click), recovers over Release with Curve.
+// The two clocks are at different places in the beat, so Live starting or stopping hands over from one to
+// the other with a 20 ms crossfade of their ducks, not a switch (which jumped the gain).
 ownph = wrap(ownph + bpm / 60 / sr, 0, 1);
-beatph = transport > 0.5 ? in2 : ownph;
-ph = wrap(beatph * pumprate, 0, 1);
 divms = 60000 / max(bpm, 20) / pumprate;
 atkf = clamp(pumpatk / divms, 0.001, 0.3);
 rl_end = max(pumprel, atkf + 0.05);
-duck = 0;                              // declared out here: gen scopes variables to the block they start in
-r = 0;
-if (ph < atkf) {
-	duck = sin(1.5707963 * ph / atkf);
-} else {
-	r = clamp((ph - atkf) / (rl_end - atkf), 0, 1);
-	duck = pow(1 - r, 1 + pumpcurve * 3);
-}
+live_clock_weight = live_clock_weight + ((transport > 0.5 ? 1 : 0) - live_clock_weight) * smoothing_coefficient(20, sr);
+duck_on_live_beat = pump_duck(wrap(in2 * pumprate, 0, 1), atkf, rl_end, pumpcurve);
+duck_on_own_clock = pump_duck(wrap(ownph * pumprate, 0, 1), atkf, rl_end, pumpcurve);
+duck = duck_on_own_clock + (duck_on_live_beat - duck_on_own_clock) * live_clock_weight;
 target_g = 1 - pumpdepth * duck;
 gsm = gsm + (target_g - gsm) * pump_gain_glide;   // ~1 ms to 90%: no steps, ever
 
