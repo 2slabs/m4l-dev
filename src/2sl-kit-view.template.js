@@ -31,7 +31,6 @@ function rgba(c, alpha) { mgraphics.set_source_rgba(c[0], c[1], c[2], alpha === 
 function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, 1]; }
 function rect(x, y, w, h, c, alpha) { rgba(c, alpha); mgraphics.rectangle(x, y, w, h); mgraphics.fill(); }
 function frame(x, y, w, h, c, lw) { rgba(c); mgraphics.set_line_width(lw || 1); mgraphics.rectangle(x + 0.5, y + 0.5, w - 1, h - 1); mgraphics.stroke(); }
-function tanh(x) { var e = Math.exp(2 * Math.max(-20, Math.min(20, x))); return (e - 1) / (e + 1); }  // jsui has no Math.tanh
 function fade(t, ms) { return Math.max(0, 1 - (now() - t) / ms); }
 
 // ---- drawing: Cozette text ---------------------------------------------------------------------

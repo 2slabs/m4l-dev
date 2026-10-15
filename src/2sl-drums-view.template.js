@@ -1,32 +1,33 @@
 // 2sl drums' displays (inserted into the kit view template by src/2sl-drums.py):
-//   grid    the pattern: a row per voice, 16 steps; click to edit, mute (name), lock (L), reroll (R)
-//   style   the style, its sources' tempo and swing, the canned kit, where the rows came from, the fill phrase
-//   mix     each voice's level, flashing on its hits
+//   grid    the pattern: a row per voice, 16 steps; click a step to edit it, a voice's name to select its row
+//   status  what Run will do, and where the history is
+//   mix     each voice's level, flashing on its hits, dimmed when the mixer's mute / solo silence it
 //   bd sd rs cp hats rd   each voice's envelope as the voice makes it (src/2sl_drums_dsp.py), flashing on hits
 var VOICE_NAMES = /*VOICE_NAMES*/;
+var VOICE_IDS = /*VOICE_IDS*/;                 // the mixer's messages are <id>_level, <id>_mute, <id>_solo
+var MIX_STRIP_W = /*MIX_STRIP_W*/;             // the mixer's strip pitch, as the generator lays out its dials
 var STEPS = 16;
 var GRADE_CHARACTERS = ".oxX";
-var VOICE_OF_MODE = { bd: [0], sd: [1], rs: [2], cp: [3], hats: [4, 5], rd: [6] };
+var VOICE_OF_MODE = /*VOICE_OF_MODE*/;         // a voice display's mode -> the voices (VOICES order) it flashes for
 
 var DEVICE_STATE = {
-  rows: [], locks: [], mutes: [], sources: [], pos: -1, fillbar: 0, flash: {},
-  styleName: "", styleTempo: "", styleSwing: "", kitName: "", bar: 0, barsInPhrase: 0,
+  rows: [], selected: [], pos: -1, flash: {}, next: "", historyAt: 0, historyLength: 0, historyLabel: "",
   hitAt: {}, hitVelocity: {}
 };
+(function () {
+  for (var v = 0; v < VOICE_IDS.length; v++) {
+    DEVICE_STATE[VOICE_IDS[v] + "_mute"] = 0;
+    DEVICE_STATE[VOICE_IDS[v] + "_solo"] = 0;
+  }
+})();
 var ANIMATED_MODES = ["grid", "mix", "bd", "sd", "rs", "cp", "hats", "rd"];
 
 function deviceMessage(m, a) {
   if (m === "rows") { S.rows = a.map(String); return true; }
-  if (m === "locks") { S.locks = a; return true; }
-  if (m === "mutes") { S.mutes = a; return true; }
-  if (m === "sources") { S.sources = a.map(String); return true; }
+  if (m === "selected") { S.selected = a; return true; }
   if (m === "pos") { S.pos = a[0]; return true; }
-  if (m === "fillbar") { S.fillbar = a[0]; return true; }
-  if (m === "style") {
-    S.styleName = String(a[0]); S.styleTempo = String(a[1]); S.styleSwing = String(a[2]); S.kitName = String(a[3]);
-    return true;
-  }
-  if (m === "bar") { S.bar = a[0]; S.barsInPhrase = a[1]; return true; }
+  if (m === "next") { S.next = a.join(" "); return true; }
+  if (m === "history") { S.historyAt = a[0]; S.historyLength = a[1]; S.historyLabel = a.slice(2).join(" "); return true; }
   if (m === "hit") {
     if (MODE === "grid") S.flash[a[0] * STEPS + a[1]] = now();    // hit voice step
     else { S.hitAt[a[0]] = now(); S.hitVelocity[a[0]] = a[1]; }   // hit voice velocity
@@ -36,75 +37,80 @@ function deviceMessage(m, a) {
 }
 
 // ---- the grid -------------------------------------------------------------------------------------------
-var GRID_LABEL_W = 24, GRID_SIDE_W = 18;
+var GRID_LABEL_W = 24;
 function gridGeometry(w, h) {
   var rowH = Math.floor((h - 1) / VOICE_NAMES.length);
-  var cellW = Math.floor((w - GRID_LABEL_W - 2 * GRID_SIDE_W - 4) / STEPS);
-  var stepsX = GRID_LABEL_W, lockX = stepsX + cellW * STEPS + 4;
-  return { rowH: rowH, cellW: cellW, stepsX: stepsX, lockX: lockX, rerollX: lockX + GRID_SIDE_W };
+  var cellW = Math.floor((w - GRID_LABEL_W - 2) / STEPS);
+  return { rowH: rowH, cellW: cellW, stepsX: GRID_LABEL_W };
 }
 
 function gridView(w, h) {
   var g = gridGeometry(w, h);
   for (var v = 0; v < VOICE_NAMES.length; v++) {
-    var y = 1 + v * g.rowH, row = S.rows[v] || "", muted = S.mutes[v] > 0;
-    text(VOICE_NAMES[v], 4, y + 10, muted ? T.rest : T.ink);
-    if (muted) rect(3, y + 6, measure(VOICE_NAMES[v]) + 2, 1, T.warm);
+    var y = 1 + v * g.rowH, row = S.rows[v] || "", chosen = S.selected[v] > 0;
+    // a selected row's name is a lit chip: Run changes it
+    if (chosen) chip(VOICE_NAMES[v], 1, y + Math.floor((g.rowH - 2 - 15) / 2), T.inverse, T.ink);
+    else text(VOICE_NAMES[v], 5, y + Math.floor((g.rowH - 2 - 15) / 2) + 12, T.label);
     for (var s = 0; s < STEPS; s++) {
       var grade = GRADE_CHARACTERS.indexOf(row.charAt(s)), x = g.stepsX + s * g.cellW;
       var fill = grade === 3 ? T.mint : grade === 2 ? mix(T.mint, T.well, 0.45) : grade === 1 ? mix(T.mint, T.well, 0.78)
                : (s % 4 === 0 ? T.beat : T.rest);
-      if (muted && grade > 0) fill = mix(fill, T.well, 0.6);
       rect(x + 1, y, g.cellW - 2, g.rowH - 2, fill);
       if (grade === 3) rect(x + 1, y, g.cellW - 2, 2, T.ink);              // accents carry a bar on top
       var flashed = S.flash[v * STEPS + s] ? fade(S.flash[v * STEPS + s], 200) : 0;
       if (flashed > 0) rect(x + 1, y, g.cellW - 2, g.rowH - 2, T.ink, flashed * 0.7);
     }
-    if (S.locks[v] > 0) chip("L", g.lockX, y - 2, T.pad, T.ink);
-    else text("L", g.lockX + 4, y + 10, T.unlit);
-    text("R", g.rerollX + 4, y + 10, S.locks[v] > 0 ? T.rest : T.label);
   }
   if (S.pos >= 0) frame(g.stepsX + S.pos * g.cellW, 0, g.cellW, g.rowH * VOICE_NAMES.length + 1, T.now, 2);
-  if (S.fillbar) frame(0, 0, w, h, T.warm, 1);
 }
 
 function gridClick(x, y, modifiers) {
   var g = gridGeometry(mgraphics.size[0], mgraphics.size[1]);
   var v = Math.floor((y - 1) / g.rowH);
   if (v < 0 || v >= VOICE_NAMES.length) return;
-  if (x < g.stepsX) outlet(0, "mute", v);
+  if (x < g.stepsX) outlet(0, "select", v, modifiers.shift ? 1 : 0);
   else if (x < g.stepsX + STEPS * g.cellW) {
     var s = Math.max(0, Math.min(STEPS - 1, Math.floor((x - g.stepsX) / g.cellW)));
     if (modifiers.shift) outlet(0, "edit", v, s, 1);                     // shift-click: a ghost
     else outlet(0, "edit", v, s);
-  } else if (x < g.rerollX) outlet(0, "lock", v);
-  else outlet(0, "reroll", v);
+  }
 }
 
-// ---- style ---------------------------------------------------------------------------------------------------
-function styleView(w, h) {
-  viewLabel("style");
-  if (S.barsInPhrase > 0) viewInfo("bar " + S.bar + "/" + S.barsInPhrase, w, S.fillbar ? T.warm : T.label);
-  text(S.styleName, 4, 28, T.ink);
-  text(S.styleTempo + "  swing " + S.styleSwing, 4, 42, T.label);
-  text("kit: " + S.kitName, 4, 56, T.label);
+// ---- the status line ---------------------------------------------------------------------------------------------
+/** `str` cut to fit `w` px, with an ellipsis-like ".." when cut (Cozette is 6 px a character). */
+function fitted(str, w) {
+  str = String(str);
+  if (measure(str) <= w) return str;
+  while (str.length > 0 && measure(str + "..") > w) str = str.slice(0, -1);
+  return str + "..";
+}
+function statusView(w, h) {
+  text(fitted("run: " + S.next, w - 8), 4, 13, T.ink);
+  var where = S.historyLength ? S.historyAt + "/" + S.historyLength + "  " : "";
+  text(fitted(where + S.historyLabel, w - 8), 4, 28, T.label);
 }
 
 // ---- mix -------------------------------------------------------------------------------------------------------
+/** Whether voice v sounds: the mixer's rule in the voices (a mute wins; while any is soloed, only soloed ones). */
+function sounds(v) {
+  var anySolo = false;
+  for (var i = 0; i < VOICE_IDS.length; i++) if (S[VOICE_IDS[i] + "_solo"] > 0) anySolo = true;
+  var id = VOICE_IDS[v];
+  return !(S[id + "_mute"] > 0) && (!anySolo || S[id + "_solo"] > 0);
+}
 function mixView(w, h) {
   viewLabel("mix");
-  var top = 18, bottom = h - 16, columnW = (w - 8) / VOICE_NAMES.length;
+  var top = 18, bottom = h - 16;
   for (var v = 0; v < VOICE_NAMES.length; v++) {
-    var level = S[VOICE_IDS_FOR_LEVEL[v] + "_level"] || 0, x = 4 + v * columnW + columnW / 2;
-    var flashed = S.hitAt[v] ? fade(S.hitAt[v], 180) : 0;
+    var level = S[VOICE_IDS[v] + "_level"] || 0, x = v * MIX_STRIP_W + 22, live = sounds(v);
+    var flashed = S.hitAt[v] && live ? fade(S.hitAt[v], 180) : 0;
     rect(x - 6, top, 12, bottom - top, T.rest);
     var levelTop = bottom - (bottom - top) * Math.max(0, Math.min(1, level));
-    rect(x - 6, levelTop, 12, bottom - levelTop, mix(T.unlit, T.mint, flashed > 0 ? 1 : 0.35));
+    rect(x - 6, levelTop, 12, bottom - levelTop, live ? mix(T.unlit, T.mint, flashed > 0 ? 1 : 0.35) : T.beat);
     if (flashed > 0) rect(x - 6, bottom - (bottom - top) * level * (S.hitVelocity[v] || 1), 12, 2, T.ink, flashed);
-    text(VOICE_NAMES[v], x - measure(VOICE_NAMES[v]) / 2, h - 3, T.label);
+    text(VOICE_NAMES[v], x - measure(VOICE_NAMES[v]) / 2, h - 3, live ? T.label : T.rest);
   }
 }
-var VOICE_IDS_FOR_LEVEL = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];
 
 // ---- the voices: their envelopes, as src/2sl_drums_dsp.py makes them -----------------------------------------
 /** An exponential decay that falls 40 dB in `decayMs`, at `ms`. */
@@ -190,6 +196,6 @@ function rdView(w, h) {
   hitFrame(w, h);
 }
 
-var VIEW_PAINTERS = { grid: gridView, style: styleView, mix: mixView, bd: bdView, sd: sdView, rs: rsView, cp: cpView,
+var VIEW_PAINTERS = { grid: gridView, status: statusView, mix: mixView, bd: bdView, sd: sdView, rs: rsView, cp: cpView,
                       hats: hatsView, rd: rdView };
 var VIEW_CLICKS = { grid: gridClick };

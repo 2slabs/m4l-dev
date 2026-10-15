@@ -20,7 +20,7 @@ var MODE = jsarguments.length > 1 ? String(jsarguments[1]) : "";
 var COZETTE = {"32":[6,1,1,6,-1,0],"33":[6,1,8,3,0,128,128,128,128,128,128,0,128],"34":[6,3,3,2,6,160,160,160],"35":[6,5,8,1,0,80,80,248,80,80,248,80,80],"36":[6,5,10,1,-1,32,112,168,160,112,40,40,168,112,32],"37":[6,5,9,1,0,64,160,72,16,32,64,144,40,16],"38":[6,5,9,1,0,32,80,80,32,104,144,144,144,104],"39":[6,1,3,3,6,128,128,128],"40":[6,3,11,2,-2,32,64,64,128,128,128,128,128,64,64,32],"41":[6,3,11,2,-2,128,64,64,32,32,32,32,32,64,64,128],"42":[6,5,5,1,1,80,32,248,32,80],"43":[6,5,5,1,1,32,32,248,32,32],"44":[6,2,4,2,-2,192,192,64,128],"45":[6,5,1,1,3,248],"46":[6,2,2,2,0,192,192],"47":[6,5,10,1,-1,8,8,16,16,32,32,64,64,128,128],"48":[6,5,8,1,0,112,136,136,168,168,136,136,112],"49":[6,5,8,1,0,32,96,160,32,32,32,32,248],"50":[6,5,8,1,0,112,136,8,16,32,64,128,248],"51":[6,5,8,1,0,112,136,8,48,8,8,136,112],"52":[6,6,8,1,0,8,24,40,72,136,252,8,8],"53":[6,5,8,1,0,248,128,128,240,8,8,136,112],"54":[6,5,8,1,0,48,64,128,240,136,136,136,112],"55":[6,5,8,1,0,248,8,16,16,32,32,64,64],"56":[6,5,8,1,0,112,136,136,112,136,136,136,112],"57":[6,5,8,1,0,112,136,136,136,120,8,16,96],"58":[6,2,6,2,0,192,192,0,0,192,192],"59":[6,2,8,2,-2,192,192,0,0,192,192,64,128],"60":[6,4,7,2,0,16,32,64,128,64,32,16],"61":[6,5,3,1,2,248,0,248],"62":[6,4,7,1,0,128,64,32,16,32,64,128],"63":[6,5,8,1,0,112,136,8,16,32,32,0,32],"64":[6,5,8,1,0,112,136,136,184,168,184,128,120],"65":[6,5,8,1,0,112,136,136,136,248,136,136,136],"66":[6,5,8,1,0,240,136,136,240,136,136,136,240],"67":[6,5,8,1,0,112,136,128,128,128,128,136,112],"68":[6,5,8,1,0,224,144,136,136,136,136,144,224],"69":[6,5,8,1,0,248,128,128,240,128,128,128,248],"70":[6,5,8,1,0,248,128,128,240,128,128,128,128],"71":[6,5,8,1,0,112,136,128,128,152,136,136,112],"72":[6,5,8,1,0,136,136,136,248,136,136,136,136],"73":[6,3,8,2,0,224,64,64,64,64,64,64,224],"74":[6,5,8,1,0,56,8,8,8,8,136,136,112],"75":[6,5,8,1,0,136,144,160,224,144,144,136,136],"76":[6,5,8,1,0,128,128,128,128,128,128,128,248],"77":[6,5,8,1,0,136,216,168,168,136,136,136,136],"78":[6,5,8,1,0,136,200,200,168,168,152,152,136],"79":[6,5,8,1,0,112,136,136,136,136,136,136,112],"80":[6,5,8,1,0,240,136,136,136,240,128,128,128],"81":[6,5,9,1,-1,112,136,136,136,136,136,144,104,8],"82":[6,5,8,1,0,240,136,136,240,144,136,136,136],"83":[6,5,8,1,0,112,136,128,112,8,8,136,112],"84":[6,5,8,1,0,248,32,32,32,32,32,32,32],"85":[6,5,8,1,0,136,136,136,136,136,136,136,112],"86":[6,5,8,1,0,136,136,136,80,80,80,32,32],"87":[6,5,8,1,0,136,136,136,168,168,112,80,80],"88":[6,5,8,1,0,136,136,80,32,32,80,136,136],"89":[6,5,8,1,0,136,136,136,80,32,32,32,32],"90":[6,5,8,1,0,248,16,32,32,64,64,128,248],"91":[6,3,11,2,-2,224,128,128,128,128,128,128,128,128,128,224],"92":[6,5,10,1,-1,128,128,64,64,32,32,16,16,8,8],"93":[6,3,11,2,-2,224,32,32,32,32,32,32,32,32,32,224],"94":[6,5,3,1,7,32,80,136],"95":[6,5,1,1,-1,248],"96":[6,2,2,2,7,128,64],"97":[6,5,6,1,0,120,136,136,136,152,104],"98":[6,5,9,1,0,128,128,128,240,136,136,136,136,240],"99":[6,5,6,1,0,112,136,128,128,136,112],"100":[6,5,9,1,0,8,8,8,120,136,136,136,136,120],"101":[6,5,6,1,0,112,136,248,128,136,112],"102":[6,5,9,1,0,56,64,64,240,64,64,64,64,64],"103":[6,5,9,1,-3,120,136,136,136,136,120,8,8,112],"104":[6,5,9,1,0,128,128,128,240,136,136,136,136,136],"105":[6,4,8,2,0,64,0,192,64,64,64,64,48],"106":[6,3,10,2,-2,32,0,96,32,32,32,32,32,160,64],"107":[6,5,9,1,0,128,128,128,136,144,160,224,144,136],"108":[6,3,9,2,0,192,64,64,64,64,64,64,64,96],"109":[6,5,6,1,0,208,168,168,168,168,168],"110":[6,5,6,1,0,240,136,136,136,136,136],"111":[6,5,6,1,0,112,136,136,136,136,112],"112":[6,5,9,1,-3,240,136,136,136,136,240,128,128,128],"113":[6,6,9,1,-3,120,136,136,136,136,120,8,8,12],"114":[6,5,6,1,0,240,136,128,128,128,128],"115":[6,5,6,1,0,120,128,112,8,8,240],"116":[6,5,8,1,0,64,64,240,64,64,64,64,56],"117":[6,5,6,1,0,136,136,136,136,136,120],"118":[6,5,6,1,0,136,136,80,80,32,32],"119":[6,5,6,1,0,136,136,168,168,80,80],"120":[6,5,6,1,0,136,80,32,32,80,136],"121":[6,5,9,1,-3,136,136,136,136,136,120,8,8,112],"122":[6,5,6,1,0,248,16,32,64,128,248],"123":[6,5,11,1,-2,24,32,32,32,32,192,32,32,32,32,24],"124":[6,1,11,3,-2,128,128,128,128,128,128,128,128,128,128,128],"125":[6,5,11,1,-2,192,32,32,32,32,24,32,32,32,32,192],"126":[6,5,3,1,2,72,168,144],"183":[6,3,3,2,2,64,224,64],"215":[6,5,5,1,1,136,80,32,80,136],"8211":[6,5,1,1,3,248],"8212":[6,7,1,0,3,254],"8226":[6,5,5,1,1,112,248,248,248,112],"8230":[6,5,1,1,0,168],"8592":[6,5,5,1,1,32,64,248,64,32],"8594":[6,5,5,1,1,32,16,248,16,32],"8635":[6,5,6,1,1,224,96,168,136,136,112],"8734":[6,7,4,0,1,108,146,146,108],"9656":[6,3,5,2,1,128,192,224,192,128],"9675":[6,7,7,0,0,56,68,130,130,130,68,56],"9679":[6,5,5,1,1,112,248,248,248,112],"9837":[6,3,7,2,0,128,128,128,224,160,160,192],"9839":[6,5,8,1,-1,16,88,112,208,88,112,208,64]};
 
 // ---- 2sl-ui tokens -----------------------------------------------------------------------------
-var THEMES = {"dark": {"pad": [0.149, 0.149, 0.149, 1], "well": [0.106, 0.106, 0.11, 1], "ink": [0.835, 0.847, 0.859, 1], "inverse": [0.149, 0.149, 0.149, 1], "label": [0.557, 0.58, 0.608, 1], "unlit": [0.494, 0.518, 0.545, 1], "mint": [0.447, 0.871, 0.761, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [1.0, 0.55, 0.2, 1], "rest": [0.2, 0.2, 0.21, 1], "beat": [0.26, 0.27, 0.28, 1], "key": [0.72, 0.73, 0.74, 1], "keyBlack": [0.07, 0.07, 0.08, 1]}, "light": {"pad": [0.835, 0.847, 0.859, 1], "well": [0.77, 0.78, 0.79, 1], "ink": [0.0, 0.0, 0.0, 1], "inverse": [1.0, 1.0, 1.0, 1], "label": [0.349, 0.369, 0.396, 1], "unlit": [0.451, 0.475, 0.502, 1], "mint": [0.12, 0.55, 0.45, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [0.85, 0.38, 0.0, 1], "rest": [0.7, 0.71, 0.73, 1], "beat": [0.62, 0.63, 0.65, 1], "key": [0.97, 0.97, 0.97, 1], "keyBlack": [0.12, 0.12, 0.13, 1]}};
+var THEMES = {"dark": {"pad": [0.149, 0.149, 0.149, 1], "well": [0.106, 0.106, 0.11, 1], "ink": [0.835, 0.847, 0.859, 1], "inverse": [0.149, 0.149, 0.149, 1], "label": [0.557, 0.58, 0.608, 1], "unlit": [0.494, 0.518, 0.545, 1], "mint": [0.447, 0.871, 0.761, 1], "now": [0.176, 0.357, 1.0, 1], "rest": [0.2, 0.2, 0.21, 1], "beat": [0.26, 0.27, 0.28, 1]}, "light": {"pad": [0.835, 0.847, 0.859, 1], "well": [0.77, 0.78, 0.79, 1], "ink": [0.0, 0.0, 0.0, 1], "inverse": [1.0, 1.0, 1.0, 1], "label": [0.349, 0.369, 0.396, 1], "unlit": [0.451, 0.475, 0.502, 1], "mint": [0.12, 0.55, 0.45, 1], "now": [0.176, 0.357, 1.0, 1], "rest": [0.7, 0.71, 0.73, 1], "beat": [0.62, 0.63, 0.65, 1]}};
 var liveColourMissingReported = false;
 /** The 2sl tokens for Live's theme: light when Live's surface colour (live_surface_bg) is light. If Max can't
  *  give that colour, dark, and the Max window says which colour was missing (once, until it is back). */
@@ -52,7 +52,6 @@ function rgba(c, alpha) { mgraphics.set_source_rgba(c[0], c[1], c[2], alpha === 
 function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, 1]; }
 function rect(x, y, w, h, c, alpha) { rgba(c, alpha); mgraphics.rectangle(x, y, w, h); mgraphics.fill(); }
 function frame(x, y, w, h, c, lw) { rgba(c); mgraphics.set_line_width(lw || 1); mgraphics.rectangle(x + 0.5, y + 0.5, w - 1, h - 1); mgraphics.stroke(); }
-function tanh(x) { var e = Math.exp(2 * Math.max(-20, Math.min(20, x))); return (e - 1) / (e + 1); }  // jsui has no Math.tanh
 function fade(t, ms) { return Math.max(0, 1 - (now() - t) / ms); }
 
 // ---- drawing: Cozette text ---------------------------------------------------------------------
@@ -120,41 +119,42 @@ function viewLabel(str) { text(str, 4, 12, T.label); }
 /** Right-aligned text on a display's top line. */
 function viewInfo(str, w, c) { text(str, w - measure(str) - 4, 12, c || T.label); }
 
-var LAYOUT = {"subtitle": 548, "pages": [{"rules": [408, 604], "labels": [["preset", 316, 15, "label"], ["out", 800, 15, "label"], ["swing", 184, 131, "label"], ["fill", 276, 131, "label"], ["new kit", 420, 165, "hint"], ["source's", 508, 165, "hint"], ["levels", 616, 110, "hint"]]}, {"rules": [348, 584], "labels": [["preset", 316, 15, "label"], ["out", 800, 15, "label"], ["soft 0: 909 punch, 100: round, muffled", 12, 110, "hint"], ["two vcos + snappy noise", 360, 110, "hint"], ["level only on the 909", 596, 110, "hint"]]}, {"rules": [180, 528], "labels": [["preset", 316, 15, "label"], ["out", 800, 15, "label"], ["level only on the 909", 12, 110, "hint"], ["one voice: closed cuts open", 192, 110, "hint"], ["6-bit rom, no decay knob", 540, 110, "hint"]]}], "subtitle_text": "909-style drum machine", "version": "0.1.0", "link_chip_text": "2sl drums"};
+var LAYOUT = {"subtitle": 420, "pages": [{"rules": [304], "labels": [["preset", 204, 15, "label"], ["out", 760, 15, "label"], ["kit", 316, 55, "label"], ["from", 316, 82, "label"], ["x", 370, 55, "label"], ["y", 370, 82, "label"], ["density", 370, 109, "label"], ["hits", 424, 55, "label"], ["rotation", 424, 82, "label"], ["steps", 424, 109, "label"], ["density", 478, 55, "label"], ["accent", 478, 82, "label"], ["seed", 478, 109, "label"], ["steps", 532, 55, "label"], ["no", 586, 55, "hint"], ["settings", 586, 68, "hint"], ["amount", 640, 55, "label"], ["amount", 694, 55, "label"], ["steps", 748, 55, "label"], ["density", 748, 82, "label"], ["amount", 802, 55, "label"], ["every", 856, 55, "label"], ["offset", 856, 82, "label"], ["swing", 836, 144, "label"]]}, {"rules": [348, 704], "labels": [["preset", 204, 15, "label"], ["out", 760, 15, "label"]]}], "subtitle_text": "909-style drum machine", "version": "0.2.0", "link_chip_text": "2sl drums"};
 
 // ---- the device's displays --------------------------------------------------------------------
 // The device code defines: DEVICE_STATE (what its displays draw from, merged into S), deviceMessage(m, args)
 // -> true when it took the message, VIEW_PAINTERS {mode: function (w, h)}, VIEW_CLICKS {mode: function (x, y,
 // modifiers)} and ANIMATED_MODES (modes redrawn every 33 ms).
 // 2sl drums' displays (inserted into the kit view template by src/2sl-drums.py):
-//   grid    the pattern: a row per voice, 16 steps; click to edit, mute (name), lock (L), reroll (R)
-//   style   the style, its sources' tempo and swing, the canned kit, where the rows came from, the fill phrase
-//   mix     each voice's level, flashing on its hits
+//   grid    the pattern: a row per voice, 16 steps; click a step to edit it, a voice's name to select its row
+//   status  what Run will do, and where the history is
+//   mix     each voice's level, flashing on its hits, dimmed when the mixer's mute / solo silence it
 //   bd sd rs cp hats rd   each voice's envelope as the voice makes it (src/2sl_drums_dsp.py), flashing on hits
 var VOICE_NAMES = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];
+var VOICE_IDS = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];                 // the mixer's messages are <id>_level, <id>_mute, <id>_solo
+var MIX_STRIP_W = 48;             // the mixer's strip pitch, as the generator lays out its dials
 var STEPS = 16;
 var GRADE_CHARACTERS = ".oxX";
-var VOICE_OF_MODE = { bd: [0], sd: [1], rs: [2], cp: [3], hats: [4, 5], rd: [6] };
+var VOICE_OF_MODE = {"bd": [0], "sd": [1], "rs": [2], "cp": [3], "hats": [4, 5], "rd": [6]};         // a voice display's mode -> the voices (VOICES order) it flashes for
 
 var DEVICE_STATE = {
-  rows: [], locks: [], mutes: [], sources: [], pos: -1, fillbar: 0, flash: {},
-  styleName: "", styleTempo: "", styleSwing: "", kitName: "", bar: 0, barsInPhrase: 0,
+  rows: [], selected: [], pos: -1, flash: {}, next: "", historyAt: 0, historyLength: 0, historyLabel: "",
   hitAt: {}, hitVelocity: {}
 };
+(function () {
+  for (var v = 0; v < VOICE_IDS.length; v++) {
+    DEVICE_STATE[VOICE_IDS[v] + "_mute"] = 0;
+    DEVICE_STATE[VOICE_IDS[v] + "_solo"] = 0;
+  }
+})();
 var ANIMATED_MODES = ["grid", "mix", "bd", "sd", "rs", "cp", "hats", "rd"];
 
 function deviceMessage(m, a) {
   if (m === "rows") { S.rows = a.map(String); return true; }
-  if (m === "locks") { S.locks = a; return true; }
-  if (m === "mutes") { S.mutes = a; return true; }
-  if (m === "sources") { S.sources = a.map(String); return true; }
+  if (m === "selected") { S.selected = a; return true; }
   if (m === "pos") { S.pos = a[0]; return true; }
-  if (m === "fillbar") { S.fillbar = a[0]; return true; }
-  if (m === "style") {
-    S.styleName = String(a[0]); S.styleTempo = String(a[1]); S.styleSwing = String(a[2]); S.kitName = String(a[3]);
-    return true;
-  }
-  if (m === "bar") { S.bar = a[0]; S.barsInPhrase = a[1]; return true; }
+  if (m === "next") { S.next = a.join(" "); return true; }
+  if (m === "history") { S.historyAt = a[0]; S.historyLength = a[1]; S.historyLabel = a.slice(2).join(" "); return true; }
   if (m === "hit") {
     if (MODE === "grid") S.flash[a[0] * STEPS + a[1]] = now();    // hit voice step
     else { S.hitAt[a[0]] = now(); S.hitVelocity[a[0]] = a[1]; }   // hit voice velocity
@@ -164,75 +164,80 @@ function deviceMessage(m, a) {
 }
 
 // ---- the grid -------------------------------------------------------------------------------------------
-var GRID_LABEL_W = 24, GRID_SIDE_W = 18;
+var GRID_LABEL_W = 24;
 function gridGeometry(w, h) {
   var rowH = Math.floor((h - 1) / VOICE_NAMES.length);
-  var cellW = Math.floor((w - GRID_LABEL_W - 2 * GRID_SIDE_W - 4) / STEPS);
-  var stepsX = GRID_LABEL_W, lockX = stepsX + cellW * STEPS + 4;
-  return { rowH: rowH, cellW: cellW, stepsX: stepsX, lockX: lockX, rerollX: lockX + GRID_SIDE_W };
+  var cellW = Math.floor((w - GRID_LABEL_W - 2) / STEPS);
+  return { rowH: rowH, cellW: cellW, stepsX: GRID_LABEL_W };
 }
 
 function gridView(w, h) {
   var g = gridGeometry(w, h);
   for (var v = 0; v < VOICE_NAMES.length; v++) {
-    var y = 1 + v * g.rowH, row = S.rows[v] || "", muted = S.mutes[v] > 0;
-    text(VOICE_NAMES[v], 4, y + 10, muted ? T.rest : T.ink);
-    if (muted) rect(3, y + 6, measure(VOICE_NAMES[v]) + 2, 1, T.warm);
+    var y = 1 + v * g.rowH, row = S.rows[v] || "", chosen = S.selected[v] > 0;
+    // a selected row's name is a lit chip: Run changes it
+    if (chosen) chip(VOICE_NAMES[v], 1, y + Math.floor((g.rowH - 2 - 15) / 2), T.inverse, T.ink);
+    else text(VOICE_NAMES[v], 5, y + Math.floor((g.rowH - 2 - 15) / 2) + 12, T.label);
     for (var s = 0; s < STEPS; s++) {
       var grade = GRADE_CHARACTERS.indexOf(row.charAt(s)), x = g.stepsX + s * g.cellW;
       var fill = grade === 3 ? T.mint : grade === 2 ? mix(T.mint, T.well, 0.45) : grade === 1 ? mix(T.mint, T.well, 0.78)
                : (s % 4 === 0 ? T.beat : T.rest);
-      if (muted && grade > 0) fill = mix(fill, T.well, 0.6);
       rect(x + 1, y, g.cellW - 2, g.rowH - 2, fill);
       if (grade === 3) rect(x + 1, y, g.cellW - 2, 2, T.ink);              // accents carry a bar on top
       var flashed = S.flash[v * STEPS + s] ? fade(S.flash[v * STEPS + s], 200) : 0;
       if (flashed > 0) rect(x + 1, y, g.cellW - 2, g.rowH - 2, T.ink, flashed * 0.7);
     }
-    if (S.locks[v] > 0) chip("L", g.lockX, y - 2, T.pad, T.ink);
-    else text("L", g.lockX + 4, y + 10, T.unlit);
-    text("R", g.rerollX + 4, y + 10, S.locks[v] > 0 ? T.rest : T.label);
   }
   if (S.pos >= 0) frame(g.stepsX + S.pos * g.cellW, 0, g.cellW, g.rowH * VOICE_NAMES.length + 1, T.now, 2);
-  if (S.fillbar) frame(0, 0, w, h, T.warm, 1);
 }
 
 function gridClick(x, y, modifiers) {
   var g = gridGeometry(mgraphics.size[0], mgraphics.size[1]);
   var v = Math.floor((y - 1) / g.rowH);
   if (v < 0 || v >= VOICE_NAMES.length) return;
-  if (x < g.stepsX) outlet(0, "mute", v);
+  if (x < g.stepsX) outlet(0, "select", v, modifiers.shift ? 1 : 0);
   else if (x < g.stepsX + STEPS * g.cellW) {
     var s = Math.max(0, Math.min(STEPS - 1, Math.floor((x - g.stepsX) / g.cellW)));
     if (modifiers.shift) outlet(0, "edit", v, s, 1);                     // shift-click: a ghost
     else outlet(0, "edit", v, s);
-  } else if (x < g.rerollX) outlet(0, "lock", v);
-  else outlet(0, "reroll", v);
+  }
 }
 
-// ---- style ---------------------------------------------------------------------------------------------------
-function styleView(w, h) {
-  viewLabel("style");
-  if (S.barsInPhrase > 0) viewInfo("bar " + S.bar + "/" + S.barsInPhrase, w, S.fillbar ? T.warm : T.label);
-  text(S.styleName, 4, 28, T.ink);
-  text(S.styleTempo + "  swing " + S.styleSwing, 4, 42, T.label);
-  text("kit: " + S.kitName, 4, 56, T.label);
+// ---- the status line ---------------------------------------------------------------------------------------------
+/** `str` cut to fit `w` px, with an ellipsis-like ".." when cut (Cozette is 6 px a character). */
+function fitted(str, w) {
+  str = String(str);
+  if (measure(str) <= w) return str;
+  while (str.length > 0 && measure(str + "..") > w) str = str.slice(0, -1);
+  return str + "..";
+}
+function statusView(w, h) {
+  text(fitted("run: " + S.next, w - 8), 4, 13, T.ink);
+  var where = S.historyLength ? S.historyAt + "/" + S.historyLength + "  " : "";
+  text(fitted(where + S.historyLabel, w - 8), 4, 28, T.label);
 }
 
 // ---- mix -------------------------------------------------------------------------------------------------------
+/** Whether voice v sounds: the mixer's rule in the voices (a mute wins; while any is soloed, only soloed ones). */
+function sounds(v) {
+  var anySolo = false;
+  for (var i = 0; i < VOICE_IDS.length; i++) if (S[VOICE_IDS[i] + "_solo"] > 0) anySolo = true;
+  var id = VOICE_IDS[v];
+  return !(S[id + "_mute"] > 0) && (!anySolo || S[id + "_solo"] > 0);
+}
 function mixView(w, h) {
   viewLabel("mix");
-  var top = 18, bottom = h - 16, columnW = (w - 8) / VOICE_NAMES.length;
+  var top = 18, bottom = h - 16;
   for (var v = 0; v < VOICE_NAMES.length; v++) {
-    var level = S[VOICE_IDS_FOR_LEVEL[v] + "_level"] || 0, x = 4 + v * columnW + columnW / 2;
-    var flashed = S.hitAt[v] ? fade(S.hitAt[v], 180) : 0;
+    var level = S[VOICE_IDS[v] + "_level"] || 0, x = v * MIX_STRIP_W + 22, live = sounds(v);
+    var flashed = S.hitAt[v] && live ? fade(S.hitAt[v], 180) : 0;
     rect(x - 6, top, 12, bottom - top, T.rest);
     var levelTop = bottom - (bottom - top) * Math.max(0, Math.min(1, level));
-    rect(x - 6, levelTop, 12, bottom - levelTop, mix(T.unlit, T.mint, flashed > 0 ? 1 : 0.35));
+    rect(x - 6, levelTop, 12, bottom - levelTop, live ? mix(T.unlit, T.mint, flashed > 0 ? 1 : 0.35) : T.beat);
     if (flashed > 0) rect(x - 6, bottom - (bottom - top) * level * (S.hitVelocity[v] || 1), 12, 2, T.ink, flashed);
-    text(VOICE_NAMES[v], x - measure(VOICE_NAMES[v]) / 2, h - 3, T.label);
+    text(VOICE_NAMES[v], x - measure(VOICE_NAMES[v]) / 2, h - 3, live ? T.label : T.rest);
   }
 }
-var VOICE_IDS_FOR_LEVEL = ["bd", "sd", "rs", "cp", "ch", "oh", "rd"];
 
 // ---- the voices: their envelopes, as src/2sl_drums_dsp.py makes them -----------------------------------------
 /** An exponential decay that falls 40 dB in `decayMs`, at `ms`. */
@@ -318,7 +323,7 @@ function rdView(w, h) {
   hitFrame(w, h);
 }
 
-var VIEW_PAINTERS = { grid: gridView, style: styleView, mix: mixView, bd: bdView, sd: sdView, rs: rsView, cp: cpView,
+var VIEW_PAINTERS = { grid: gridView, status: statusView, mix: mixView, bd: bdView, sd: sdView, rs: rsView, cp: cpView,
                       hats: hatsView, rd: rdView };
 var VIEW_CLICKS = { grid: gridClick };
 
@@ -328,7 +333,7 @@ var S = { page: 0 };
 (function () {
   for (var key in DEVICE_STATE) S[key] = DEVICE_STATE[key];
 })();
-var VIEW_DEFAULTS = {"mix": {"bd_level": 0.8, "sd_level": 0.7000000000000001, "rs_level": 0.5, "cp_level": 0.6, "ch_level": 0.5, "oh_level": 0.5, "rd_level": 0.4}, "bd": {"bd_tune": 50, "bd_sweep": 0.5, "bd_decay": 450, "bd_attack": 0.5, "bd_soft": 0.0, "bd_bits": 16}, "sd": {"sd_tune": 180, "sd_tone": 160, "sd_snappy": 0.6, "sd_bits": 16}, "rs": {"rs_bits": 16}, "cp": {"cp_bits": 16}, "hats": {"hat_tune": 1, "ch_decay": 60, "oh_decay": 500, "hat_bits": 6}, "rd": {"rd_tune": 1, "rd_bits": 6}};
+var VIEW_DEFAULTS = {"bd": {"bd_tune": 50, "bd_sweep": 0.5, "bd_decay": 450, "bd_attack": 0.5, "bd_soft": 0.0, "bd_bits": 16}, "sd": {"sd_tune": 180, "sd_tone": 160, "sd_snappy": 0.6, "sd_bits": 16}, "rs": {"rs_bits": 16}, "cp": {"cp_bits": 16}, "hats": {"hat_tune": 1, "ch_decay": 60, "oh_decay": 500, "hat_bits": 6}, "rd": {"rd_tune": 1, "rd_bits": 6}, "mix": {"bd_level": 0.8, "bd_mute": 0, "bd_solo": 0, "sd_level": 0.7000000000000001, "sd_mute": 0, "sd_solo": 0, "rs_level": 0.5, "rs_mute": 0, "rs_solo": 0, "cp_level": 0.6, "cp_mute": 0, "cp_solo": 0, "ch_level": 0.5, "ch_mute": 0, "ch_solo": 0, "oh_level": 0.5, "oh_mute": 0, "oh_solo": 0, "rd_level": 0.4, "rd_mute": 0, "rd_solo": 0}};
 (function () {
   var defaults = VIEW_DEFAULTS[MODE] || {};
   for (var key in defaults) S[key] = defaults[key];

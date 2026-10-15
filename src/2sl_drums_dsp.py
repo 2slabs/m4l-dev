@@ -4,6 +4,10 @@ One gen~ for the whole kit. Each voice is triggered by two Params the pattern en
 `delay_<voice>` (ms, the swing delay; sent first) and `trig_<voice>` = serial + velocity / 2 (a new number
 every hit, so even two equal hits are two triggers). The voice waits the delay in samples, then fires.
 
+The mixer's Mute and Solo are gates per voice (`<voice>_mute`, `<voice>_solo`, 0/1): a voice sounds when it isn't
+muted and either nothing is soloed or it is. Mute wins over Solo. Each gate is smoothed over 5 ms so a mute
+doesn't click. CH and OH are one hat voice but have their own levels and gates.
+
 Topologies follow references/drums/voices.md; every number that has no source there is marked
 "(unsourced)" here and listed in devices/2sl-drums/README.md.
 """
@@ -82,7 +86,23 @@ if ({voice}_waiting > 0) {{
 """
 
 
-DECLARATIONS = "".join(trigger_declarations(v) for v in VOICE_IDS) + r"""
+def mixer_declarations(voice):
+    return (f"Param {voice}_mute(0, min=0, max=1);\nParam {voice}_solo(0, min=0, max=1);\n"
+            f"History {voice}_gate(1);\n")
+
+
+def mixer_code():
+    """Sets `<voice>_gate` (0..1, smoothed) from the mixer's Mute and Solo (the rule is in the docstring above)."""
+    any_solo = " + ".join(f"{voice}_solo" for voice in VOICE_IDS)
+    code = f"\n// the mixer: mute and solo gates, smoothed over 5 ms\nany_solo = ({any_solo}) > 0 ? 1 : 0;\n"
+    code += "gate_coefficient = 1 - exp(-1000 / (5 * samplerate));\n"
+    for voice in VOICE_IDS:
+        code += (f"{voice}_gate = {voice}_gate + gate_coefficient * ((1 - {voice}_mute) * (any_solo > 0 ? {voice}_solo : 1)"
+                 f" - {voice}_gate);\n")
+    return code
+
+
+DECLARATIONS = "".join(trigger_declarations(v) + mixer_declarations(v) for v in VOICE_IDS) + r"""
 Param accent(0.7, min=0, max=1);         // how much quieter a normal hit is than an accent
 Param volume(0, min=-36, max=12);        // output, dB
 Param panic(0);                          // Stop: every new number fades the kit out in 20 ms
@@ -193,7 +213,7 @@ if (silence_now > 0) {
 	bd_pulse_envelope = 0;
 	bd_click_envelope = 0;
 }
-bd_out = crush(bd_output_lowpass, bd_bits) * bd_level * accent_gain(bd_velocity, accent);
+bd_out = crush(bd_output_lowpass, bd_bits) * bd_level * bd_gate * accent_gain(bd_velocity, accent);
 
 // ================= SD: two triangle VCOs with a 20 ms pitch bend, noise through LPF -> ENV4 / HPF -> ENV5 =================
 if (sd_fire > 0) {
@@ -234,7 +254,7 @@ if (silence_now > 0) {
 	sd_noise_envelope5 = 0;
 	sd_noise_hold = 0;
 }
-sd_out = crush(sd_drum + sd_snappy_noise, sd_bits) * sd_level * accent_gain(sd_velocity, accent);
+sd_out = crush(sd_drum + sd_snappy_noise, sd_bits) * sd_level * sd_gate * accent_gain(sd_velocity, accent);
 
 // ================= RS: three bridged-T rings at 500 / 220 / 1000 Hz, a diode clipper, a short VCA, a high-pass =================
 rs_kick = 0;
@@ -261,7 +281,7 @@ rs_highpass_lowpass = rs_highpass_lowpass + onepole_coefficient(250, sr) * (rs_c
 if (silence_now > 0) {
 	rs_envelope = 0;
 }
-rs_out = crush((rs_clipped - rs_highpass_lowpass) * rs_envelope, rs_bits) * rs_level * accent_gain(rs_velocity, accent);
+rs_out = crush((rs_clipped - rs_highpass_lowpass) * rs_envelope, rs_bits) * rs_level * rs_gate * accent_gain(rs_velocity, accent);
 
 // ================= CP: noise -> band-pass -> four chained claps, plus the "pseudo-reverb" tail =================
 if (cp_fire > 0) {
@@ -282,13 +302,13 @@ cp_band_lowpass = cp_band_lowpass + onepole_coefficient(2400, sr) * ((analog_noi
 if (silence_now > 0) {
 	cp_time = 1000000000;
 }
-cp_out = crush(cp_band_lowpass * (cp_claps + cp_tail) * 1.6, cp_bits) * cp_level * accent_gain(cp_velocity, accent);
+cp_out = crush(cp_band_lowpass * (cp_claps + cp_tail) * 1.6, cp_bits) * cp_level * cp_gate * accent_gain(cp_velocity, accent);
 
 // ================= CH / OH: a 6-bit "sample" ROM at 30 kHz, then the VCA, then two low-passes =================
 // We have no samples: the "ROM" is metallic noise (six squares + noise, high-passed), held at the ROM's clock and
 // quantized to hat_bits, flat like the 909's compressed sample; the VCA puts the decay on after, so the grit
 // decays with the hat.
-hat_level_now = ch_level;
+hat_level_now = ch_level * ch_gate;
 if (ch_fire > 0) {
 	hat_velocity = ch_pending_velocity;
 	hat_envelope = 1;
@@ -300,7 +320,7 @@ if (oh_fire > 0) {
 	hat_open = 1;
 }
 if (hat_open > 0) {
-	hat_level_now = oh_level;
+	hat_level_now = oh_level * oh_gate;
 }
 hat_osc1 = wrap(hat_osc1 + 2520 * hat_tune / sr, 0, 1);           // the six frequencies (unsourced)
 hat_osc2 = wrap(hat_osc2 + 3390 * hat_tune / sr, 0, 1);
@@ -354,7 +374,7 @@ rd_output_lowpass2 = rd_output_lowpass2 + onepole_coefficient(10000, sr) * (rd_o
 if (silence_now > 0) {
 	rd_envelope = 0;
 }
-rd_out = rd_output_lowpass2 * rd_level * accent_gain(rd_velocity, accent);
+rd_out = rd_output_lowpass2 * rd_level * rd_gate * accent_gain(rd_velocity, accent);
 
 // ================= out: the mono kit on both sides, through the soft clip =================
 // x0.4 (-8 dB): headroom, so the Init kit peaks about 3 dB under full scale (tools/render_drums.py measures it)
@@ -364,4 +384,4 @@ out1 = kit_out;
 out2 = kit_out;
 """
 
-KIT = FUNCTIONS + DECLARATIONS + "".join(trigger_code(v) for v in VOICE_IDS) + BODY
+KIT = FUNCTIONS + DECLARATIONS + "".join(trigger_code(v) for v in VOICE_IDS) + mixer_code() + BODY

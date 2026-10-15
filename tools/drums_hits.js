@@ -1,8 +1,8 @@
-// The hits 2sl drums' pattern engine plays for a preset, as JSON, for tools/render_drums.py:
-//   node tools/drums_hits.js '<{"brain": {message: value}, "bars": n, "tempo": bpm, "seed": n}>'
-// Loads devices/2sl-drums/2sl-drums.js in tools/max_sandbox.js (as tests/2sl-drums.test.js does), applies the
-// preset's brain messages (Style last, after ready, so it loads its first kit), and plays `bars` bars of Live's
-// transport. Prints [{sixteenth, messages: [[name, value], ...]}] with each 16th's messages to gen~ in order.
+// The hits 2sl drums' pattern engine plays, as JSON, for tools/render_drums.py:
+//   node tools/drums_hits.js '<{"bars": n, "tempo": bpm, "seed": n}>'
+// Loads devices/2sl-drums/2sl-drums.js in tools/max_sandbox.js (as tests/2sl-drums.test.js does) and plays its Init
+// pattern (presets are kit sounds: they send the brain nothing) for `bars` bars of Live's transport. Prints
+// [{sixteenth, messages: [[name, value], ...]}] with each 16th's messages to gen~ in order.
 "use strict";
 const vm = require("vm");
 const fs = require("fs");
@@ -16,8 +16,6 @@ const toGen = () => record.outlets.filter((o) => o[0] === 0).map((o) => [o[1], o
 function send(name, value) { context.inlet = 1; context.messagename = name; context.anything(value); }
 send("ready");
 send("tempo", request.tempo || 120);
-for (const name in request.brain) if (name !== "style") send(name, request.brain[name]);
-if ("style" in request.brain) send("style", request.brain.style);
 send("playing", 1);
 const out = [];
 for (let s = 0; s < (request.bars || 4) * 16; s++) {
