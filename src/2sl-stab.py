@@ -666,7 +666,12 @@ def param(cls, name, short, rect, kind, prect, **v):
     outs = {"live.dial": (2, ["", "float"]), "live.menu": (3, ["", "", "float"]), "live.tab": (3, ["", "", "float"]), "live.text": (2, ["", ""]), "live.numbox": (2, ["", "float"])}[cls]
     extra = {}
     if cls == "live.text":
-        extra = {"text": short.lower(), "texton": short.lower(), "mode": v.pop("_mode", 1)}
+        # text / texton are only the button's label; the names Live shows for its two states (automation lanes,
+        # Push, presets) are the box's automation / automationon attributes, default "val1" / "val2" (Cycling '74,
+        # live.text reference). Max saves them on the box and mirrors them in parameter_enum (references/README.md,
+        # "Live presets"): a parameter_enum without them is overridden by the defaults.
+        extra = {"text": short.lower(), "texton": short.lower(), "mode": v.pop("_mode", 1),
+                 "automation": TOGGLE_ITEMS[0], "automationon": TOGGLE_ITEMS[1]}
         vals = {k: x for k, x in vals.items() if k != "_mode"}
         vals.update(parameter_enum=TOGGLE_ITEMS, parameter_mmax=1)
     b_id = box(cls=cls, rect=rect, ins=1, outs=outs[0], outtype=outs[1], varname=name.lower().replace(" ", "_"),
@@ -925,7 +930,7 @@ def tabs(name, short, items, x, y, w, page, h=15, lines=1):
     return on_page(page, pid, vn)
 
 
-TOGGLE_ITEMS = ["off", "on"]      # a live.text's parameter_enum (param() sets it)
+TOGGLE_ITEMS = ["off", "on"]      # a live.text's state names in Live (param() sets automation / automationon)
 
 
 def toggle(name, short, x, y, w, h, page, mode=1):
@@ -1364,9 +1369,6 @@ print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024}
 LIVE_PRESET_TEMPLATE_PATH = os.path.join(ROOT, "references", "ableton", "example-2sl-stab-preset.xml")
 LIVE_PRESET_FOLDER = os.path.dirname(amxd)                  # next to the device: the reference is relative to it
 PARAMETER_TYPE_FLOAT, PARAMETER_TYPE_ENUM = 0, 2            # Max's parameter_type (live.* references)
-# Live listed every live.text's items as val1 / val2 (live.text's default enum), not the off / on the patch saves:
-# the presets say what Live says. (So Live's automation and Push may show val1 / val2 for the toggles: unchecked.)
-LIVE_TEXT_ITEMS_AS_LIVE_LISTS_THEM = ["val1", "val2"]
 AMXD_CRC_BYTES = 16384                                      # OriginalCrc covers the file's first 16 KB
 
 
@@ -1412,7 +1414,15 @@ for patch_box in (x["box"] for x in boxes):
         if valueof["parameter_type"] not in (PARAMETER_TYPE_FLOAT, PARAMETER_TYPE_ENUM):
             raise SystemExit(f"2sl-stab.py: Live presets: {valueof['parameter_longname']!r} has parameter_type "
                              f"{valueof['parameter_type']}; only float (0) and enum (2) have a known preset form")
-        listed_parameters.append(dict(valueof, maxclass=patch_box["maxclass"]))
+        item_names_in_live = valueof.get("parameter_enum")
+        if patch_box["maxclass"] == "live.text":
+            # a live.text's state names in Live are its automation / automationon attributes (see param())
+            item_names_in_live = [patch_box.get("automation"), patch_box.get("automationon")]
+            if item_names_in_live != valueof.get("parameter_enum"):
+                raise SystemExit(f"2sl-stab.py: Live presets: live.text {valueof['parameter_longname']!r} has "
+                                 f"automation / automationon {item_names_in_live}, parameter_enum "
+                                 f"{valueof.get('parameter_enum')}: Max keeps them the same")
+        listed_parameters.append(dict(valueof, item_names_in_live=item_names_in_live))
     else:
         raise SystemExit(f"2sl-stab.py: Live presets: {valueof['parameter_longname']!r} has Parameter Visibility "
                          f"{visibility}, with no known preset form")
@@ -1453,8 +1463,7 @@ def live_parameter_element(parameter_id, index, valueof, value):
         names = element.find("Names")
         for old_name in list(names):
             names.remove(old_name)
-        items = LIVE_TEXT_ITEMS_AS_LIVE_LISTS_THEM if valueof["maxclass"] == "live.text" else valueof["parameter_enum"]
-        for item_index, item in enumerate(items):
+        for item_index, item in enumerate(valueof["item_names_in_live"]):
             name_element = ElementTree.SubElement(names, "Name", Id=str(item_index))
             ElementTree.SubElement(name_element, "Name", Value=item)
     else:

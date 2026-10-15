@@ -116,7 +116,8 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   - `ParameterList/ParameterList`: one `MxDFloatParameter` (Type 0) or `MxDEnumParameter` (Type 2) per automatable
     parameter, ordered by name: `Index`, `Name` (the long name), `ShortName`, `MinValue`, `MaxValue`, `Default`,
     `IsUndoable`, `IsStored`, and the value in `Timeable/Manual` (an enum's index). Enums list their item `Names`;
-    Live listed every live.text's items as `val1` / `val2` (live.text's default), not the `off` / `on` the patch saves.
+    Live listed every live.text's items as `val1` / `val2`, though the patch it loaded (the copy Live made, in commit
+    f585d19) saved `parameter_enum` `off` / `on` for them: see live.text below.
   - `Default` is the initial value mapped linearly through the exponent (min + (max - min) * normalised^(1/exponent));
     a float's `MidiControllerRange` is [max(min, 0), max(min, 1)]. Both hold for all 51 parameters in the file.
   - Stored Only parameters aren't in the list: `BlobSlot/Value/MxDBlob/Blob` holds them as hex of JSON plus a NUL:
@@ -126,6 +127,15 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
     m4l-connection-kit `OSC Leap Motion Example.adg` (Live 9.6) gives Crc 63076, `MaxCrcSize` 16384, FileSize 234834
     for `OSC Leap Motion.amxd` at commit 551c28a, and that file's first 16 KB give 63076.
     https://github.com/Ableton/m4l-connection-kit
+- **live.text's state names** (Cycling '74, live.text reference): https://docs.cycling74.com/reference/live.text
+  `automation` (default `val1`): "Sets the automation "off" label that will appear in Live."; `automationon` (default
+  `val2`): "Sets the automation on label that will appear in Live."; `text` / `texton` only set "the button label".
+  The page doesn't list `parameter_enum`. Patches saved by Max carry both, the same: the box's `automation` /
+  `automationon` and `parameter_enum` in `valueof` (EnvelopSound/EnvelopForLive
+  `patchers/panner/e4l.panner.multicontrol.maxpat`: Off / On; stretta/BEAP `clippings/BEAP/LFO/bp.LFO2.maxpat`: Sync / Freq;
+  without the attributes, Ableton's maxdevtools `load-time-tester/Load Time Tester.maxpat` saves `val1` / `val2`).
+  So the build sets `automation` / `automationon` to `off` / `on` on every live.text, and the presets list them so.
+  Not yet seen in a file Live saved from the fixed build: a preset saved from it should list `off` / `on`.
 - **Ableton, Live 12 manual, Working with Instruments and Effects** (23.2.5):
   https://www.ableton.com/en/manual/working-with-instruments-and-effects/
   "Click the Save Preset button in the device title bar ... the preset is highlighted in its corresponding folder in

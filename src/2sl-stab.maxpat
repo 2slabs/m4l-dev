@@ -2057,7 +2057,9 @@
 					"annotation_name": "Stop",
 					"annotation": "Panic: releases every note, clears a latched chord, ramps the voices to silence in 20 ms, empties the echo and turns Freeze off. Stopping Live doesn't run it: tails ring out.",
 					"texton": "stop",
-					"mode": 0
+					"mode": 0,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
@@ -2287,7 +2289,9 @@
 					"annotation_name": "In Key",
 					"annotation": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes, and the chord display says so.",
 					"texton": "in key",
-					"mode": 1
+					"mode": 1,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
@@ -2633,7 +2637,9 @@
 					"annotation_name": "Machine",
 					"annotation": "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. Follows Live's transport. With Live stopped it plays only keys you hold, at Live's tempo.",
 					"texton": "machine",
-					"mode": 1
+					"mode": 1,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
@@ -2701,7 +2707,9 @@
 					"annotation_name": "Latch",
 					"annotation": "With Machine on, the chord keeps playing after you let go, while Live plays. A new chord replaces it; Stop clears it.",
 					"texton": "latch",
-					"mode": 1
+					"mode": 1,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
@@ -3568,7 +3576,9 @@
 					"annotation_name": "Throw",
 					"annotation": "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback.",
 					"texton": "throw",
-					"mode": 0
+					"mode": 0,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
@@ -3636,7 +3646,9 @@
 					"annotation_name": "Freeze",
 					"annotation": "Holds the echo loop: nothing new goes in, and each time round it gets a little louder, so it swells over tens of seconds until tape saturation holds it just under full level. Stop turns it off.",
 					"texton": "freeze",
-					"mode": 1
+					"mode": 1,
+					"automation": "off",
+					"automationon": "on"
 				}
 			},
 			{
