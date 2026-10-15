@@ -352,8 +352,8 @@ def gen_patcher(code, ins, outs):
 # The text says what the code does; keep it short, the Info View is small.
 INFO = {
     # views
-    "Steps view": ("Pattern", "The machine's 16 steps. Click a step to cycle rest, hit, accent. Bright with a bar on "
-                   "top: accent (full velocity, fires at Density x1.4). Dim: hit (softer, fires at Density). Empty "
+    "Steps view": ("Pattern", "The machine's 16 steps, as Shift places them. Click a step to cycle rest, hit, "
+                   "accent. Bright with a bar on top: accent (full velocity, fires at Density x1.4). Dim: hit (softer, fires at Density). Empty "
                    "steps: the lighter ones start each beat. Blue outline: the step playing now. Orange outline: "
                    "that stab was thrown into the echo."),
     "Link view": ("2sl.to", "Opens 2sl.to in your browser."),
@@ -406,6 +406,8 @@ INFO = {
                 "offbeat 16ths also fire now and then (up to 15% at 100). Default 80%."),
     "Throws": ("Throws", "Chance each machine stab is also thrown into the echo (opens the echo for an 8th at 90% feedback)."),
     "Gate": ("Gate", "How long each machine stab is held, in 16th notes (1-4). Default 1."),
+    "Shift": ("Shift", "Rotates the pattern later by 0-15 16ths without changing it; the display shows the shifted "
+              "pattern. Default 0."),
     # play: dub
     "Dub": ("Dub", "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. "
             "0 = no echo except throws."),
@@ -795,6 +797,7 @@ tell(pat, "pattern", memory, 1)
 dial("Density", "Density", memory, "density", 0, 100, 80, 5, C2, DIAL_Y, "play", scale=0.01, inlet=1)
 dial("Throws", "Throws", memory, "throws", 0, 100, 0, 5, C2 + 56, DIAL_Y, "play", scale=0.01, inlet=1)
 dial("Gate", "Gate", memory, "length", 1, 4, 1, 0, C2 + 112, DIAL_Y, "play", inlet=1)
+dial("Shift", "Shift", memory, "shift", 0, 15, 0, 0, C2 + 168, DIAL_Y, "play", inlet=1)
 
 sbits = stored("Steps", 73)      # dub dotted: hits on 1, 4, 7
 abits = stored("Accents", 1)
@@ -908,8 +911,7 @@ LAYOUT = {
     "version": VERSION,
     "pages": [
         {"rules": [208, 512, 720],
-         "labels": HEADER + [["click a step", C2 + 172, DIAL_Y + 17, "hint"], ["to change it", C2 + 172, DIAL_Y + 31, "hint"],
-                             ["echo time", C3 + 64, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
+         "labels": HEADER + [["echo time", C3 + 64, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
         {"rules": [228, 456, 684],
          "labels": HEADER + [["pw: pulse width", O1 + 116, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 116, DIAL_Y + 38, "hint"],
                              ["semi 7:", O2 + 116, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 116, DIAL_Y + 38, "hint"],
@@ -924,7 +926,7 @@ LAYOUT = {
 
 # ---- presets: values in each control's own units ---------------------------------------
 BASE = {"Chord": 1, "In Key": 0, "Tone": 0, "Length": 0, "Drift": 0, "Machine": 0, "Latch": 0, "Pattern": 0,
-        "Density": 80, "Throws": 0, "Gate": 1, "Dub": 0, "Freeze": 0, "Echo Time": 2,
+        "Density": 80, "Throws": 0, "Gate": 1, "Shift": 0, "Dub": 0, "Freeze": 0, "Echo Time": 2,
         "Pump": 0, "Pump Rate": 0, "Pump Attack": 6, "Pump Release": 55, "Pump Curve": 50,
         "DCO1 Wave": 2, "DCO1 Octave": 1, "PW": 70, "PWM": 0, "DCO2 Wave": 0, "DCO2 Octave": 1, "Semi": 0, "Fine": 10,
         "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
@@ -1044,6 +1046,9 @@ pbox["saved_attribute_attributes"]["valueof"].update(parameter_enum=[n for n, _ 
 if set(INFO) - INFO_USED:
     raise SystemExit(f"2sl-stab.py: INFO has text for no parameter or view: {sorted(set(INFO) - INFO_USED)}")
 
+# a preset sets every control: every saved control but the Preset menu itself needs a BASE value
+if set(VALUES) - {"Preset"} - set(BASE):
+    raise SystemExit(f"2sl-stab.py: BASE has no preset value for: {sorted(set(VALUES) - {'Preset'} - set(BASE))}")
 presets_js = [{VALUES[k]: v for k, v in {**BASE, **p}.items()} for _, p in PRESETS]
 
 # 2sl-ui tokens, dark and light (2sl-ui/max/2sl-colors.json), plus the few this device needs

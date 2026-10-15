@@ -7,7 +7,8 @@
 //     drift f       0..1: chance each stab gets a different voicing
 //     machine i / latch i
 //     pattern i     load a pattern (a starting point; steps can then be edited)
-//     edit i        cycle step i: rest -> hit -> accent -> rest (from the step display)
+//     edit i        cycle the step shown at display position i: rest -> hit -> accent -> rest (from the step display)
+//     shift i       0..15: play (and show) the stored pattern i 16ths later, wrapping; the stored steps don't change
 //     stepbits i / accbits i   the pattern as stored with the set (two hidden parameters)
 //     density f, throws f, length i (16ths)
 //     tick bar beat units       from [transport], once per 16th while Live plays
@@ -35,7 +36,8 @@ var PATTERNS = [
 
 var shape = 1, inkey = 0, root = 0, intervals = [], drift = 0;
 var machine = 0, latch = 0, density = 0.8, throws = 0, length = 1, ready = 0;
-var steps = parse(PATTERNS[0]);
+var steps = parse(PATTERNS[0]);   // the pattern as stored (unshifted)
+var shift = 0;                    // 16ths the pattern plays later than stored
 
 var keys = {};      // physically held keys -> velocity
 var latched = {};   // latched chord: key -> velocity
@@ -56,8 +58,16 @@ function parse(str) {
   for (var i = 0; i < 16; i++) { var c = str.charAt(i); a.push(c === "X" ? 2 : c === "x" ? 1 : 0); }
   return a;
 }
+/** The stored step that plays at `position` (0..15) with the pattern shifted `shift` 16ths later. */
+function storedIndexAt(position) { return (position - shift + 16) % 16; }
+/** The pattern as it plays: one character per playing position, Shift applied. */
 function patternString() {
-  return steps.map(function (s) { return s === 2 ? "X" : s === 1 ? "x" : "."; }).join("");
+  var shown = "";
+  for (var position = 0; position < 16; position++) {
+    var s = steps[storedIndexAt(position)];
+    shown += s === 2 ? "X" : s === 1 ? "x" : ".";
+  }
+  return shown;
 }
 function clampi(v, lo, hi) { return Math.max(lo, Math.min(hi, Math.round(v))); }
 function clampf(v) { return Math.max(0, Math.min(1, v)); }
@@ -244,10 +254,10 @@ function step16(step) {
   var chord = machineChord();
   var held = Object.keys(chord);
   if (!held.length) return;
-  var s = steps[step], hit = false;
+  var s = steps[storedIndexAt(step)], hit = false;   // `step` is the playing position
   if (s === 2) hit = Math.random() < Math.min(1, density * 1.4);
   else if (s === 1) hit = Math.random() < density;
-  else if (density > 0.7 && step % 2 === 1) hit = Math.random() < (density - 0.7) * 0.5; // the odd extra
+  else if (density > 0.7 && step % 2 === 1) hit = Math.random() < (density - 0.7) * 0.5; // the odd extra, on offbeats as heard
   if (!hit) return;
   var all = [];
   for (var k = 0; k < held.length; k++) {
@@ -305,13 +315,14 @@ function anything() {
       store();
       break;
     case "edit":
-      var i = clampi(v, 0, 15);
+      var i = storedIndexAt(clampi(v, 0, 15));   // v is the display position
       steps[i] = (steps[i] + 1) % 3;
       showSteps();
       store();
       break;
     case "stepbits": storedHits = clampi(v, 0, 65535); fromStore(); break;
     case "accbits": storedAcc = clampi(v, 0, 65535); fromStore(); break;
+    case "shift": shift = clampi(v, 0, 15); showSteps(); break;
     case "density": density = clampf(v); break;
     case "throws": throws = clampf(v); break;
     case "length": length = clampi(v, 1, 8); break;
