@@ -1436,9 +1436,10 @@ FIRST_PARAMETER_ID = min(int(p.get("Id")) for p in template_parameter_list)
 
 
 def live_parameter_element(parameter_id, index, valueof, value):
-    """One parameter as Live lists it, copied from the template's element of its type. Default is the initial value
-    mapped linearly through its exponent's position (min + (max - min) * normalised^(1/exponent)), and a float's
-    MIDI controller range is [max(min, 0), max(min, 1)]: both as Live wrote them for all 51 of this device's."""
+    """One parameter as Live lists it, copied from the template's element of its type. Live holds a float's values
+    (Default and the Manual value alike) as the dial's position spread linearly over [min, max], not in the dial's
+    units: min + (max - min) * normalised^(1/exponent). A float's MIDI controller range is [max(min, 0), max(min, 1)].
+    All as Live wrote them for all 51 of this device's (e.g. Decay 260 ms is saved as 2097.7)."""
     is_enum = valueof["parameter_type"] == PARAMETER_TYPE_ENUM
     element = ElementTree.fromstring(ElementTree.tostring(PARAMETER_PROTOTYPE["MxDEnumParameter" if is_enum else "MxDFloatParameter"]))
     element.set("Id", str(parameter_id))
@@ -1446,10 +1447,15 @@ def live_parameter_element(parameter_id, index, valueof, value):
     maximum = float(len(valueof["parameter_enum"]) - 1) if is_enum else float(valueof.get("parameter_mmax", 127.0))
     initial_value = float((valueof.get("parameter_initial") or [minimum])[0])
     exponent = float(valueof.get("parameter_exponent", 1.0))
-    default = initial_value if is_enum else minimum + (maximum - minimum) * ((initial_value - minimum) / (maximum - minimum)) ** (1.0 / exponent)
+
+    def value_as_live_holds_it(value_in_dial_units):
+        if is_enum:
+            return value_in_dial_units
+        return minimum + (maximum - minimum) * ((value_in_dial_units - minimum) / (maximum - minimum)) ** (1.0 / exponent)
     for path, text in [("Index", str(index)), ("Type", str(valueof["parameter_type"])), ("Name", valueof["parameter_longname"]),
                        ("ShortName", valueof["parameter_shortname"]), ("MinValue", live_number(minimum)),
-                       ("MaxValue", live_number(maximum)), ("Default", live_number(default)), ("Timeable/Manual", live_number(value))]:
+                       ("MaxValue", live_number(maximum)), ("Default", live_number(value_as_live_holds_it(initial_value))),
+                       ("Timeable/Manual", live_number(value_as_live_holds_it(float(value))))]:
         set_value(element, path, text)
     if is_enum:
         names = element.find("Names")
