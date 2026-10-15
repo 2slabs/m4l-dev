@@ -35,7 +35,9 @@ var S = {
   page: 0,
   name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
-  level: 0, throwAt: 0, phase: 0
+  level: 0, throwAt: 0, phase: 0,
+  tempo: 120,                       // Live's tempo (the pump), until Live reports it
+  lfophase: 0, lfophaseAt: 0        // the LFO's phase (0..1) as last read from the audio, and when
 };
 var VIEW_DEFAULTS = /*VIEW_DEFAULTS*/;
 (function () {
@@ -45,7 +47,7 @@ var VIEW_DEFAULTS = /*VIEW_DEFAULTS*/;
 
 var anim = new Task(function () { mgraphics.redraw(); }, this);
 anim.interval = 33;
-if (MODE === "steps" || MODE === "echo" || MODE === "pump" || MODE === "lfo" || MODE === "osc1") anim.repeat();
+if (MODE === "steps" || MODE === "echo" || MODE === "pump" || MODE === "lfo" || MODE === "osc1" || MODE === "osc2") anim.repeat();
 
 function now() { return new Date().getTime(); }
 
@@ -62,6 +64,7 @@ function anything() {
   else if (m === "held") S.held = String(a[0]);
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
+  else if (m === "lfophase") { S.lfophase = a[0]; S.lfophaseAt = now(); }
   else if (m in S) S[m] = a[0];
   else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
@@ -262,18 +265,29 @@ function onclick(x, y) {
   outlet(0, "edit", Math.max(0, Math.min(15, Math.floor((x - 4) / ((w - 8) / 16)))));
 }
 
+// Frozen, the loop feeds back at 105% through tape saturation, tanh(1.05 x 1.1 a) / 1.1 per time round: it
+// swells until it holds where that equals a. The level the loop settles at, in the echo's own units:
+var FROZEN_LOOP_HOLD = (function () {
+  var a = 1;
+  for (var i = 0; i < 200; i++) a = tanh(1.05 * 1.1 * a) / 1.1;
+  return a;
+})();
+
 function echoView(w, h) {
   var thrown = fade(S.throwAt, 900);
-  var fb = S.freeze ? 1 : Math.max(0.3 + S.dub * 0.62, thrown * 0.9);
+  var fb = Math.max(0.3 + S.dub * 0.62, thrown * 0.9);
   var on = S.dub > 0 || thrown > 0 || S.freeze;
   viewLabel("echo");
   var state = S.freeze ? "frozen" : thrown > 0.05 ? "throw" : S.dub > 0 ? "dub " + Math.round(S.dub * 100) : "throws only";
   text(state, w - measure(state) - 4, 12, thrown > 0.05 ? T.warm : S.freeze ? T.mint : T.label);
   var top = 18, base = h - 8, n = 10, gap = (w - 20) / n;
   rect(6, top, 6, base - top, T.ink);                          // the stab
-  var amp = 1;
+  // frozen: the repeats from the loop's level now (the level line: both sides, so 2 x the loop's amplitude),
+  // each time round a little louder, to full height where saturation holds it
+  var amp = S.freeze ? Math.max(0.05, Math.min(1, S.level / (2 * FROZEN_LOOP_HOLD))) : 1;
   for (var i = 1; i <= n; i++) {                                // its repeats, darker each time round
-    amp *= fb;
+    if (S.freeze) amp = tanh(1.05 * 1.1 * amp * FROZEN_LOOP_HOLD) / 1.1 / FROZEN_LOOP_HOLD;
+    else amp *= fb;
     var x = 6 + i * gap, bh = Math.max(1, (base - top) * amp);
     var col = S.freeze ? T.mint : mix(T.mint, T.rest, Math.min(1, i / (2 + S.dub * 8)));
     if (on) rect(x, base - bh, 6, bh, col);
@@ -286,7 +300,7 @@ function echoView(w, h) {
 // The pump's gain over a division: the same shape as the DSP (sine ramp in over Attack, recover over
 // Release with Curve). Pump attack arrives in ms, release as a fraction of the division.
 function pumpGain(ph) {
-  var divms = 60000 / 124 / S.rate;                       // display at a typical tempo
+  var divms = 60000 / Math.max(20, S.tempo) / S.rate;     // at Live's tempo, as the DSP
   var atkf = Math.max(0.001, Math.min(0.3, (S.atk === undefined ? 6 : S.atk) / divms));
   var relEnd = Math.max(S.rel === undefined ? 0.55 : S.rel, atkf + 0.05);
   var duck;
@@ -363,29 +377,39 @@ function filterView(w, h) {
   curve(fc, T.mint, 2, false);
 }
 
-var lfoT = 0;
-function lfoNow() { return Math.sin(2 * Math.PI * (now() / 1000) * S.lforate); }
+/** The LFO's phase `secondsAgo` before now: its phase as last read from the audio (snapshot~ of the LFO's
+ *  phasor~, every 33 ms), carried on at its rate. The LFO itself is cos~ of that phase. */
+function lfoPhase(secondsAgo) {
+  var since = (now() - S.lfophaseAt) / 1000 - (secondsAgo || 0);
+  var phase = S.lfophase + S.lforate * since;
+  return phase - Math.floor(phase);
+}
+function lfoNow() { return Math.cos(2 * Math.PI * lfoPhase(0)); }
 
-/** One cycle of DCO 1 or 2 as set, drawn twice. */
+/** DCO 1 or 2 as the voice makes it (without its anti-aliasing): two cycles of DCO 1, and DCO 2 over the same
+ *  time, so Semi shows as more or fewer cycles. Pulse is the voice's saw minus a saw shifted by the pulse width
+ *  (no DC: high 2 - 2w for a fraction w of the cycle, low -2w), and the width moves with PWM, on both DCOs. */
 function oscView(w, h, n) {
   var names1 = ["saw", "pulse", "saw + pulse"], names2 = ["saw", "pulse", "triangle"];
   viewLabel(n === 1 ? "dco 1" : "dco 2");
-  var info = n === 1 ? names1[S.wave1 | 0] + "  pw " + Math.round(S.pw * 100) : names2[S.wave2 | 0] +
+  var wave = n === 1 ? S.wave1 | 0 : S.wave2 | 0;
+  var usesWidth = n === 1 ? wave !== 0 : wave === 1;
+  var pwText = usesWidth ? "  pw " + Math.round(S.pw * 100) : "";
+  var info = n === 1 ? names1[wave] + pwText : names2[wave] + pwText +
     (S.semi ? "  " + (S.semi > 0 ? "+" : "") + S.semi + " st" : "") + "  +" + Math.round(S.fine) + " ct";
   text(info, w - measure(info) - 4, 12, T.label);
   var mid = 20 + (h - 24) / 2, amp = (h - 30) / 2;
-  var width = Math.max(0.05, Math.min(0.95, S.pw + (n === 1 ? S.pwm * 0.35 * lfoNow() : 0)));
+  var width = Math.max(0.05, Math.min(0.95, S.pw + S.pwm * 0.35 * lfoNow()));
   rgba(T.mint);
   mgraphics.set_line_width(2);
   var cycles = n === 2 ? 2 * Math.pow(2, S.semi / 12) : 2;
   for (var x = 4; x <= w - 4; x++) {
     var ph = (((x - 4) / (w - 8)) * cycles) % 1, v;
-    var saw = 2 * ph - 1, pulse = ph < width ? 1 : -1, tri = 2 * Math.abs(2 * ph - 1) - 1;
-    var wv = n === 1 ? S.wave1 | 0 : S.wave2 | 0;
-    if (wv === 0) v = saw;
-    else if (wv === 1) v = pulse * 0.9;
-    else v = n === 1 ? (saw + pulse) * 0.5 : tri;
-    var y = mid - amp * v;
+    var saw = 2 * ph - 1, shifted = (ph + width) % 1, pulse = saw - (2 * shifted - 1), tri = 2 * Math.abs(2 * ph - 1) - 1;
+    if (wave === 0) v = saw;
+    else if (wave === 1) v = pulse;
+    else v = n === 1 ? (saw + pulse) * 0.6 : tri;
+    var y = mid - amp * v / 2;                                     // +-2: the pulse's widest swing
     if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
   mgraphics.stroke();
@@ -398,12 +422,11 @@ function lfoView(w, h) {
   var info = r + " Hz";
   text(info, w - measure(info) - 4, 12, T.label);
   var top = 20, bot = h - 18, mid = (top + bot) / 2, amp = (bot - top) / 2;
-  var t0 = now() / 1000;
   rgba(T.mint);
   mgraphics.set_line_width(2);
   for (var x = 4; x <= w - 4; x++) {
-    var t = t0 - (w - 4 - x) / (w - 8) * 2;                          // the last two seconds, scrolling
-    var y = mid - amp * Math.sin(2 * Math.PI * t * S.lforate);
+    var secondsAgo = (w - 4 - x) / (w - 8) * 2;                      // the last two seconds, scrolling
+    var y = mid - amp * Math.cos(2 * Math.PI * lfoPhase(secondsAgo));
     if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
   mgraphics.stroke();
@@ -417,6 +440,8 @@ function lfoView(w, h) {
   }
 }
 
+/** The FX's drive as the DSP does it: out = tanh(in x (1 + 5 Drive)) / (1 + 2.2 Drive), for an input from -1 to
+ *  +1 (full scale) across and the output on the same scale up, so turning Drive up also shows it turning down. */
 function driveView(w, h) {
   viewLabel("drive");
   var top = 20, bot = h - 6, H = bot - top, x0 = 6, x1 = w - 6;
@@ -426,7 +451,7 @@ function driveView(w, h) {
   var g = 1 + S.drive * 5, norm = 1 / (1 + S.drive * 2.2);
   for (var x = x0; x <= x1; x++) {
     var vin = ((x - x0) / (x1 - x0)) * 2 - 1;
-    var vout = tanh(vin * 1.6 * g) * norm;
+    var vout = tanh(vin * g) * norm;
     var y = top + H / 2 - vout * (H / 2);
     if (x === x0) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }

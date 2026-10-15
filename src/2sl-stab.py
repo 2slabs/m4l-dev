@@ -425,22 +425,27 @@ INFO = {
                    "those notes lit mint. With Machine on, the last stab the machine played. In orange on top: "
                    "In Key is on but Live's scale has under 5 notes, so chords use the fixed shapes."),
     "Echo view": ("Echo", "The stab (left) and its repeats, each lower by the feedback, mint fading as they go round "
-                  "(slower with more Dub). Outlines only while the echo is silent. Frozen: every repeat full and mint. A throw flashes "
-                  "an orange frame. The line along the bottom is the echo's level now."),
-    "Pump view": ("Pump", "The output level over two beats: each dip is a duck, mint while Depth is above 0. "
-                  "The blue line is Live's position in the beat. Top right: Depth."),
-    "DCO1 view": ("DCO 1", "Two cycles of DCO 1's waveform as set (saw, pulse or both), in mint. Top right: the wave "
-                  "and pulse width. With PWM up, the pulse width moves with the LFO."),
+                  "(slower with more Dub). Outlines only while the echo is silent. Frozen: the loop swelling, each repeat "
+                  "a little louder (105% feedback, less what the loop's filters take) from its level now up to full "
+                  "height, where tape saturation holds it. "
+                  "A throw flashes an orange frame. The line along the bottom is the echo's level now."),
+    "Pump view": ("Pump", "The output level over two beats at Live's tempo: each dip is a duck, mint while Depth "
+                  "is above 0. The blue line is Live's position in the beat. Top right: Depth."),
+    "DCO1 view": ("DCO 1", "Two cycles of DCO 1's waveform as the voice makes it (saw, pulse or both), in mint. "
+                  "Top right: the wave and pulse width. With PWM up, the pulse width moves with the LFO, in step with it."),
     "DCO2 view": ("DCO 2", "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, "
-                  "so Semi shows as more or fewer cycles. Top right: the wave, Semi and Fine."),
-    "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint; its rate top right. Along the bottom, "
-                 "where it goes: pwm, vibrato, filter, bright with the amount when on, dim when off."),
+                  "so Semi shows as more or fewer cycles. Its pulse has PW's width and moves with PWM, as DCO 1's. "
+                  "Top right: the wave, pulse width (on pulse), Semi and Fine."),
+    "LFO view": ("LFO", "The LFO's last two seconds, scrolling, in mint, in step with the sound (read from the LFO "
+                 "itself) and drawn at its current rate; its rate top right. Along the bottom, where it goes: pwm, "
+                 "vibrato, filter, bright with the amount when on, dim when off."),
     "Filter view": ("Filter", "The low-pass response from 20 Hz to 20 kHz in mint, with the resonance peak, at the "
                     "cutoff (top right, Tone included). Grey: how far the envelope opens it at full velocity."),
     "Envelope view": ("Envelope", "The envelope in mint: attack, decay to Sustain, a held stretch, then release. "
                       "Times are on a squashed scale and include the Length macro."),
-    "Drive view": ("Drive", "The saturation curve in mint: input level across, output up. More Drive bends it into "
-                   "a steeper middle and flatter ends."),
+    "Drive view": ("Drive", "The saturation curve in mint: input level across (-1 to +1, full scale), output up on "
+                   "the same scale. More Drive bends it into a steeper middle and flatter ends, and turns the output "
+                   "down to keep the level about even."),
     # header
     "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working."),
     "Preset": ("Preset", "Sets every control (and the machine's pattern) to a preset; tweak from there. "
@@ -618,7 +623,11 @@ wire(alloc, tgt_g, 5, 1)
 
 voice = box("mc.gen~ @chans 16", rect=(30, 350, 160, 22), ins=3, outs=1, outtype=["multichannelsignal"],
             patcher=gen_patcher(VOICE, 3, 1))
-lfo = box("cycle~ 0.5", rect=(220, 320, 70, 22), ins=2, outs=1, outtype=["signal"])
+# the LFO: a cosine of a phasor~'s phase (cos~: "the cosine of 2pi times the input"), so the displays can read
+# the phase itself (snapshot~ below) and draw the LFO in step with the sound
+lfo_phase = box(f"phasor~ {BASE['LFO Rate']}", rect=(220, 300, 80, 22), ins=2, outs=1, outtype=["signal"])
+lfo = box("cos~", rect=(220, 325, 40, 22), ins=1, outs=1, outtype=["signal"])
+wire(lfo_phase, lfo)
 wire(lfo, voice, 0, 2)
 wire(tgt_f, voice, 0, 0)
 wire(tgt_g, voice, 0, 1)
@@ -958,6 +967,7 @@ v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play", info="Pump view")
 ph_snap = box("snapshot~ 33", rect=(250, 430, 80, 22), ins=2, outs=1, outtype=["float"])
 wire(beat, ph_snap)
 tell(ph_snap, "phase", v_pump)
+tell(obs, "tempo", v_pump)            # Live's tempo: the pump's attack is in ms, so its shape depends on it
 prate = menu("Pump Rate", "Rate", ["1/4", "1/8", "1/16"], C4, ROW_Y, 96, "play")
 rmult = derived(box("expr ($i1==0)*1. + ($i1==1)*2. + ($i1==2)*4.", rect=(1100, 760, 260, 22), ins=1, outs=1),
                 "Pump Rate", lambda v: [1.0, 2.0, 4.0][v])
@@ -979,7 +989,7 @@ o1 = tabs("DCO1 Octave", "Oct 1", ["16'", "8'", "4'"], O1 + 128, ROW_Y, 76, "osc
 o1m = derived(box("- 1", rect=(1100, 820, 40, 22), ins=2, outtype=["int"]), "DCO1 Octave", lambda v: v - 1)
 wire(o1, o1m)
 tell(o1m, "oct1", voice)
-dial("PW", "PW", voice, "pw", 50, 95, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
+pw_dial = dial("PW", "PW", voice, "pw", 50, 95, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
 pwm_dial = dial("PWM", "PWM", voice, "pwmamt", 0, 100, 5, O1 + 56, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pwm")])
 
 v_osc2 = view("osc2", O2, VIEW_Y, 204, VIEW_H, "osc", info="DCO2 view")
@@ -1004,7 +1014,16 @@ tell(sub_mode_tab, "submode", voice)
 
 v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
-dial("LFO Rate", "Rate", lfo, None, 0.05, 12, 3, O4, DIAL_Y, "osc", exp=3.0, views=[(v_lfo, "lforate")])
+# PW and PWM shape both DCOs' pulse (the voice's `width`), so DCO 2's display gets them too
+tell(pw_dial, "pw", v_osc2, 0, 0.01)
+tell(pwm_dial, "pwm", v_osc2, 0, 0.01)
+# the LFO's phase, read from the audio, for every display that draws the LFO moving
+lfo_snap = box("snapshot~ 33", rect=(310, 300, 80, 22), ins=2, outs=1, outtype=["float"])
+wire(lfo_phase, lfo_snap)
+for lfo_view in (v_lfo, v_osc1, v_osc2):
+    tell(lfo_snap, "lfophase", lfo_view)
+dial("LFO Rate", "Rate", lfo_phase, None, 0.05, 12, 3, O4, DIAL_Y, "osc", exp=3.0,
+     views=[(v_lfo, "lforate"), (v_osc1, "lforate"), (v_osc2, "lforate")])   # the DCOs' PWM follows the LFO too
 dial("Vibrato", "Vibrato", voice, "vibamt", 0, 100, 5, O4 + 64, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "vib")])
 dial("LFO Filter", "Filter", voice, "lfofilt", 0, 100, 5, O4 + 128, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "lfofilt")])
 

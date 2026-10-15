@@ -17,16 +17,16 @@ Three pages: switch with **play / osc / shape** in the header. The header also h
 | chord | the chord you're playing: name, notes, a lit keyboard | **Chord** (poly, minor, m7, m9, m11, sus4, fifths, dark), **In Key** (chords from Live's Scale Mode), **Tone** (brighter or darker), **Length** (shorter or longer tails), **Drift** (voicing varies stab to stab) |
 | machine | the 16-step pattern: **click a step** to cycle rest → hit → accent; the playhead, hits flashing, throws flashing orange; a status line | **Machine**, **Latch** (tap a chord and it keeps playing), **Pattern** (starting points), **Density**, **Throws**, **Gate**, **Shift** (moves every trigger 0–15 16ths later, wrapping; the display shows the shifted pattern, the saved pattern doesn't change, and picking a Pattern keeps it) |
 | dub | the echo: the stab and its repeats (more and darker as Dub goes up), throws, freeze, a live tape level | **Dub** (0 = no echo), **Throw**, **Freeze**, echo **Time** |
-| pump | the duck over two beats, with the playhead | **Depth**, **Attack** (ms to full duck: a ramp, never a jump), **Release** (how much of the beat it takes to recover), **Curve** (linear to snappy), pump **Rate** |
+| pump | the duck over two beats at Live's tempo, with the playhead | **Depth**, **Attack** (ms to full duck: a ramp, never a jump), **Release** (how much of the beat it takes to recover), **Curve** (linear to snappy), pump **Rate** |
 
 **Osc**: laid out like the voice sections of a Juno, Jupiter or Prophet.
 
 | section | display | controls |
 |---|---|---|
 | dco 1 | its waveform, moving with PWM | wave buttons **saw / pulse / both**, footage **16′ / 8′ / 4′**, **PW**, **PWM** (the LFO on pulse width, the Juno shimmer) |
-| dco 2 | its waveform | wave buttons **saw / pulse / tri**, footage, **Semi** (−12 to +12; 7 stacks a fifth), **Fine** (detune in cents) |
+| dco 2 | its waveform; on pulse, with PW's width, moving with PWM like DCO 1 | wave buttons **saw / pulse / tri**, footage, **Semi** (−12 to +12; 7 stacks a fifth), **Fine** (detune in cents) |
 | mixer | none: four level dials in a square, and the sub switch | **OSC 1**, **OSC 2**, **Sub**, **Noise**; **Sub** switch as on the Roland SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (DCO 1 divided down, so it follows DCO 1's footage) |
-| lfo | the LFO moving, and where it's going | **Rate**, **Vibrato** (LFO → pitch), **Filter** (LFO → cutoff). One LFO for all voices. |
+| lfo | the LFO moving, in step with the sound, and where it's going | **Rate**, **Vibrato** (LFO → pitch), **Filter** (LFO → cutoff). One LFO for all voices. |
 
 **Shape**
 

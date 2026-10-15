@@ -64,3 +64,7 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
   this value to any connected objects." The build sets every control's initial value from BASE (the
   Init preset), and also starts the gen~ Params and the displays there.
+- **cos~** (Max reference): https://docs.cycling74.com/reference/cos~
+  "Signal cosine function (0-1 range)"; output: "The cosine of 2π times the input". The LFO is
+  [phasor~] -> [cos~], the same cosine as the [cycle~] it replaces ("The default waveform is one cycle of a
+  cosine wave", https://docs.cycling74.com/reference/cycle~), with the phase readable for the displays.
