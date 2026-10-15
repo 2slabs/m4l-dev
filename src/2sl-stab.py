@@ -63,9 +63,9 @@ Param rel(240, min=5, max=6000);        // ms to -40 dB
 Param level(0.22, min=0, max=1);
 Param tonemac(0, min=-1, max=1);        // Play page Tone: cutoff and envelope up or down
 Param lenmac(0, min=-1, max=1);         // Play page Length: decay and release x0.25..x4
-Param hush(0, min=0, max=1);            // Stop: fade out now, whatever the release
+Param panic(0);                         // Stop: every new number ramps the voice to silence
 
-History env(0), stage(0), lastgate(0), velo(0), lastfreq(0);
+History env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);
 History ph1(0), ph2(0), phs(0), s1(0), s2(0), s3(0), s4(0);
 
 lfo = in3;
@@ -84,9 +84,17 @@ if (gatein > 0 && (lastgate <= 0 || gatein != lastgate || note != lastfreq)) {
 lastgate = gatein;
 lastfreq = note;
 
-if (hush > 0) {
+// Stop: ramp to exactly 0 over 20 ms, whatever the release. A key pressed during the ramp starts when it ends.
+if (panic != lastpanic) {
+	lastpanic = panic;
+	fadeleft = max(mstosamps(20), 1);
+	fadestep = env / fadeleft;
+}
+if (fadeleft > 0) {
+	fadeleft = fadeleft - 1;
 	stage = 0;
-	env = env * 0.996;   // about 20 ms to silence
+	env = fadeleft > 0 ? max(env - fadestep, 0) : 0;
+	lastgate = 0;
 }
 
 // analog-style ADSR: the attack aims past 1, decay and release are exponential
@@ -181,7 +189,7 @@ Param pumpcurve(0.5, min=0, max=1);     // recovery: 0 linear .. 1 snappy
 Param bpm(120, min=20, max=999);        // Live's tempo, for the pump's own clock when stopped
 Param transport(0, min=0, max=1);       // 1 while Live plays: lock to its beat
 Param volume(0, min=-60, max=12);       // output, dB
-Param hush(0, min=0, max=1);            // Stop: empty the echo
+Param panic(0);                         // Stop: every new number empties the echo
 
 Delay dl(200000);
 Delay dr(200000);
@@ -190,7 +198,8 @@ Delay al2(2000);
 Delay ar1(2000);
 Delay ar2(2000);
 History ts(363), wph(0), wph2(0), sendsm(0), fbsm(0.4), frz(0);
-History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), hsm(0), ownph(0), gsm(1);
+History lpl1(0), lpl2(0), hpl(0), lpr1(0), lpr2(0), hpr(0), lvl(0), ownph(0), gsm(1);
+History lastpanic(0), elapsed(400000), pressfade(0);
 
 sr = samplerate;
 gain = 1 + drive * 5;
@@ -214,8 +223,30 @@ wph2 = wrap(wph2 + 0.137 / sr, 0, 1);
 wow = (sin(twopi * wph) * 0.6 + sin(twopi * wph2) * 0.4) * 0.0012;
 tl = clamp(mstosamps(ts * 1.031 * (1 + wow)), 2, 199000);
 tr = clamp(mstosamps(ts * 0.979 * (1 - 0.8 * wow)), 2, 199000);
-rl = dl.read(tl, interp="cubic");
-rr = dr.read(tr, interp="cubic");
+
+// Stop: everything in the buffers is from before it. `clean` is a gain by where the longest read lands:
+// 0 on audio from before Stop, rising to 1 over the 2 ms of audio written after it. It is a position, not
+// a time, so a read gliding back past the Stop point (Time changed) is silent however fast it moves.
+// The old echo fades out over 2 ms at the press, so no click. New sound goes in straight away.
+if (panic != lastpanic) {
+	lastpanic = panic;
+	elapsed = 0;
+	pressfade = 1;
+}
+elapsed = min(elapsed + 1, 400000);
+clean = clamp((elapsed - max(tl, tr) - 3) / mstosamps(2), 0, 1);   // -3: the cubic read's reach
+pressfade = max(pressfade - 1 / mstosamps(2), 0);
+keep = max(clean, pressfade);
+rl = dl.read(tl, interp="cubic") * keep;
+rr = dr.read(tr, interp="cubic") * keep;
+if (clean <= 0) {                      // empty the loop filters too
+	lpl1 = 0;
+	lpl2 = 0;
+	hpl = 0;
+	lpr1 = 0;
+	lpr2 = 0;
+	hpr = 0;
+}
 
 // in the loop: low-pass (12 dB) and high-pass, compounding on every repeat
 lpk = 1 - exp(-twopi * looplp / sr);
@@ -232,25 +263,23 @@ fr = lpr2 - hpr;
 // diffusion: two allpasses per side
 d1 = al1.read(373);
 v1 = fl + diffuse * d1;
-al1.write(v1);
+al1.write(v1 * clean);
 fl = d1 - diffuse * v1;
 d2 = al2.read(587);
 v2 = fl + diffuse * d2;
-al2.write(v2);
+al2.write(v2 * clean);
 fl = d2 - diffuse * v2;
 d3 = ar1.read(401);
 v3 = fr + diffuse * d3;
-ar1.write(v3);
+ar1.write(v3 * clean);
 fr = d3 - diffuse * v3;
 d4 = ar2.read(613);
 v4 = fr + diffuse * d4;
-ar2.write(v4);
+ar2.write(v4 * clean);
 fr = d4 - diffuse * v4;
 
-hsm = hsm + (hush - hsm) * 0.01;
-keep = 1 - hsm;
-dl.write((x * sendsm + tanh(fl * fb * 1.1) / 1.1) * keep);
-dr.write((x * sendsm + tanh(fr * fb * 1.1) / 1.1) * keep);
+dl.write(x * sendsm + clean * tanh(fl * fb * 1.1) / 1.1);
+dr.write(x * sendsm + clean * tanh(fr * fb * 1.1) / 1.1);
 
 // pump: a sidechain-style duck on every beat division. Live's beat while it plays, our own clock when
 // stopped. The duck ramps in over Attack (never a jump, so no click), recovers over Release with Curve.
@@ -274,8 +303,8 @@ gsm = gsm + (target_g - gsm) * 0.05;   // ~1 ms smoother: no steps, ever
 lvl = max(abs(rl) + abs(rr), lvl * 0.9997);
 out3 = lvl;
 gain = dbtoa(volume) * 2;              // +6 dB over the old level; the soft clip catches overs
-out1 = sclip((x + rl * 1.2 * keep) * gsm * gain);
-out2 = sclip((x + rr * 1.2 * keep) * gsm * gain);
+out1 = sclip((x + rl * 1.2) * gsm * gain);
+out2 = sclip((x + rr * 1.2) * gsm * gain);
 """
 
 # ---- patch building ----------------------------------------------------------------
@@ -328,8 +357,8 @@ INFO = {
                "When Live reopens a set, your saved tweaks win."),
     "Volume": ("Volume", "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs. "
                "Presets set it to match their loudness."),
-    "Stop": ("Stop", "Releases every note, clears a latched chord, fades the voices out in about 20 ms, "
-             "empties the echo and turns Freeze off. Runs by itself when Live's transport stops."),
+    "Stop": ("Stop", "Panic: releases every note, clears a latched chord, ramps the voices to silence in 20 ms, "
+             "empties the echo and turns Freeze off. Stopping Live doesn't run it: tails ring out."),
     # play: chord
     "Chord": ("Chord", "What each key plays: poly plays your notes as they are; the others stack a chord on each key "
               "(minor, m7, m9, m11, sus4, fifths, dark = 0-5-8). Default minor."),
@@ -342,8 +371,9 @@ INFO = {
               "middle spread, or octave added). 0 = always the same."),
     # play: machine
     "Machine": ("Machine", "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. "
-                "Follows Live's transport; with Live stopped it runs on its own clock at Live's tempo."),
-    "Latch": ("Latch", "With Machine on, the chord keeps playing after you let go. A new chord replaces it; Stop clears it."),
+                "Follows Live's transport. With Live stopped it plays only keys you hold, at Live's tempo."),
+    "Latch": ("Latch", "With Machine on, the chord keeps playing after you let go, while Live plays. "
+              "A new chord replaces it; Stop clears it."),
     "Pattern": ("Pattern", "Loads a 16-step stab pattern as a starting point. Click steps in the display to cycle "
                 "rest, hit, accent; edited steps are saved with the set."),
     "Density": ("Density", "Each step fires by chance: hits at Density, accents at Density x1.4. Above 70%, empty "
@@ -688,28 +718,21 @@ stop_btn = param("live.text", "Stop", "Stop", (1500, 540, 48, 15), 2, (900.0, 3.
 find(stop_btn).update(varname="stop")
 CONTROLS["text"].append("stop")
 
-# ---- Stop: release everything, fade the voices, empty the echo, Freeze off ----
-stopt = box("t b b b", rect=(1100, 200, 60, 22), outs=3, outtype=["bang", "bang", "bang"])
-hush1 = box(cls="message", text="hush 1", rect=(1100, 230, 50, 22), ins=2, outs=1)
-hushd = box("delay 250", rect=(1160, 230, 60, 22), ins=2, outs=1, outtype=["bang"])
-hush0 = box(cls="message", text="hush 0", rect=(1160, 260, 50, 22), ins=2, outs=1)
+# ---- Stop: the panic button. Notes off and latch cleared (brain), Freeze off (ui), and a new `panic`
+# number to the voices (ramp to silence) and the echo (muted until it has emptied). Live's transport
+# stopping doesn't run it: like any instrument, the device just stops getting notes and rings out.
+stopt = box("t b b", rect=(1100, 200, 40, 22), outs=2, outtype=["bang", "bang"])
 stopmsg = box(cls="message", text="stop", rect=(1230, 230, 40, 22), ins=2, outs=1)
+panics = box("counter 1 1000000", rect=(1100, 230, 110, 22), ins=3, outs=4, outtype=["int", "", "", "int"])
+panicmsg = box("prepend panic", rect=(1100, 260, 90, 22))
 wire(stop_btn, stopt)
-wire(stopt, stopmsg, 2, 0)      # brain: notes off, latch cleared; ui: Freeze off
+wire(stopt, stopmsg, 1, 0)
 wire(stopmsg, memory, 0, 1)
 wire(stopmsg, ui)
-wire(stopt, hush1, 1, 0)
+wire(stopt, panics, 0, 0)
+wire(panics, panicmsg)
 for dst in (voice, fx):
-    wire(hush1, dst)
-    wire(hush0, dst)
-wire(stopt, hushd, 0, 0)
-wire(hushd, hush0)
-# Live's transport stopping runs the same stop
-chg = box("change", rect=(1100, 170, 50, 22), ins=1, outs=3)
-sel0 = box("sel 0", rect=(1160, 170, 40, 22), ins=2, outs=2, outtype=["bang", ""])
-wire(observers[2], chg)
-wire(chg, sel0)
-wire(sel0, stopt)
+    wire(panicmsg, dst)
 
 
 

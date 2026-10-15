@@ -40,7 +40,7 @@ The output stage has 6 dB more gain than before, with a soft clip above −2 dBF
 
 The machine's steps are saved with the set, so an edited pattern comes back when you reopen it.
 
-**Stop** (top right, on both pages) releases every note, clears a latched chord, fades the voices out in about 20 ms whatever the release, empties the echo and turns Freeze off. It also runs by itself whenever Live's transport stops. Holding keys while Live is stopped still plays, so you can audition.
+**Stop** (top right, on every page) is a panic: it releases every note, clears a latched chord, ramps the voices to silence in 20 ms whatever the release, empties the echo and turns Freeze off. Stopping Live doesn't run it: like any instrument, the device just stops getting notes, and releases and echoes ring out. A latched chord is kept for when Live plays again; with Live stopped, the machine plays only the keys you hold, so you can audition.
 
 ### Presets
 

@@ -149,7 +149,9 @@ function chordFor(key) {
 
 // ---- what the displays show -----------------------------------------------------------
 
-function machineChord() { return latch ? latched : keys; }
+/** The chord the machine plays: the latched chord while Live plays; with Live stopped only the keys you
+ *  hold (to audition), so stopping Live stops the machine the way it stops a clip. */
+function machineChord() { return latch && playing ? latched : keys; }
 
 /** The chord the machine plays (all held or latched keys, without drift), for the status line. */
 function heldName() {
