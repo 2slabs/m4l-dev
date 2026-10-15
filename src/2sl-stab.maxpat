@@ -2623,13 +2623,14 @@
 						"valueof": {
 							"parameter_longname": "Steps",
 							"parameter_shortname": "Steps",
-							"parameter_type": 1,
+							"parameter_type": 0,
 							"parameter_mmin": 0.0,
 							"parameter_mmax": 65535.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								73
+								73.0
 							],
+							"parameter_unitstyle": 0,
 							"parameter_invisible": 1
 						}
 					}
@@ -2658,13 +2659,14 @@
 						"valueof": {
 							"parameter_longname": "Accents",
 							"parameter_shortname": "Accents",
-							"parameter_type": 1,
+							"parameter_type": 0,
 							"parameter_mmin": 0.0,
 							"parameter_mmax": 65535.0,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								1
+								1.0
 							],
+							"parameter_unitstyle": 0,
 							"parameter_invisible": 1
 						}
 					}

@@ -548,10 +548,13 @@ def toggle(name, short, x, y, w, h, page, mode=1):
 
 
 def stored(name, init):
-    """A parameter Live stores with the set but doesn't show or automate."""
-    pid = param("live.numbox", name, name, (1500, 1400 + (30 * len(boxes)) % 300, 60, 15), 1, (0, 0, 60, 15),
-                parameter_mmin=0.0, parameter_mmax=65535.0, parameter_initial_enable=1, parameter_initial=[init],
-                parameter_invisible=1)
+    """A parameter Live stores with the set but doesn't show or automate.
+
+    Float type with an Int unit style: Live's Int type holds only 256 values (0-255), which cut a 16-step
+    bit mask down to its first 8 steps. Cycling '74's param reference gives this pattern for bigger integers."""
+    pid = param("live.numbox", name, name, (1500, 1400 + (30 * len(boxes)) % 300, 60, 15), 0, (0, 0, 60, 15),
+                parameter_mmin=0.0, parameter_mmax=65535.0, parameter_initial_enable=1, parameter_initial=[float(init)],
+                parameter_unitstyle=0, parameter_invisible=1)
     b = find(pid)
     b["presentation"] = 0
     del b["presentation_rect"]
