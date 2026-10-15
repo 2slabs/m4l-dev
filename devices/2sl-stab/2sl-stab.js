@@ -12,7 +12,8 @@
 //     shift i       0..15: play (and show) the stored pattern i 16ths later, wrapping; the stored steps don't change
 //     stepbits i / accbits i   the pattern as stored with the set (two hidden parameters)
 //     density f, throws f, length i (Gate: 1-4 16ths)
-//     tick bar beat units       from [transport], once per 16th while Live plays
+//     tick ticks    Live's song position in ticks (480 per quarter note), from [transport] on each 16th
+//                   metro bang while Live plays: the step is the song position in 16ths, mod 16
 //     playing i / tempo f       Live's transport; stopped, the machine runs on its own clock
 //     ready         Live has finished restoring the set
 //     stop          release everything and clear the latch (the Stop button only; Live stopping lets tails ring out)
@@ -49,6 +50,9 @@ var sent = {};      // played key -> pitches it sent (direct play)
 var count = {};     // sounding pitch -> how many holders
 var pending = [];   // machine notes waiting for their note-off: {pitches, left}
 var playing = 0, tempo = 120, ownStep = 0;
+var TICKS_PER_SIXTEENTH = 120;        // Max: 480 ticks per quarter note, whatever the time signature
+var ON_SIXTEENTH_TOLERANCE = 0.25;    // a bang within a quarter of a 16th of one is on it (clock jitter)
+var lastPlayedSixteenth = null;       // song position (in 16ths) of the last step played while Live plays
 
 var clock = new Task(function () {
   step16(ownStep);
@@ -286,9 +290,29 @@ function updateClock() {
   } else if (clock.running) clock.cancel();
 }
 
-function tick(bar, beat, units) {
+/** A clock bang while Live plays, with Live's song position in ticks. Every 16th of the song plays exactly
+ *  once: a second bang on the same 16th is ignored, and a bang between 16ths (the metro's immediate bang
+ *  when Live starts mid-16th) plays nothing, since that 16th began before we heard it. The step is the
+ *  song position in 16ths mod 16, so the pattern stays on Live's grid in any time signature. */
+function tick(ticks) {
   if (!playing) return;
-  step16(((beat - 1) * 4 + Math.round(units / 120)) % 16);
+  if (!isFinite(ticks)) {
+    error("2sl stab: the machine's clock got a song position of " + ticks + " ticks: step skipped\n");
+    return;
+  }
+  var position = ticks / TICKS_PER_SIXTEENTH;
+  var nearest = Math.round(position);
+  if (Math.abs(position - nearest) > ON_SIXTEENTH_TOLERANCE) {
+    lastPlayedSixteenth = Math.floor(position);
+    return;
+  }
+  if (nearest === lastPlayedSixteenth) return;
+  if (lastPlayedSixteenth !== null && nearest > lastPlayedSixteenth + 1) {
+    post("2sl stab: the machine's song position jumped from 16th " + lastPlayedSixteenth + " to " + nearest +
+         " (a locate, or a late clock): the steps between were not played\n");
+  }
+  lastPlayedSixteenth = nearest;
+  step16(((nearest % 16) + 16) % 16);
 }
 
 function step16(step) {
@@ -379,7 +403,7 @@ function anything() {
     case "density": density = controlUnit("Density", v); break;
     case "throws": throws = controlUnit("Throws", v); break;
     case "length": length = controlInt("Gate", v, 1, 4); break;   // the Gate dial and its Info text: 1-4
-    case "playing": playing = v ? 1 : 0; updateClock(); break;
+    case "playing": playing = v ? 1 : 0; lastPlayedSixteenth = null; updateClock(); break;
     case "tempo": tempo = v; updateClock(); break;
     case "ready": ready = 1; showSteps(); break;
     case "stop":

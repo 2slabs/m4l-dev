@@ -345,6 +345,14 @@ def wire(src, dst, so=0, di=0):
     lines.append({"patchline": {"source": [src, so], "destination": [dst, di]}})
 
 
+def find_box_by_text(text):
+    """The one box with this text (fails the build if there are none or several)."""
+    found = [x["box"]["id"] for x in boxes if x["box"].get("text") == text]
+    if len(found) != 1:
+        raise SystemExit(f"2sl-stab.py: expected one box {text!r}, found {len(found)}")
+    return found[0]
+
+
 def gen_patcher(code, ins, outs):
     sub_boxes, sub_lines = [], []
     sub_boxes.append({"box": {"id": "cb", "maxclass": "codebox", "code": code.strip() + "\n",
@@ -556,7 +564,8 @@ for i, (prop_name, msg) in enumerate(props):
     pp = box(f"prepend {msg}", rect=(620 + 160 * i, 180, 110, 22))
     wire(tbb, pm, 1, 0)
     wire(pm, ob)
-    wire(ob, pp)
+    if msg != "playing":
+        wire(ob, pp)
     wire(pp, memory, 0, 1)
     observers = locals().setdefault("observers", [])
     observers.append(ob)
@@ -576,28 +585,29 @@ wire(lpath, obs, 0, 1)
 for ob in observers:
     wire(lpath, ob, 0, 1)
 
-# the stab machine's clock: a 16th metro that follows Live's transport
+# the stab machine's clock: a 16th metro that follows Live's transport. Each bang asks [transport] for Live's
+# song position in ticks (its 8th outlet); the brain plays the 16th it lands on, once (see tick() there).
 metro = box("metro 16n @quantize 16n", rect=(30, 520, 160, 22), ins=2, outs=1, outtype=["bang"])
-# run it whenever Live is playing (also if it already was when the device loaded)
-wire(observers[2], metro, 0, 0)
+# Live playing or not, in a set order (trigger: right to left): the brain hears it first, then the FX, and
+# only then does the metro start (its immediate bang must find the brain playing)
+playing_order = box("t i i i", rect=(940, 210, 60, 22), ins=1, outs=3, outtype=["int", "int", "int"])
+wire(observers[2], playing_order)
+wire(playing_order, find_box_by_text("prepend playing"), 2, 0)
+ptransport = box("prepend transport", rect=(720, 250, 110, 22))
+wire(playing_order, ptransport, 1, 0)
+wire(ptransport, fx)
+wire(playing_order, metro, 0, 0)
 # the machine also needs the tempo, for its own clock when Live is stopped
 pbpm = box("prepend bpm", rect=(620, 250, 80, 22))
 wire(obs, pbpm)
 wire(pbpm, fx)
-ptransport = box("prepend transport", rect=(720, 250, 110, 22))
-wire(observers[2], ptransport)
-wire(ptransport, fx)
 ptempo = box("prepend tempo", rect=(520, 250, 90, 22))
 wire(obs, ptempo)
 wire(ptempo, memory, 0, 1)
 trans = box("transport", rect=(30, 550, 70, 22), ins=2, outs=9)
-tpack = box("pack 0 0 0", rect=(30, 580, 80, 22), ins=3, outs=1)
 ptick = box("prepend tick", rect=(30, 610, 80, 22))
 wire(metro, trans)
-wire(trans, tpack, 0, 0)
-wire(trans, tpack, 1, 1)
-wire(trans, tpack, 2, 2)
-wire(tpack, ptick)
+wire(trans, ptick, 7, 0)          # raw ticks: 480 per quarter note
 wire(ptick, memory, 0, 1)
 
 # throws: the Throw button or the machine opens the echo for an 8th

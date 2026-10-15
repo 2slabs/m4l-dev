@@ -1046,16 +1046,18 @@
 					"id": "obj-37",
 					"maxclass": "newobj",
 					"numinlets": 1,
-					"numoutlets": 1,
+					"numoutlets": 3,
 					"patching_rect": [
-						620.0,
-						250.0,
-						80.0,
+						940.0,
+						210.0,
+						60.0,
 						22.0
 					],
-					"text": "prepend bpm",
+					"text": "t i i i",
 					"outlettype": [
-						""
+						"int",
+						"int",
+						"int"
 					]
 				}
 			},
@@ -1084,6 +1086,24 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
+						620.0,
+						250.0,
+						80.0,
+						22.0
+					],
+					"text": "prepend bpm",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-40",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
 						520.0,
 						250.0,
 						90.0,
@@ -1097,7 +1117,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-40",
+					"id": "obj-41",
 					"maxclass": "newobj",
 					"numinlets": 2,
 					"numoutlets": 9,
@@ -1117,24 +1137,6 @@
 						"",
 						"",
 						"",
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-41",
-					"maxclass": "newobj",
-					"numinlets": 3,
-					"numoutlets": 1,
-					"patching_rect": [
-						30.0,
-						580.0,
-						80.0,
-						22.0
-					],
-					"text": "pack 0 0 0",
-					"outlettype": [
 						""
 					]
 				}
@@ -1755,7 +1757,7 @@
 					],
 					"border": 0,
 					"annotation_name": "Chord",
-					"annotation": "The chord sounding now: its name, its notes (top right), and two octaves of keys with those notes lit mint. With Machine on, the last stab the machine played.",
+					"annotation": "The chord sounding now: its name, its notes (top right), and two octaves of keys with those notes lit mint. With Machine on, the last stab the machine played. In orange on top: In Key is on but Live's scale has under 5 notes, so chords use the fixed shapes.",
 					"varname": "view_chord"
 				}
 			},
@@ -1867,7 +1869,7 @@
 								0
 							],
 							"parameter_annotation_name": "In Key",
-							"parameter_info": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes.",
+							"parameter_info": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes, and the chord display says so.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -1876,7 +1878,7 @@
 						}
 					},
 					"annotation_name": "In Key",
-					"annotation": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes.",
+					"annotation": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes, and the chord display says so.",
 					"texton": "in key",
 					"mode": 1
 				}
@@ -6964,18 +6966,6 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-27",
-						0
-					],
-					"destination": [
-						"obj-28",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
 						"obj-28",
 						0
 					],
@@ -7100,6 +7090,54 @@
 						0
 					],
 					"destination": [
+						"obj-37",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-37",
+						2
+					],
+					"destination": [
+						"obj-28",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-37",
+						1
+					],
+					"destination": [
+						"obj-38",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-38",
+						0
+					],
+					"destination": [
+						"obj-15",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-37",
+						0
+					],
+					"destination": [
 						"obj-36",
 						0
 					]
@@ -7112,7 +7150,7 @@
 						0
 					],
 					"destination": [
-						"obj-37",
+						"obj-39",
 						0
 					]
 				}
@@ -7120,31 +7158,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-37",
-						0
-					],
-					"destination": [
-						"obj-15",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-27",
-						0
-					],
-					"destination": [
-						"obj-38",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-38",
+						"obj-39",
 						0
 					],
 					"destination": [
@@ -7160,7 +7174,7 @@
 						0
 					],
 					"destination": [
-						"obj-39",
+						"obj-40",
 						0
 					]
 				}
@@ -7168,7 +7182,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-39",
+						"obj-40",
 						0
 					],
 					"destination": [
@@ -7184,18 +7198,6 @@
 						0
 					],
 					"destination": [
-						"obj-40",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-40",
-						0
-					],
-					"destination": [
 						"obj-41",
 						0
 					]
@@ -7204,32 +7206,8 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-40",
-						1
-					],
-					"destination": [
 						"obj-41",
-						1
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-40",
-						2
-					],
-					"destination": [
-						"obj-41",
-						2
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-41",
-						0
+						7
 					],
 					"destination": [
 						"obj-42",
