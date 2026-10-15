@@ -2275,7 +2275,7 @@
 							"parameter_type": 2,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								0
+								1
 							],
 							"parameter_annotation_name": "In Key",
 							"parameter_info": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes, and the chord display says so.",
@@ -2623,7 +2623,7 @@
 							"parameter_type": 2,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								0
+								1
 							],
 							"parameter_annotation_name": "Machine",
 							"parameter_info": "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. Follows Live's transport. With Live stopped it plays only keys you hold, at Live's tempo.",
@@ -2693,7 +2693,7 @@
 							"parameter_type": 2,
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
-								0
+								1
 							],
 							"parameter_annotation_name": "Latch",
 							"parameter_info": "With Machine on, the chord keeps playing after you let go, while Live plays. A new chord replaces it; Stop clears it.",
