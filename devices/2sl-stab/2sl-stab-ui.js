@@ -8,7 +8,7 @@
 inlets = 1;
 outlets = 1;
 
-var PAGES = {"play": ["view_chord", "chord", "in_key", "tone", "length", "drift", "view_steps", "machine", "latch", "pattern", "density", "throws", "gate", "shift", "view_echo", "throw", "freeze", "dub", "echo_time", "view_pump", "pump_rate", "pump", "pump_attack", "pump_release", "pump_curve"], "osc": ["view_osc1", "dco1_wave", "dco1_octave", "pw", "pwm", "view_osc2", "dco2_wave", "dco2_octave", "semi", "fine", "osc_1", "osc_2", "sub", "noise", "view_lfo", "lfo_rate", "vibrato", "lfo_filter"], "shape": ["view_filter", "cutoff", "resonance", "env_amount", "key_track", "velocity_filter", "view_env", "attack", "decay", "sustain", "release", "view_drive", "drive"]};
+var PAGES = {"play": ["view_chord", "chord", "in_key", "tone", "length", "drift", "view_steps", "machine", "latch", "pattern", "density", "throws", "gate", "shift", "view_echo", "throw", "freeze", "dub", "echo_time", "view_pump", "pump_rate", "pump", "pump_attack", "pump_release", "pump_curve"], "osc": ["view_osc1", "dco1_wave", "dco1_octave", "pw", "pwm", "view_osc2", "dco2_wave", "dco2_octave", "semi", "fine", "osc_1", "osc_2", "sub", "noise", "sub_mode", "view_lfo", "lfo_rate", "vibrato", "lfo_filter"], "shape": ["view_filter", "cutoff", "resonance", "env_amount", "key_track", "velocity_filter", "view_env", "attack", "decay", "sustain", "release", "view_drive", "drive"]};
 var PRESETS = [
  {
   "chord": 1,
@@ -42,6 +42,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -90,6 +91,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 10,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -138,6 +140,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 20,
+  "sub_mode": 0,
   "noise": 12,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -186,6 +189,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 60,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 18,
   "lfo_rate": 0.25,
   "vibrato": 0,
@@ -234,6 +238,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 70,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 25,
   "lfo_rate": 0.12,
   "vibrato": 0,
@@ -282,6 +287,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 15,
   "lfo_rate": 0.3,
   "vibrato": 0,
@@ -330,6 +336,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 6,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -378,6 +385,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 25,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -426,6 +434,7 @@ var PRESETS = [
   "osc_1": 50,
   "osc_2": 70,
   "sub": 70,
+  "sub_mode": 0,
   "noise": 4,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -474,6 +483,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 30,
   "lfo_rate": 0.6,
   "vibrato": 12,
@@ -522,6 +532,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 20,
   "lfo_rate": 0.2,
   "vibrato": 0,
@@ -570,6 +581,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -618,6 +630,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 10,
   "lfo_rate": 0.15,
   "vibrato": 0,
@@ -666,6 +679,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 12,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -714,6 +728,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 50,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 5,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -762,6 +777,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 30,
+  "sub_mode": 0,
   "noise": 18,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -810,6 +826,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 20,
   "lfo_rate": 2,
   "vibrato": 0,
@@ -858,6 +875,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -906,6 +924,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 40,
+  "sub_mode": 0,
   "noise": 10,
   "lfo_rate": 0.1,
   "vibrato": 0,
@@ -954,6 +973,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -1002,6 +1022,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 4,
   "lfo_rate": 5,
   "vibrato": 8,
@@ -1050,6 +1071,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 50,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 3,
   "lfo_rate": 0.5,
   "vibrato": 0,
@@ -1098,6 +1120,7 @@ var PRESETS = [
   "osc_1": 80,
   "osc_2": 80,
   "sub": 0,
+  "sub_mode": 0,
   "noise": 8,
   "lfo_rate": 0.4,
   "vibrato": 0,
@@ -1115,7 +1138,7 @@ var PRESETS = [
   "volume": -6.5
  }
 ];
-var CONTROLS = {"dial": ["tone", "length", "drift", "density", "throws", "gate", "shift", "dub", "pump", "pump_attack", "pump_release", "pump_curve", "pw", "pwm", "semi", "fine", "osc_1", "osc_2", "sub", "noise", "lfo_rate", "vibrato", "lfo_filter", "cutoff", "resonance", "env_amount", "key_track", "velocity_filter", "attack", "decay", "sustain", "release", "drive"], "text": ["stop", "in_key", "machine", "latch", "throw", "freeze"], "menu": ["preset", "chord", "pattern", "echo_time", "pump_rate"], "tab": ["page", "dco1_wave", "dco1_octave", "dco2_wave", "dco2_octave"], "numbox": ["volume"]};
+var CONTROLS = {"dial": ["tone", "length", "drift", "density", "throws", "gate", "shift", "dub", "pump", "pump_attack", "pump_release", "pump_curve", "pw", "pwm", "semi", "fine", "osc_1", "osc_2", "sub", "noise", "lfo_rate", "vibrato", "lfo_filter", "cutoff", "resonance", "env_amount", "key_track", "velocity_filter", "attack", "decay", "sustain", "release", "drive"], "text": ["stop", "in_key", "machine", "latch", "throw", "freeze"], "menu": ["preset", "chord", "pattern", "echo_time", "pump_rate"], "tab": ["page", "dco1_wave", "dco1_octave", "dco2_wave", "dco2_octave", "sub_mode"], "numbox": ["volume"]};
 var VIEWS = ["view_chrome", "view_link", "view_chord", "view_steps", "view_echo", "view_pump", "view_osc1", "view_osc2", "view_lfo", "view_filter", "view_env", "view_drive"];
 var THEMES = {"dark": {"pad": [0.149, 0.149, 0.149, 1], "well": [0.106, 0.106, 0.11, 1], "ink": [0.835, 0.847, 0.859, 1], "inverse": [0.149, 0.149, 0.149, 1], "label": [0.557, 0.58, 0.608, 1], "unlit": [0.494, 0.518, 0.545, 1], "mint": [0.447, 0.871, 0.761, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [1.0, 0.55, 0.2, 1], "rest": [0.2, 0.2, 0.21, 1], "beat": [0.26, 0.27, 0.28, 1], "key": [0.72, 0.73, 0.74, 1], "keyBlack": [0.07, 0.07, 0.08, 1]}, "light": {"pad": [0.835, 0.847, 0.859, 1], "well": [0.77, 0.78, 0.79, 1], "ink": [0.0, 0.0, 0.0, 1], "inverse": [1.0, 1.0, 1.0, 1], "label": [0.349, 0.369, 0.396, 1], "unlit": [0.451, 0.475, 0.502, 1], "mint": [0.12, 0.55, 0.45, 1], "now": [0.176, 0.357, 1.0, 1], "warm": [0.85, 0.38, 0.0, 1], "rest": [0.7, 0.71, 0.73, 1], "beat": [0.62, 0.63, 0.65, 1], "key": [0.97, 0.97, 0.97, 1], "keyBlack": [0.12, 0.12, 0.13, 1]}};
 var current = 0;

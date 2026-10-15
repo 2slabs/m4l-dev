@@ -46,7 +46,8 @@ Param semi(0, min=-12, max=12);         // DCO 2 interval: 7 = a fifth up
 Param fine(10, min=0, max=50);          // DCO 2 detune, cents
 Param lvl1(0.8, min=0, max=1);          // mixer
 Param lvl2(0.8, min=0, max=1);
-Param sublvl(0, min=0, max=1);          // square, an octave below DCO 1
+Param sublvl(0, min=0, max=1);          // the sub: DCO 1 divided down, as on the SH-101
+Param submode(0, min=0, max=2);         // 0 square -1 oct, 1 square -2 oct, 2 25% pulse -2 oct
 Param noiseamt(0.08, min=0, max=1);
 Param pwmamt(0, min=0, max=1);          // LFO -> pulse width
 Param lfofilt(0, min=0, max=1);         // LFO -> cutoff, up to +-3 octaves
@@ -66,7 +67,7 @@ Param lenmac(0, min=-1, max=1);         // Play page Length: decay and release x
 Param panic(0);                         // Stop: every new number ramps the voice to silence
 
 History env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);
-History ph1(0), ph2(0), phs(0), s1(0), s2(0), s3(0), s4(0);
+History ph1(0), ph2(0), dco1_cycle_count(0), s1(0), s2(0), s3(0), s4(0);
 
 lfo = in3;
 note = max(in1, 1);                    // the played pitch (vibrato is applied on top)
@@ -123,7 +124,11 @@ width = clamp(pw + pwmamt * 0.35 * lfo, 0.05, 0.95);
 // DCO 1
 f1 = freq * pow(2, oct1);
 dt1 = f1 / sr;
-ph1 = wrap(ph1 + dt1, 0, 1);
+dco1_phase_unwrapped = ph1 + dt1;
+if (dco1_phase_unwrapped >= 1) {       // DCO 1 completed a cycle: clock the sub's divider (0..3)
+	dco1_cycle_count = wrap(dco1_cycle_count + 1, 0, 4);
+}
+ph1 = wrap(dco1_phase_unwrapped, 0, 1);
 saw1 = 2 * ph1 - 1 - blep(ph1, dt1);
 p1b = wrap(ph1 + width, 0, 1);
 pulse1 = saw1 - (2 * p1b - 1 - blep(p1b, dt1));
@@ -139,10 +144,20 @@ pulse2 = saw2 - (2 * p2b - 1 - blep(p2b, dt2));
 tri2 = 2 * abs(2 * ph2 - 1) - 1;
 o2 = wave2 < 0.5 ? saw2 : (wave2 < 1.5 ? pulse2 : tri2);
 
-// sub: a square an octave below DCO 1
-dts = dt1 * 0.5;
-phs = wrap(phs + dts, 0, 1);
-subosc = (phs < 0.5 ? 1 : -1) + blep(phs, dts) - blep(wrap(phs + 0.5, 0, 1), dts);
+// sub: DCO 1 divided by 2 or 4 (the SH-101's flip-flops), so it stays locked to DCO 1 and follows its
+// footage. Its phase is DCO 1's phase plus the cycles counted so far. Square -1 oct, square -2 oct, or a
+// 25% pulse -2 oct (DC removed, so switching doesn't shift the level). Edges band-limited with blep.
+sub_phase_1oct = (wrap(dco1_cycle_count, 0, 2) + ph1) * 0.5;
+sub_dt_1oct = dt1 * 0.5;
+sub_phase_2oct = (dco1_cycle_count + ph1) * 0.25;
+sub_dt_2oct = dt1 * 0.25;
+sub_square_1oct = (sub_phase_1oct < 0.5 ? 1 : -1) + blep(sub_phase_1oct, sub_dt_1oct)
+	- blep(wrap(sub_phase_1oct + 0.5, 0, 1), sub_dt_1oct);
+sub_square_2oct = (sub_phase_2oct < 0.5 ? 1 : -1) + blep(sub_phase_2oct, sub_dt_2oct)
+	- blep(wrap(sub_phase_2oct + 0.5, 0, 1), sub_dt_2oct);
+sub_pulse_2oct = (sub_phase_2oct < 0.25 ? 1 : -1) + 0.5 + blep(sub_phase_2oct, sub_dt_2oct)
+	- blep(wrap(sub_phase_2oct + 0.75, 0, 1), sub_dt_2oct);
+subosc = submode < 0.5 ? sub_square_1oct : (submode < 1.5 ? sub_square_2oct : sub_pulse_2oct);
 
 osc = (o1 * lvl1 + o2 * lvl2 + subosc * sublvl) * 0.5 + noise() * noiseamt * 0.4;
 
@@ -434,7 +449,9 @@ INFO = {
     "Fine": ("DCO 2 Fine", "Detunes DCO 2 upward, in cents (0-50, default 10)."),
     "OSC 1": ("OSC 1 Level", "DCO 1 level in the mixer. Default 80%."),
     "OSC 2": ("OSC 2 Level", "DCO 2 level in the mixer. Default 80%."),
-    "Sub": ("Sub Level", "Level of the sub: a square wave an octave below DCO 1. Default 0."),
+    "Sub": ("Sub Level", "Level of the sub: DCO 1 divided down, an octave or two below it (Sub Mode). Default 0."),
+    "Sub Mode": ("Sub Mode", "The sub's wave, as on the SH-101: a square 1 octave below DCO 1, a square 2 octaves "
+                 "below, or a 25% pulse 2 octaves below (keeps a strong -1 octave). Default -1 oct square."),
     "Noise": ("Noise Level", "Level of white noise in the mix (the 'chuff'). Default 8%."),
     "LFO Rate": ("LFO Rate", "Speed of the sine LFO, 0.05 to 12 Hz (default 0.5). One LFO for all voices."),
     "Vibrato": ("Vibrato", "LFO to pitch, up to +-50 cents."),
@@ -681,12 +698,13 @@ def menu(name, short, items, init, x, y, w, page):
     return on_page(page, pid, vn)
 
 
-def tabs(name, short, items, init, x, y, w, page):
-    """Selector buttons (a live.tab), like the waveform and footage switches on a Jupiter or Juno."""
-    pid = param("live.tab", name, short, (1500 + x, 600 + y, w, 15), 2, (x, y, w, 15),
+def tabs(name, short, items, init, x, y, w, page, h=15, lines=1):
+    """Selector buttons (a live.tab), like the waveform and footage switches on a Jupiter or Juno.
+    lines = len(items) stacks them vertically, like a slide switch."""
+    pid = param("live.tab", name, short, (1500 + x, 600 + y, w, h), 2, (x, y, w, h),
                 parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1, parameter_initial=[init])
     vn = name.lower().replace(" ", "_")
-    find(pid).update(num_lines_patching=1, num_lines_presentation=1)
+    find(pid).update(num_lines_patching=lines, num_lines_presentation=lines)
     VALUES[name] = vn
     CONTROLS["tab"].append(vn)
     return on_page(page, pid, vn)
@@ -841,7 +859,7 @@ dial("Pump Attack", "Attack", fx, "pumpatk", 1, 40, 6, 2, C4 + 56, DIAL_Y, "play
 dial("Pump Release", "Release", fx, "pumprel", 10, 95, 55, 5, C4 + 112, DIAL_Y, "play", scale=0.01, views=[(v_pump, "rel")])
 dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 50, 5, C4 + 168, DIAL_Y, "play", scale=0.01, views=[(v_pump, "curve")])
 
-# ================= OSC: DCO 1 | DCO 2 | mixer | LFO =================
+# ================= OSC: DCO 1 | DCO 2 | mixer + sub | LFO =================
 O1, O2, O3, O4 = 12, 240, 468, 696
 v_osc1 = view("osc1", O1, VIEW_Y, 204, VIEW_H, "osc", info="DCO1 view")
 w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], 0, O1, ROW_Y, 124, "osc")
@@ -865,12 +883,14 @@ tell(o2m, "oct2", voice)
 dial("Semi", "Semi", voice, "semi", -12, 12, 0, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
 dial("Fine", "Fine", voice, "fine", 0, 50, 10, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
 
-# the mixer: four levels as a square of dials, on the left of its column. No display.
-MIX_TOP_Y, MIX_COL2 = 64, O3 + 52
+# the mixer: four levels as a square of dials (left), the SH-101 sub switch (right). No display.
+MIX_TOP_Y, MIX_COL2, SUB_X = 64, O3 + 52, O3 + 108
 dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 80, 5, O3, MIX_TOP_Y, "osc", scale=0.01)
 dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 80, 5, MIX_COL2, MIX_TOP_Y, "osc", scale=0.01)
 dial("Sub", "Sub", voice, "sublvl", 0, 100, 0, 5, O3, DIAL_Y, "osc", scale=0.01)
 dial("Noise", "Noise", voice, "noiseamt", 0, 100, 8, 5, MIX_COL2, DIAL_Y, "osc", scale=0.01)
+sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], 0, SUB_X, MIX_TOP_Y, 64, "osc", h=48, lines=3)
+tell(sub_mode_tab, "submode", voice)
 
 v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
@@ -916,8 +936,8 @@ LAYOUT = {
         {"rules": [228, 456, 684],
          "labels": HEADER + [["pw: pulse width", O1 + 116, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 116, DIAL_Y + 38, "hint"],
                              ["semi 7:", O2 + 116, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 116, DIAL_Y + 38, "hint"],
-                             ["mixer", O3, VIEW_Y + 12, "label"],
-                             ["sub: square,", O3 + 108, DIAL_Y + 24, "hint"], ["1 oct down", O3 + 108, DIAL_Y + 38, "hint"],
+                             ["mixer", O3, VIEW_Y + 12, "label"], ["sub", SUB_X, VIEW_Y + 12, "label"],
+                             ["as on the", SUB_X, DIAL_Y + 24, "hint"], ["sh-101", SUB_X, DIAL_Y + 38, "hint"],
                              ["one lfo for all voices", O4, ROW_Y + 12, "hint"]]},
         {"rules": [364, 668],
          "labels": HEADER + [["grey: where the envelope opens it", F, ROW_Y + 12, "hint"],
@@ -931,7 +951,7 @@ BASE = {"Chord": 1, "In Key": 0, "Tone": 0, "Length": 0, "Drift": 0, "Machine": 
         "Density": 80, "Throws": 0, "Gate": 1, "Shift": 0, "Dub": 0, "Freeze": 0, "Echo Time": 2,
         "Pump": 0, "Pump Rate": 0, "Pump Attack": 6, "Pump Release": 55, "Pump Curve": 50,
         "DCO1 Wave": 2, "DCO1 Octave": 1, "PW": 70, "PWM": 0, "DCO2 Wave": 0, "DCO2 Octave": 1, "Semi": 0, "Fine": 10,
-        "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
+        "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Sub Mode": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
         "Cutoff": 700, "Resonance": 30, "Env Amount": 50, "Key Track": 50, "Velocity Filter": 50,
         "Attack": 2, "Decay": 260, "Sustain": 0, "Release": 240, "Drive": 25, "Volume": 0}
 # Pattern: 0 dub dotted, 1 one & three+, 2 offbeat chops, 3 skank, 4 deep stab, 5 3-3-2

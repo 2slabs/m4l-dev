@@ -273,7 +273,7 @@
 								"box": {
 									"id": "cb",
 									"maxclass": "codebox",
-									"code": "// One voice. in1: frequency (Hz). in2: gate = velocity 0..1, 0 = release. in3: the LFO (-1..1, shared).\n// Two oscillators, a sub and noise into a mixer, like the Juno / Jupiter / Prophet voices of the time.\n// (gen requires functions before everything else, declarations included.)\n// polyBLEP: removes the aliasing from a saw's jump\nblep(t, dt) {\n\tif (t < dt) {\n\t\tx = t / dt;\n\t\treturn x + x - x * x - 1;\n\t} else if (t > 1 - dt) {\n\t\tx = (t - 1) / dt;\n\t\treturn x * x + x + x + 1;\n\t}\n\treturn 0;\n}\n\nParam wave1(0, min=0, max=2);           // DCO 1: 0 saw, 1 pulse, 2 saw + pulse\nParam oct1(0, min=-1, max=1);           // 16' 8' 4'\nParam pw(0.7, min=0.5, max=0.95);       // pulse width (both DCOs)\nParam wave2(0, min=0, max=2);           // DCO 2: 0 saw, 1 pulse, 2 triangle\nParam oct2(0, min=-1, max=1);\nParam semi(0, min=-12, max=12);         // DCO 2 interval: 7 = a fifth up\nParam fine(10, min=0, max=50);          // DCO 2 detune, cents\nParam lvl1(0.8, min=0, max=1);          // mixer\nParam lvl2(0.8, min=0, max=1);\nParam sublvl(0, min=0, max=1);          // square, an octave below DCO 1\nParam noiseamt(0.08, min=0, max=1);\nParam pwmamt(0, min=0, max=1);          // LFO -> pulse width\nParam lfofilt(0, min=0, max=1);         // LFO -> cutoff, up to +-3 octaves\nParam vibamt(0, min=0, max=1);          // LFO -> pitch, up to +-50 cents\nParam cutoff(700, min=40, max=12000);   // Hz\nParam reso(0.3, min=0, max=1);\nParam envamt(0.5, min=0, max=1);        // envelope -> cutoff, up to +6 octaves\nParam keytrack(0.5, min=0, max=1);\nParam velfilt(0.5, min=0, max=1);       // velocity -> envelope amount\nParam atk(2, min=0.5, max=4000);        // ms\nParam dec(260, min=5, max=6000);        // ms to -40 dB\nParam sus(0, min=0, max=1);\nParam rel(240, min=5, max=6000);        // ms to -40 dB\nParam level(0.22, min=0, max=1);\nParam tonemac(0, min=-1, max=1);        // Play page Tone: cutoff and envelope up or down\nParam lenmac(0, min=-1, max=1);         // Play page Length: decay and release x0.25..x4\nParam panic(0);                         // Stop: every new number ramps the voice to silence\n\nHistory env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);\nHistory ph1(0), ph2(0), phs(0), s1(0), s2(0), s3(0), s4(0);\n\nlfo = in3;\nnote = max(in1, 1);                    // the played pitch (vibrato is applied on top)\nfreq = note * pow(2, vibamt * lfo * 0.5 / 12);\ngatein = in2;\nsr = samplerate;\n\n// gate edges; a new velocity or pitch while held = a stolen voice: start again\nif (gatein > 0 && (lastgate <= 0 || gatein != lastgate || note != lastfreq)) {\n\tstage = 1;\n\tvelo = gatein;\n} else if (gatein <= 0 && lastgate > 0) {\n\tstage = 3;\n}\nlastgate = gatein;\nlastfreq = note;\n\n// Stop: ramp to exactly 0 over 20 ms, whatever the release. A key pressed during the ramp starts when it ends.\nif (panic != lastpanic) {\n\tlastpanic = panic;\n\tfadeleft = max(mstosamps(20), 1);\n\tfadestep = env / fadeleft;\n}\nif (fadeleft > 0) {\n\tfadeleft = fadeleft - 1;\n\tstage = 0;\n\tenv = fadeleft > 0 ? max(env - fadestep, 0) : 0;\n\tlastgate = 0;\n}\n\n// analog-style ADSR: the attack aims past 1, decay and release are exponential\nstretch = pow(4, lenmac);\nka = 1 - exp(-1.47 / max(atk * 0.001 * sr, 1));\nkd = 1 - exp(-4.6 / max(dec * stretch * 0.001 * sr, 1));\nkr = 1 - exp(-4.6 / max(rel * stretch * 0.001 * sr, 1));\nif (stage == 1) {\n\tenv = env + (1.3 - env) * ka;\n\tif (env >= 1) {\n\t\tenv = 1;\n\t\tstage = 2;\n\t}\n} else if (stage == 2) {\n\tenv = env + (sus - env) * kd;\n} else if (stage == 3) {\n\tenv = env + (0 - env) * kr;\n\tif (env < 0.0005) {\n\t\tenv = 0;\n\t\tstage = 0;\n\t}\n}\n\nwidth = clamp(pw + pwmamt * 0.35 * lfo, 0.05, 0.95);\n\n// DCO 1\nf1 = freq * pow(2, oct1);\ndt1 = f1 / sr;\nph1 = wrap(ph1 + dt1, 0, 1);\nsaw1 = 2 * ph1 - 1 - blep(ph1, dt1);\np1b = wrap(ph1 + width, 0, 1);\npulse1 = saw1 - (2 * p1b - 1 - blep(p1b, dt1));\no1 = wave1 < 0.5 ? saw1 : (wave1 < 1.5 ? pulse1 : (saw1 + pulse1) * 0.6);\n\n// DCO 2\nf2 = freq * pow(2, oct2 + semi / 12 + fine / 1200);\ndt2 = f2 / sr;\nph2 = wrap(ph2 + dt2, 0, 1);\nsaw2 = 2 * ph2 - 1 - blep(ph2, dt2);\np2b = wrap(ph2 + width, 0, 1);\npulse2 = saw2 - (2 * p2b - 1 - blep(p2b, dt2));\ntri2 = 2 * abs(2 * ph2 - 1) - 1;\no2 = wave2 < 0.5 ? saw2 : (wave2 < 1.5 ? pulse2 : tri2);\n\n// sub: a square an octave below DCO 1\ndts = dt1 * 0.5;\nphs = wrap(phs + dts, 0, 1);\nsubosc = (phs < 0.5 ? 1 : -1) + blep(phs, dts) - blep(wrap(phs + 0.5, 0, 1), dts);\n\nosc = (o1 * lvl1 + o2 * lvl2 + subosc * sublvl) * 0.5 + noise() * noiseamt * 0.4;\n\n// 4-pole ladder low-pass with saturated feedback\nvel_env = clamp(envamt + 0.25 * tonemac, 0, 1) * (1 - velfilt + velfilt * velo);\nfc = cutoff * pow(2, 2.5 * tonemac) * pow(2, keytrack * log2(note / 261.63)) * pow(2, 6 * vel_env * env)\n\t* pow(2, 3 * lfofilt * lfo);\nfc = clamp(fc, 20, sr * 0.45);\ng = 1 - exp(-twopi * fc / sr);\nk = reso * 3.8;\nx0 = tanh(osc - k * s4);\ns1 = s1 + g * (x0 - s1);\ns2 = s2 + g * (s1 - s2);\ns3 = s3 + g * (s2 - s3);\ns4 = s4 + g * (s3 - s4);\ny = s4 * (1 + k * 0.4);\n\nout1 = y * env * (0.35 + 0.65 * velo) * level;\n",
+									"code": "// One voice. in1: frequency (Hz). in2: gate = velocity 0..1, 0 = release. in3: the LFO (-1..1, shared).\n// Two oscillators, a sub and noise into a mixer, like the Juno / Jupiter / Prophet voices of the time.\n// (gen requires functions before everything else, declarations included.)\n// polyBLEP: removes the aliasing from a saw's jump\nblep(t, dt) {\n\tif (t < dt) {\n\t\tx = t / dt;\n\t\treturn x + x - x * x - 1;\n\t} else if (t > 1 - dt) {\n\t\tx = (t - 1) / dt;\n\t\treturn x * x + x + x + 1;\n\t}\n\treturn 0;\n}\n\nParam wave1(0, min=0, max=2);           // DCO 1: 0 saw, 1 pulse, 2 saw + pulse\nParam oct1(0, min=-1, max=1);           // 16' 8' 4'\nParam pw(0.7, min=0.5, max=0.95);       // pulse width (both DCOs)\nParam wave2(0, min=0, max=2);           // DCO 2: 0 saw, 1 pulse, 2 triangle\nParam oct2(0, min=-1, max=1);\nParam semi(0, min=-12, max=12);         // DCO 2 interval: 7 = a fifth up\nParam fine(10, min=0, max=50);          // DCO 2 detune, cents\nParam lvl1(0.8, min=0, max=1);          // mixer\nParam lvl2(0.8, min=0, max=1);\nParam sublvl(0, min=0, max=1);          // the sub: DCO 1 divided down, as on the SH-101\nParam submode(0, min=0, max=2);         // 0 square -1 oct, 1 square -2 oct, 2 25% pulse -2 oct\nParam noiseamt(0.08, min=0, max=1);\nParam pwmamt(0, min=0, max=1);          // LFO -> pulse width\nParam lfofilt(0, min=0, max=1);         // LFO -> cutoff, up to +-3 octaves\nParam vibamt(0, min=0, max=1);          // LFO -> pitch, up to +-50 cents\nParam cutoff(700, min=40, max=12000);   // Hz\nParam reso(0.3, min=0, max=1);\nParam envamt(0.5, min=0, max=1);        // envelope -> cutoff, up to +6 octaves\nParam keytrack(0.5, min=0, max=1);\nParam velfilt(0.5, min=0, max=1);       // velocity -> envelope amount\nParam atk(2, min=0.5, max=4000);        // ms\nParam dec(260, min=5, max=6000);        // ms to -40 dB\nParam sus(0, min=0, max=1);\nParam rel(240, min=5, max=6000);        // ms to -40 dB\nParam level(0.22, min=0, max=1);\nParam tonemac(0, min=-1, max=1);        // Play page Tone: cutoff and envelope up or down\nParam lenmac(0, min=-1, max=1);         // Play page Length: decay and release x0.25..x4\nParam panic(0);                         // Stop: every new number ramps the voice to silence\n\nHistory env(0), stage(0), lastgate(0), velo(0), lastfreq(0), lastpanic(0), fadeleft(0), fadestep(0);\nHistory ph1(0), ph2(0), dco1_cycle_count(0), s1(0), s2(0), s3(0), s4(0);\n\nlfo = in3;\nnote = max(in1, 1);                    // the played pitch (vibrato is applied on top)\nfreq = note * pow(2, vibamt * lfo * 0.5 / 12);\ngatein = in2;\nsr = samplerate;\n\n// gate edges; a new velocity or pitch while held = a stolen voice: start again\nif (gatein > 0 && (lastgate <= 0 || gatein != lastgate || note != lastfreq)) {\n\tstage = 1;\n\tvelo = gatein;\n} else if (gatein <= 0 && lastgate > 0) {\n\tstage = 3;\n}\nlastgate = gatein;\nlastfreq = note;\n\n// Stop: ramp to exactly 0 over 20 ms, whatever the release. A key pressed during the ramp starts when it ends.\nif (panic != lastpanic) {\n\tlastpanic = panic;\n\tfadeleft = max(mstosamps(20), 1);\n\tfadestep = env / fadeleft;\n}\nif (fadeleft > 0) {\n\tfadeleft = fadeleft - 1;\n\tstage = 0;\n\tenv = fadeleft > 0 ? max(env - fadestep, 0) : 0;\n\tlastgate = 0;\n}\n\n// analog-style ADSR: the attack aims past 1, decay and release are exponential\nstretch = pow(4, lenmac);\nka = 1 - exp(-1.47 / max(atk * 0.001 * sr, 1));\nkd = 1 - exp(-4.6 / max(dec * stretch * 0.001 * sr, 1));\nkr = 1 - exp(-4.6 / max(rel * stretch * 0.001 * sr, 1));\nif (stage == 1) {\n\tenv = env + (1.3 - env) * ka;\n\tif (env >= 1) {\n\t\tenv = 1;\n\t\tstage = 2;\n\t}\n} else if (stage == 2) {\n\tenv = env + (sus - env) * kd;\n} else if (stage == 3) {\n\tenv = env + (0 - env) * kr;\n\tif (env < 0.0005) {\n\t\tenv = 0;\n\t\tstage = 0;\n\t}\n}\n\nwidth = clamp(pw + pwmamt * 0.35 * lfo, 0.05, 0.95);\n\n// DCO 1\nf1 = freq * pow(2, oct1);\ndt1 = f1 / sr;\ndco1_phase_unwrapped = ph1 + dt1;\nif (dco1_phase_unwrapped >= 1) {       // DCO 1 completed a cycle: clock the sub's divider (0..3)\n\tdco1_cycle_count = wrap(dco1_cycle_count + 1, 0, 4);\n}\nph1 = wrap(dco1_phase_unwrapped, 0, 1);\nsaw1 = 2 * ph1 - 1 - blep(ph1, dt1);\np1b = wrap(ph1 + width, 0, 1);\npulse1 = saw1 - (2 * p1b - 1 - blep(p1b, dt1));\no1 = wave1 < 0.5 ? saw1 : (wave1 < 1.5 ? pulse1 : (saw1 + pulse1) * 0.6);\n\n// DCO 2\nf2 = freq * pow(2, oct2 + semi / 12 + fine / 1200);\ndt2 = f2 / sr;\nph2 = wrap(ph2 + dt2, 0, 1);\nsaw2 = 2 * ph2 - 1 - blep(ph2, dt2);\np2b = wrap(ph2 + width, 0, 1);\npulse2 = saw2 - (2 * p2b - 1 - blep(p2b, dt2));\ntri2 = 2 * abs(2 * ph2 - 1) - 1;\no2 = wave2 < 0.5 ? saw2 : (wave2 < 1.5 ? pulse2 : tri2);\n\n// sub: DCO 1 divided by 2 or 4 (the SH-101's flip-flops), so it stays locked to DCO 1 and follows its\n// footage. Its phase is DCO 1's phase plus the cycles counted so far. Square -1 oct, square -2 oct, or a\n// 25% pulse -2 oct (DC removed, so switching doesn't shift the level). Edges band-limited with blep.\nsub_phase_1oct = (wrap(dco1_cycle_count, 0, 2) + ph1) * 0.5;\nsub_dt_1oct = dt1 * 0.5;\nsub_phase_2oct = (dco1_cycle_count + ph1) * 0.25;\nsub_dt_2oct = dt1 * 0.25;\nsub_square_1oct = (sub_phase_1oct < 0.5 ? 1 : -1) + blep(sub_phase_1oct, sub_dt_1oct)\n\t- blep(wrap(sub_phase_1oct + 0.5, 0, 1), sub_dt_1oct);\nsub_square_2oct = (sub_phase_2oct < 0.5 ? 1 : -1) + blep(sub_phase_2oct, sub_dt_2oct)\n\t- blep(wrap(sub_phase_2oct + 0.5, 0, 1), sub_dt_2oct);\nsub_pulse_2oct = (sub_phase_2oct < 0.25 ? 1 : -1) + 0.5 + blep(sub_phase_2oct, sub_dt_2oct)\n\t- blep(wrap(sub_phase_2oct + 0.75, 0, 1), sub_dt_2oct);\nsubosc = submode < 0.5 ? sub_square_1oct : (submode < 1.5 ? sub_square_2oct : sub_pulse_2oct);\n\nosc = (o1 * lvl1 + o2 * lvl2 + subosc * sublvl) * 0.5 + noise() * noiseamt * 0.4;\n\n// 4-pole ladder low-pass with saturated feedback\nvel_env = clamp(envamt + 0.25 * tonemac, 0, 1) * (1 - velfilt + velfilt * velo);\nfc = cutoff * pow(2, 2.5 * tonemac) * pow(2, keytrack * log2(note / 261.63)) * pow(2, 6 * vel_env * env)\n\t* pow(2, 3 * lfofilt * lfo);\nfc = clamp(fc, 20, sr * 0.45);\ng = 1 - exp(-twopi * fc / sr);\nk = reso * 3.8;\nx0 = tanh(osc - k * s4);\ns1 = s1 + g * (x0 - s1);\ns2 = s2 + g * (s1 - s2);\ns3 = s3 + g * (s2 - s3);\ns4 = s4 + g * (s3 - s4);\ny = s4 * (1 + k * 0.4);\n\nout1 = y * env * (0.35 + 0.65 * velo) * level;\n",
 									"fontname": "<Monospaced>",
 									"fontsize": 12.0,
 									"numinlets": 3,
@@ -4843,11 +4843,11 @@
 							"parameter_unitstyle": 5,
 							"parameter_exponent": 1.0,
 							"parameter_annotation_name": "Sub Level",
-							"parameter_info": "Level of the sub: a square wave an octave below DCO 1. Default 0."
+							"parameter_info": "Level of the sub: DCO 1 divided down, an octave or two below it (Sub Mode). Default 0."
 						}
 					},
 					"annotation_name": "Sub Level",
-					"annotation": "Level of the sub: a square wave an octave below DCO 1. Default 0.",
+					"annotation": "Level of the sub: DCO 1 divided down, an octave or two below it (Sub Mode). Default 0.",
 					"hidden": 1
 				}
 			},
@@ -4973,6 +4973,76 @@
 			{
 				"box": {
 					"id": "obj-183",
+					"maxclass": "live.tab",
+					"numinlets": 1,
+					"numoutlets": 3,
+					"patching_rect": [
+						2076.0,
+						664.0,
+						64.0,
+						48.0
+					],
+					"outlettype": [
+						"",
+						"",
+						"float"
+					],
+					"varname": "sub_mode",
+					"parameter_enable": 1,
+					"presentation": 1,
+					"presentation_rect": [
+						576.0,
+						64.0,
+						64.0,
+						48.0
+					],
+					"saved_attribute_attributes": {
+						"valueof": {
+							"parameter_longname": "Sub Mode",
+							"parameter_shortname": "Sub",
+							"parameter_type": 2,
+							"parameter_enum": [
+								"-1 sq",
+								"-2 sq",
+								"-2 pls"
+							],
+							"parameter_mmax": 2,
+							"parameter_initial_enable": 1,
+							"parameter_initial": [
+								0
+							],
+							"parameter_annotation_name": "Sub Mode",
+							"parameter_info": "The sub's wave, as on the SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (keeps a strong -1 octave). Default -1 oct square."
+						}
+					},
+					"annotation_name": "Sub Mode",
+					"annotation": "The sub's wave, as on the SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (keeps a strong -1 octave). Default -1 oct square.",
+					"num_lines_patching": 3,
+					"num_lines_presentation": 3,
+					"hidden": 1
+				}
+			},
+			{
+				"box": {
+					"id": "obj-184",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1266.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend submode",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-185",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -5005,13 +5075,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-184",
+					"id": "obj-186",
 					"maxclass": "newobj",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"patching_rect": [
 						1300.0,
-						1266.0,
+						1270.0,
 						50.0,
 						22.0
 					],
@@ -5023,13 +5093,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-185",
+					"id": "obj-187",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1268.0,
+						1272.0,
 						100.0,
 						22.0
 					],
@@ -5041,7 +5111,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-186",
+					"id": "obj-188",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5088,13 +5158,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-187",
+					"id": "obj-189",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1272.0,
+						1276.0,
 						100.0,
 						22.0
 					],
@@ -5106,7 +5176,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-188",
+					"id": "obj-190",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5153,42 +5223,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-189",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1276.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-190",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1278.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend vibamt",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-191",
 					"maxclass": "newobj",
 					"numinlets": 2,
@@ -5217,7 +5251,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend vib",
+					"text": "prepend vibamt",
 					"outlettype": [
 						""
 					]
@@ -5226,6 +5260,42 @@
 			{
 				"box": {
 					"id": "obj-193",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1284.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-194",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1286.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend vib",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-195",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5272,42 +5342,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-194",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1286.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-195",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1288.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend lfofilt",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-196",
 					"maxclass": "newobj",
 					"numinlets": 2,
@@ -5345,6 +5379,42 @@
 			{
 				"box": {
 					"id": "obj-198",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1294.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-199",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1296.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend lfofilt",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-200",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -5377,7 +5447,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-199",
+					"id": "obj-201",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5424,43 +5494,43 @@
 			},
 			{
 				"box": {
-					"id": "obj-200",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1298.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend cutoff",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-201",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1300.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend cutoff",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-202",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1302.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend cutoff",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-203",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1304.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend cutoff",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-204",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5507,42 +5577,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-203",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1304.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-204",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1306.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend reso",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-205",
 					"maxclass": "newobj",
 					"numinlets": 2,
@@ -5580,6 +5614,42 @@
 			{
 				"box": {
 					"id": "obj-207",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1312.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-208",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1314.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend reso",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-209",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5626,42 +5696,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-208",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1314.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-209",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1316.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend envamt",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-210",
 					"maxclass": "newobj",
 					"numinlets": 2,
@@ -5699,6 +5733,42 @@
 			{
 				"box": {
 					"id": "obj-212",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1322.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-213",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1324.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend envamt",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-214",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5745,13 +5815,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-213",
+					"id": "obj-215",
 					"maxclass": "newobj",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"patching_rect": [
 						1300.0,
-						1324.0,
+						1328.0,
 						50.0,
 						22.0
 					],
@@ -5763,13 +5833,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-214",
+					"id": "obj-216",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1326.0,
+						1330.0,
 						100.0,
 						22.0
 					],
@@ -5781,7 +5851,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-215",
+					"id": "obj-217",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5828,13 +5898,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-216",
+					"id": "obj-218",
 					"maxclass": "newobj",
 					"numinlets": 2,
 					"numoutlets": 1,
 					"patching_rect": [
 						1300.0,
-						1330.0,
+						1334.0,
 						50.0,
 						22.0
 					],
@@ -5846,13 +5916,13 @@
 			},
 			{
 				"box": {
-					"id": "obj-217",
+					"id": "obj-219",
 					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1332.0,
+						1336.0,
 						100.0,
 						22.0
 					],
@@ -5864,7 +5934,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-218",
+					"id": "obj-220",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -5897,7 +5967,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-219",
+					"id": "obj-221",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -5944,43 +6014,43 @@
 			},
 			{
 				"box": {
-					"id": "obj-220",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1338.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend atk",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-221",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1340.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend atk",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-222",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1342.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend atk",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-223",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1344.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend atk",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-224",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6027,43 +6097,43 @@
 			},
 			{
 				"box": {
-					"id": "obj-223",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1344.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend dec",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-224",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1346.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend dec",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-225",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1348.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend dec",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-226",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1350.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend dec",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-227",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6110,42 +6180,6 @@
 			},
 			{
 				"box": {
-					"id": "obj-226",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1350.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-227",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1352.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend sus",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-228",
 					"maxclass": "newobj",
 					"numinlets": 2,
@@ -6183,6 +6217,42 @@
 			{
 				"box": {
 					"id": "obj-230",
+					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1358.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-231",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1360.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend sus",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-232",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6229,43 +6299,43 @@
 			},
 			{
 				"box": {
-					"id": "obj-231",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1360.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rel",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-232",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1362.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend rel",
-					"outlettype": [
-						""
-					]
-				}
-			},
-			{
-				"box": {
 					"id": "obj-233",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1364.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rel",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-234",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1366.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend rel",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-235",
 					"maxclass": "jsui",
 					"numinlets": 1,
 					"numoutlets": 1,
@@ -6298,7 +6368,7 @@
 			},
 			{
 				"box": {
-					"id": "obj-234",
+					"id": "obj-236",
 					"maxclass": "live.dial",
 					"numinlets": 1,
 					"numoutlets": 2,
@@ -6341,42 +6411,6 @@
 					"annotation_name": "Drive",
 					"annotation": "Tape saturation on the voices, before the echo. Default 25%.",
 					"hidden": 1
-				}
-			},
-			{
-				"box": {
-					"id": "obj-235",
-					"maxclass": "newobj",
-					"numinlets": 2,
-					"numoutlets": 1,
-					"patching_rect": [
-						1300.0,
-						1368.0,
-						50.0,
-						22.0
-					],
-					"text": "* 0.01",
-					"outlettype": [
-						"float"
-					]
-				}
-			},
-			{
-				"box": {
-					"id": "obj-236",
-					"maxclass": "newobj",
-					"numinlets": 1,
-					"numoutlets": 1,
-					"patching_rect": [
-						1360.0,
-						1370.0,
-						100.0,
-						22.0
-					],
-					"text": "prepend drive",
-					"outlettype": [
-						""
-					]
 				}
 			},
 			{
@@ -6445,7 +6479,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend tone",
+					"text": "prepend drive",
 					"outlettype": [
 						""
 					]
@@ -6481,7 +6515,7 @@
 						100.0,
 						22.0
 					],
-					"text": "prepend len",
+					"text": "prepend tone",
 					"outlettype": [
 						""
 					]
@@ -6491,11 +6525,47 @@
 				"box": {
 					"id": "obj-243",
 					"maxclass": "newobj",
+					"numinlets": 2,
+					"numoutlets": 1,
+					"patching_rect": [
+						1300.0,
+						1384.0,
+						50.0,
+						22.0
+					],
+					"text": "* 0.01",
+					"outlettype": [
+						"float"
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-244",
+					"maxclass": "newobj",
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
 						1360.0,
-						1384.0,
+						1386.0,
+						100.0,
+						22.0
+					],
+					"text": "prepend len",
+					"outlettype": [
+						""
+					]
+				}
+			},
+			{
+				"box": {
+					"id": "obj-245",
+					"maxclass": "newobj",
+					"numinlets": 1,
+					"numoutlets": 1,
+					"patching_rect": [
+						1360.0,
+						1388.0,
 						100.0,
 						22.0
 					],
@@ -9138,35 +9208,35 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-183",
+						0
+					],
+					"destination": [
+						"obj-184",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-184",
+						0
+					],
+					"destination": [
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
 						"obj-153",
 						0
 					],
 					"destination": [
-						"obj-184",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-184",
-						0
-					],
-					"destination": [
-						"obj-185",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-185",
-						0
-					],
-					"destination": [
-						"obj-183",
+						"obj-186",
 						0
 					]
 				}
@@ -9175,6 +9245,30 @@
 				"patchline": {
 					"source": [
 						"obj-186",
+						0
+					],
+					"destination": [
+						"obj-187",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-187",
+						0
+					],
+					"destination": [
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-188",
 						0
 					],
 					"destination": [
@@ -9186,30 +9280,6 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-186",
-						0
-					],
-					"destination": [
-						"obj-187",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-187",
-						0
-					],
-					"destination": [
-						"obj-183",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
 						"obj-188",
 						0
 					],
@@ -9226,7 +9296,7 @@
 						0
 					],
 					"destination": [
-						"obj-190",
+						"obj-185",
 						0
 					]
 				}
@@ -9235,18 +9305,6 @@
 				"patchline": {
 					"source": [
 						"obj-190",
-						0
-					],
-					"destination": [
-						"obj-12",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-188",
 						0
 					],
 					"destination": [
@@ -9274,42 +9332,6 @@
 						0
 					],
 					"destination": [
-						"obj-183",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-193",
-						0
-					],
-					"destination": [
-						"obj-194",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-194",
-						0
-					],
-					"destination": [
-						"obj-195",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-195",
-						0
-					],
-					"destination": [
 						"obj-12",
 						0
 					]
@@ -9318,7 +9340,43 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-190",
+						0
+					],
+					"destination": [
 						"obj-193",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-193",
+						0
+					],
+					"destination": [
+						"obj-194",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-194",
+						0
+					],
+					"destination": [
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-195",
 						0
 					],
 					"destination": [
@@ -9346,30 +9404,6 @@
 						0
 					],
 					"destination": [
-						"obj-183",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-199",
-						0
-					],
-					"destination": [
-						"obj-200",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-200",
-						0
-					],
-					"destination": [
 						"obj-12",
 						0
 					]
@@ -9378,19 +9412,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-199",
-						0
-					],
-					"destination": [
-						"obj-201",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-201",
+						"obj-195",
 						0
 					],
 					"destination": [
@@ -9402,31 +9424,43 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-198",
+						0
+					],
+					"destination": [
+						"obj-199",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-199",
+						0
+					],
+					"destination": [
+						"obj-185",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-201",
+						0
+					],
+					"destination": [
 						"obj-202",
 						0
-					],
-					"destination": [
-						"obj-203",
-						0
 					]
 				}
 			},
 			{
 				"patchline": {
 					"source": [
-						"obj-203",
-						0
-					],
-					"destination": [
-						"obj-204",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-204",
+						"obj-202",
 						0
 					],
 					"destination": [
@@ -9438,7 +9472,31 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-202",
+						"obj-201",
+						0
+					],
+					"destination": [
+						"obj-203",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-203",
+						0
+					],
+					"destination": [
+						"obj-200",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-204",
 						0
 					],
 					"destination": [
@@ -9466,7 +9524,19 @@
 						0
 					],
 					"destination": [
-						"obj-198",
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-204",
+						0
+					],
+					"destination": [
+						"obj-207",
 						0
 					]
 				}
@@ -9490,7 +9560,7 @@
 						0
 					],
 					"destination": [
-						"obj-209",
+						"obj-200",
 						0
 					]
 				}
@@ -9499,6 +9569,30 @@
 				"patchline": {
 					"source": [
 						"obj-209",
+						0
+					],
+					"destination": [
+						"obj-210",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-210",
+						0
+					],
+					"destination": [
+						"obj-211",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-211",
 						0
 					],
 					"destination": [
@@ -9510,35 +9604,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-207",
+						"obj-209",
 						0
 					],
 					"destination": [
-						"obj-210",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-210",
-						0
-					],
-					"destination": [
-						"obj-211",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-211",
-						0
-					],
-					"destination": [
-						"obj-198",
+						"obj-212",
 						0
 					]
 				}
@@ -9562,7 +9632,7 @@
 						0
 					],
 					"destination": [
-						"obj-214",
+						"obj-200",
 						0
 					]
 				}
@@ -9574,7 +9644,7 @@
 						0
 					],
 					"destination": [
-						"obj-12",
+						"obj-215",
 						0
 					]
 				}
@@ -9598,18 +9668,6 @@
 						0
 					],
 					"destination": [
-						"obj-217",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-217",
-						0
-					],
-					"destination": [
 						"obj-12",
 						0
 					]
@@ -9618,43 +9676,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-219",
-						0
-					],
-					"destination": [
-						"obj-220",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-220",
-						0
-					],
-					"destination": [
-						"obj-12",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-219",
-						0
-					],
-					"destination": [
-						"obj-221",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-221",
+						"obj-217",
 						0
 					],
 					"destination": [
@@ -9666,7 +9688,55 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-218",
+						0
+					],
+					"destination": [
+						"obj-219",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-219",
+						0
+					],
+					"destination": [
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-221",
+						0
+					],
+					"destination": [
 						"obj-222",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-222",
+						0
+					],
+					"destination": [
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-221",
 						0
 					],
 					"destination": [
@@ -9682,19 +9752,7 @@
 						0
 					],
 					"destination": [
-						"obj-12",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-222",
-						0
-					],
-					"destination": [
-						"obj-224",
+						"obj-220",
 						0
 					]
 				}
@@ -9706,7 +9764,7 @@
 						0
 					],
 					"destination": [
-						"obj-218",
+						"obj-225",
 						0
 					]
 				}
@@ -9715,6 +9773,18 @@
 				"patchline": {
 					"source": [
 						"obj-225",
+						0
+					],
+					"destination": [
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-224",
 						0
 					],
 					"destination": [
@@ -9730,7 +9800,7 @@
 						0
 					],
 					"destination": [
-						"obj-227",
+						"obj-220",
 						0
 					]
 				}
@@ -9739,18 +9809,6 @@
 				"patchline": {
 					"source": [
 						"obj-227",
-						0
-					],
-					"destination": [
-						"obj-12",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-225",
 						0
 					],
 					"destination": [
@@ -9778,30 +9836,6 @@
 						0
 					],
 					"destination": [
-						"obj-218",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-230",
-						0
-					],
-					"destination": [
-						"obj-231",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-231",
-						0
-					],
-					"destination": [
 						"obj-12",
 						0
 					]
@@ -9810,91 +9844,43 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-227",
+						0
+					],
+					"destination": [
+						"obj-230",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
 						"obj-230",
 						0
 					],
 					"destination": [
+						"obj-231",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-231",
+						0
+					],
+					"destination": [
+						"obj-220",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
 						"obj-232",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-232",
-						0
-					],
-					"destination": [
-						"obj-218",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-234",
-						0
-					],
-					"destination": [
-						"obj-235",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-235",
-						0
-					],
-					"destination": [
-						"obj-236",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-236",
-						0
-					],
-					"destination": [
-						"obj-15",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-234",
-						0
-					],
-					"destination": [
-						"obj-237",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-237",
-						0
-					],
-					"destination": [
-						"obj-238",
-						0
-					]
-				}
-			},
-			{
-				"patchline": {
-					"source": [
-						"obj-238",
 						0
 					],
 					"destination": [
@@ -9906,11 +9892,119 @@
 			{
 				"patchline": {
 					"source": [
+						"obj-233",
+						0
+					],
+					"destination": [
+						"obj-12",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-232",
+						0
+					],
+					"destination": [
+						"obj-234",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-234",
+						0
+					],
+					"destination": [
+						"obj-220",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-236",
+						0
+					],
+					"destination": [
+						"obj-237",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-237",
+						0
+					],
+					"destination": [
+						"obj-238",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-238",
+						0
+					],
+					"destination": [
+						"obj-15",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-236",
+						0
+					],
+					"destination": [
+						"obj-239",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-239",
+						0
+					],
+					"destination": [
+						"obj-240",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
+						"obj-240",
+						0
+					],
+					"destination": [
+						"obj-235",
+						0
+					]
+				}
+			},
+			{
+				"patchline": {
+					"source": [
 						"obj-70",
 						0
 					],
 					"destination": [
-						"obj-239",
+						"obj-241",
 						0
 					]
 				}
@@ -9918,11 +10012,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-239",
+						"obj-241",
 						0
 					],
 					"destination": [
-						"obj-240",
+						"obj-242",
 						0
 					]
 				}
@@ -9930,11 +10024,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-240",
+						"obj-242",
 						0
 					],
 					"destination": [
-						"obj-198",
+						"obj-200",
 						0
 					]
 				}
@@ -9946,7 +10040,7 @@
 						0
 					],
 					"destination": [
-						"obj-241",
+						"obj-243",
 						0
 					]
 				}
@@ -9954,11 +10048,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-241",
+						"obj-243",
 						0
 					],
 					"destination": [
-						"obj-242",
+						"obj-244",
 						0
 					]
 				}
@@ -9966,11 +10060,11 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-242",
+						"obj-244",
 						0
 					],
 					"destination": [
-						"obj-218",
+						"obj-220",
 						0
 					]
 				}
@@ -9982,7 +10076,7 @@
 						0
 					],
 					"destination": [
-						"obj-243",
+						"obj-245",
 						0
 					]
 				}
@@ -9990,7 +10084,7 @@
 			{
 				"patchline": {
 					"source": [
-						"obj-243",
+						"obj-245",
 						0
 					],
 					"destination": [
