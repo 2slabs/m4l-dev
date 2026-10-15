@@ -8,7 +8,7 @@ A [2sl](https://2sl.to) project. The **2sl drums** chip in the header links to 2
 
 Drop `2sl-drums.amxd` on a MIDI track and press play in Live: it plays from Live's transport. Keep `2sl-drums.js`, `2sl-drums-ui.js` and `2sl-drums-view.js` next to it, or use the frozen `dist/2sl-drums-<version>.amxd`. MIDI notes on the track also play the voices (GM drum notes: 36 BD, 38 SD, 37 RS, 39 CP, 42/44 CH, 46 OH, 51/59 RD), so clips and pads work too.
 
-The device is 772 × 169 px (the kit page sets the width).
+The device is 944 × 169 px (the pattern page sets the width).
 
 ## Controls
 
@@ -18,12 +18,13 @@ There are two pages: **pattern** and **kit**. The header has the **preset** menu
 
 | part | what it does |
 |---|---|
-| grid (left) | One row per voice, 16 steps. **Click a step** to cycle rest → hit → accent → rest; **shift-click** sets a ghost. The names of the rows Voice picks are lit. The playhead is outlined in blue. While you turn Seed or a setting, the grid shows the live result. |
+| grid (left) | One row per voice, 16 steps. **Click a step** to cycle rest → hit → accent → rest; **shift-click** sets a ghost. The names of the rows Voice picks are lit. **Click a voice's name** to pick that row: the Voice dial moves, just as turning it would (it commits). A click on the name of the row Voice already picks picks all; on all, a click on a name picks that row. The playhead is outlined in blue. While you turn Seed or a setting, the grid shows the live result. |
 | **Voice** | The row the function changes: bd, sd, rs, cp, ch, oh, rd, or **all** (the last). On all, generators make the whole kit and modifiers change every row. |
-| **Function** | The generator or modifier. Only its own setting dials show, to the right. |
+| **Function** | A button per function, in two rows: the generator or modifier. It is one Live parameter (a list of the functions), so a MIDI knob mapped to it sweeps through them. Only the chosen function's setting dials show, to the right. |
 | **Seed** | Walks the function's variants: every combination of its settings in one list, the finest setting changing fastest. Turning Seed moves the setting dials; turning a setting dial moves Seed. |
 | setting dials | The function's settings (one Live parameter each; the table below). Each function keeps its own. |
 | **Undo** | Drops what you turned since the last commit (the pattern goes back to the base, the dials back to where you started). Else steps back one commit. A commit after an Undo drops the patterns you undid (there's no redo). |
+| **Clear** | Clears the row Voice picks (every row, on all): all rests. It commits what you were turning first; the clear is one history step, and Undo brings the row back. A clear that changes nothing is no step (the Max window says so). |
 | status line | Line 1: Voice, Function, Seed's place (seed n / how many). Line 2: the settings. Line 3: "the base", "live: …" with what is shown, or a warning in blue (open hh on a row other than oh, a row grids has nothing for). Line 4: where you are in the history, and what made the pattern. |
 | **Swing** | The 909's shuffle, 1 (none) to 7. |
 
@@ -31,7 +32,7 @@ How it works (the user's design: `PLANS/2026-10-15-2sl-drums-knobs.md`, on the f
 
 - A generator is a pure function settings → rows; a modifier is a pure function (pattern, settings) → pattern. A hand edit is one more modifier.
 - **Live, with no Run.** The first turn of Seed or a setting after a commit takes the pattern as it is as the **base**. Every turn then shows (and plays) f(base, settings) on the rows Voice picks, at once, the settings you started from too: to put the remembered settings on another row, turn any knob away and back. The base itself comes back by Undo, or by a modifier's settings that change nothing (shift 0, thin 0% ...).
-- **Commits.** Moving Voice or Function commits what is shown as one history step, and it becomes the next base; it doesn't apply anything itself. A hand edit commits first, then is a step of its own. Nothing changed: no step.
+- **Commits.** Moving Voice or Function commits what is shown as one history step, and it becomes the next base; it doesn't apply anything itself. A hand edit and Clear commit first, then are a step of their own. Nothing changed: no step.
 - **Each function remembers its settings** when you switch away and back. Coming back doesn't apply them: the base is the pattern as it is now, and the remembered settings are where the next turning starts.
 - The history keeps the **last 100 commits** (the oldest go); it isn't saved with the set. The pattern playing (live or committed) is saved with the set, in hidden parameters, and so are Voice, Function, every setting, Seed and Swing (they are Live parameters). When Live reopens a set, the history starts from the saved pattern, and Seed is set from the saved settings if the two disagree.
 
@@ -61,7 +62,7 @@ None of the functions draws random numbers when it runs: the same pattern and se
 
 The canned kits (`kit`): 1 P1 basic channel, 2 P8 4 ingredients, 3 P1 + rim 16ths, 4 P3 minimal house, 5 P7 house 124, 6 P4 deep house, 7 P2 motor city, 8 P2 rim answer, 9 P7 techno 130, 10 P9 mills 137, 11 P5 dark rumble, 12 P6 rolling, 13 P11 tresillo, 14 P11 bossa, 15 P11 son clave. The Init pattern is kit 1.
 
-Adding a function is one entry in `src/2sl-drums-functions.js`'s `FUNCTIONS`: name, kind, Info text, its settings (name, min, max, initial, unit, Info text; at least one, at most three), their `order` (finest first) and the function itself. The build reads the entries and makes the Function dial's choices, one dial per setting (shown only while Function picks it) and their Info text from them.
+Adding a function is one entry in `src/2sl-drums-functions.js`'s `FUNCTIONS`: name, kind, Info text, its settings (name, min, max, initial, unit, Info text; at least one, at most three), their `order` (finest first) and the function itself. The build reads the entries and makes the Function buttons, one dial per setting (shown only while Function picks it) and their Info text from them.
 
 ### Playback
 
@@ -135,7 +136,7 @@ All sources are in `references/drums/` (README.md, patterns.md, voices.md, produ
   - Reverse's span (reverse had no setting, and Seed needs one to have anything to walk). The modifiers' initial settings at "no change".
   - Open hh on one row writes only oh: on oh alone the ch hits stay too.
   - The hit velocity 0.7 (the ghost's 0.2 is B5's 15–35 of 127; an accent is 1).
-  - Function names fit a dial's label: "open hh" for open hats.
+  - Function names fit a Function button (54 px): "open hh" for open hats.
 - **909 numbers no source gives**:
   - BD: base pitch 30–90 Hz (default 50); sweep up to ×4 over 30 ms; click pulse 1.5 ms and noise 6 ms; output low-pass 9 kHz.
   - SD: VCO 1 at 180 Hz and VCO 2 at ×1.83. These are SOS's generic patch (180 / 330 Hz), not the 909. Also: bend depth 0.4; VCO decays 180 / 90 ms; noise low-pass 7 kHz, high-pass 1.8 kHz; ENV5 90 ms.
@@ -159,7 +160,7 @@ All sources are in `references/drums/` (README.md, patterns.md, voices.md, produ
 - Everything audible. The voices were checked with our GenExpr subset (`tools/genexpr.py`), which catches syntax and scoping and renders the code, not by gen~'s compiler.
 - The transport clock and timing jitter of [js] (the step trigger comes from the low-priority thread, like 2sl stab's; swing is then sample-accurate in gen~).
 - Hidden-parameter storage when a set is reopened (the pattern), and the order Live restores Voice, Function, Seed and the settings in (the tests try one order; the brain takes the settings as the truth whatever the order).
-- The pattern page in Live: the enum dials (Voice, Function) showing their choice's name; how the setting dials look and drag (Int and Percent unit styles; random's seed setting is a float shown as Int, because Live's Int type holds 256 values); Function's group showing and hiding the setting dials (`sendbox hidden`, tested offline); how a live.text button sends Undo.
+- The pattern page in Live: the Voice dial showing its choice's name; the Function live.tab laid out in two rows (`num_lines_presentation`) and swept by a MIDI knob; how the setting dials look and drag (Int and Percent unit styles; random's seed setting is a float shown as Int, because Live's Int type holds 256 values); Function's group showing and hiding the setting dials (`sendbox hidden`, tested offline); how a live.text button sends Undo.
 - Seed in Live: that Live holds its float exactly enough (the tests assume a 32-bit float), that a dial set from the brain sends the value straight back, as a live.dial does with a number it is sent (the brain is tested with echoes at once and late; one that never came back would make it take one later turn of that dial to the same value for the echo), and how far a MIDI knob jumps on a big function.
 - The kit page in Live: the Voice buttons showing and hiding their controls (the UI script's `sendbox hidden`, tested offline), the mute and solo chips.
 - The Info View text, the recolouring, light and dark themes, and how the grid feels to click.
@@ -172,7 +173,7 @@ The Grids pattern map (25 nodes of `grids/resources.cc`, © Emilie Gillet, GPLv3
 ## Design
 
 The 2sl-ui look, built on the shared kit (`src/2sl_kit.py`, `src/2sl-kit-*.template.js`):
-- 772 × 169 on a 4 px grid: the width the kit page needs (the build takes the widest of the pages and the header). The pattern page: the grid on the left (it takes the full height: seven rows need it); on the right, the status line in the display band, Undo and Swing in the chip row, and the dials Voice, Function, Seed, then the active function's settings (up to three). The kit page keeps stab's three bands (display, chips and buttons, dials): the selected voice on the left, the mixer on the right. The build fails if anything shown at the same time overlaps.
+- 944 × 169 on a 4 px grid: the width the pattern page needs (the build takes the widest of the pages and the header). The pattern page: the grid on the left (it takes the full height: seven rows need it); on the right, the status line in the display band, Undo, Clear and Swing in the chip row, and in the dial band Voice, the Function buttons (two rows of six, 54 px each, as "open hh" needs), Seed, then the active function's settings (up to three). Three rows of four buttons would make the device 836 px wide. The kit page keeps stab's three bands (display, chips and buttons, dials): the selected voice on the left, the mixer on the right. The build fails if anything shown at the same time overlaps.
 - Displays are drawn in Cozette with the 2sl-ui tokens, light or dark to follow Live's theme.
 - Live's controls are recoloured from the same tokens.
 - Every control and display has Info View text.
@@ -191,7 +192,7 @@ The patch is generated. Edit these, then run `python3 src/2sl-drums.py` (it need
 
 Checks:
 
-- `node tests/2sl-drums.test.js`: every function against its sources, purity, the registry against the Live parameters, the variants (the round trip Seed → settings → Seed, neighbours one step apart, the orders and counts), the live application, commits on Voice and Function, Undo and the history and its limit, the echoes of the dials (at once and late), all and single rows, open hh's rows, the hand edit, storage round trips, playback velocities, swing timing, the clock, MIDI, the mixer's wiring, the Voice and Function groups, loud failures, the UI script and every display, and that no message the patch sends a script collides with one of its function names.
+- `node tests/2sl-drums.test.js`: every function against its sources, purity, the registry against the Live parameters, the variants (the round trip Seed → settings → Seed, neighbours one step apart, the orders and counts), the live application, commits on Voice and Function, Clear, picking a row by its name, Undo and the history and its limit, the echoes of the dials (at once and late), all and single rows, open hh's rows, the hand edit, storage round trips, playback velocities, swing timing, the clock, MIDI, the mixer's wiring, the Voice and Function groups, loud failures, the UI script and every display, and that no message the patch sends a script collides with one of its function names.
 - `python3 tests/test_2sl_kit.py`: the kit's layout check, groups (by a live.tab or any control), dial types, controls kept out of presets.
 - `python3 tools/es5check.py devices/2sl-drums/*.js`: ES5 syntax, which is what Max's js needs.
 - The build checks the gen~ code with `tools/genexpr.py`, our GenExpr subset checker; `python3 tools/test_genexpr.py` tests the checker itself, including against 2sl stab's gen~ code.

@@ -21,7 +21,7 @@ time overlap.
 
 A page can hold groups of controls that a selector shows one at a time: a live.tab (`group_selector`), like 2sl
 drums' kit page, where the voice buttons show one voice's controls, or any control (`groups_selected_by`), like
-2sl drums' Function dial, which shows only its function's settings.
+2sl drums' Function buttons, which show only its function's settings.
 
 Controls are in the presets (their initial value from BASE, the Init preset) unless they are given
 `initial_outside_presets`: then they are saved with the set but presets leave them alone.
@@ -316,13 +316,18 @@ class DevicePatchBuilder:
         self.controls_by_kind["menu"].append(varname)
         return self.on_page(page, box_id, varname, group)
 
-    def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None):
-        """Selector buttons (a live.tab), side by side on one line."""
-        box_id = self.param("live.tab", name, short, (1500 + x, 600 + y, w, ROW_H), 2, (x, y, w, ROW_H),
+    def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None, rows=1):
+        """Selector buttons (a live.tab): one enum parameter, a button per item, in `rows` lines of ROW_H. live.tab
+        splits each line's width equally: every button needs 6 px a character (Cozette's advance) + 12."""
+        per_row = -(-len(items) // rows)
+        if w // per_row < 6 * max(len(i) for i in items) + 12:
+            self.fail(f"tabs {name!r}: {per_row} buttons a row in {w} px leave {w // per_row} px each; the longest "
+                      f"name needs {6 * max(len(i) for i in items) + 12}")
+        box_id = self.param("live.tab", name, short, (1500 + x, 600 + y, w, ROW_H * rows), 2, (x, y, w, ROW_H * rows),
                             parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1,
                             parameter_initial=[self.initial(name, initial_outside_presets)])
         varname = varname_for(name)
-        self.find(box_id).update(num_lines_patching=1, num_lines_presentation=1)
+        self.find(box_id).update(num_lines_patching=rows, num_lines_presentation=rows)
         self.in_presets(name, varname, initial_outside_presets)
         self.controls_by_kind["tab"].append(varname)
         return self.on_page(page, box_id, varname, group)

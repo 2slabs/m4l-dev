@@ -107,6 +107,15 @@ def test_dials_are_floats_ints_or_enums():
     expect_failure(lambda: patch.dial("C", "C", TARGET, "c", 0, 999, 0, 156, 119, "one", integer=True), "256 values")
 
 
+def test_tabs_in_rows_need_room_for_the_longest_name():
+    patch = builder()
+    patch.tabs("Tool", "Tool", ["one", "two", "three", "four"], 12, 40, 108, "one", initial_outside_presets=0, rows=2)
+    assert patch.find_by_varname("tool")["presentation_rect"][3] == 30, "two rows of 15 px"
+    assert patch.find_by_varname("tool")["num_lines_presentation"] == 2
+    expect_failure(lambda: patch.tabs("Pick", "Pick", ["one", "two", "three", "four"], 12, 80, 80, "one",
+                                      initial_outside_presets=0, rows=2), "longest")
+
+
 def find_by_varname(self, varname):
     found = [x["box"] for x in self.boxes if x["box"].get("varname") == varname]
     assert len(found) == 1, f"{len(found)} boxes named {varname}"

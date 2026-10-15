@@ -186,8 +186,9 @@ INFO = {
     # views
     "Link view": ("2sl.to", "Opens 2sl.to in your browser."),
     "Grid view": ("Pattern", "The pattern: a row per voice, 16 steps. Click a step: rest, hit, accent (bright, with a "
-                  "bar on top); shift-click: a ghost (dim). The lit names are the rows Voice picks. Blue outline: the "
-                  "step playing. While Seed or a setting is being turned, this is the live result."),
+                  "bar on top); shift-click: a ghost (dim). The lit names are the rows Voice picks; click a name to pick "
+                  "that row (Voice moves; the row it already picks: all). Blue outline: the step playing. While "
+                  "Seed or a setting is being turned, this is the live result."),
     "Status view": ("Status", "Line 1: Voice, Function and where Seed is in the function's variants. Line 2: the "
                     "function's settings. Line 3: what is shown (the base, or live), or a warning in blue (open hh "
                     "on a row other than oh, a row grids has nothing for). Line 4: where you are in the history "
@@ -221,6 +222,8 @@ INFO = {
              "fastest, neighbours one step apart; turning it moves the settings, turning a setting moves it. Shown at "
              "once: the first turn after a commit takes the pattern as it is as the base; Undo brings the base back. "
              "0-100% of the way through this function's variants (the status line shows which)."),
+    "Clear": ("Clear", "Clears the row Voice picks (every row, on all): all rests. Commits what is being turned "
+              "first; the clear is one history step (Undo brings the row back). A clear that changes nothing is no step."),
     "Undo": ("Undo", f"Drops what Seed and the settings show that isn't committed (back to the base, the settings "
              f"back where they were). Else steps back one commit (a Voice or Function move, or a hand edit). The last "
              f"{HISTORY_LIMIT} patterns are kept; the history isn't saved with the set (the pattern playing is)."),
@@ -281,7 +284,15 @@ SETTINGS_SHOWN = 3                              # setting dials a function can s
 STEP_W, LABEL_W = 16, 24                        # the grid: a 16 px column per step after the voice names
 P_GRID, P_GRID_W = 12, LABEL_W + 16 * STEP_W + 2
 P_KNOBS = P_GRID + P_GRID_W + 20                # Voice, Function, Seed; then the function's settings
-P_SETTINGS = P_KNOBS + 3 * DIAL_STEP + 12
+# Function: a button per function (a live.tab, one enum parameter, so a MIDI knob sweeps it), in two rows, between
+# the Voice and Seed dials; a button is as wide as the longest name needs (the kit's live.tab rule)
+FUNCTION_ROWS = 2
+FUNCTION_BUTTON_W = 6 * max(len(entry["name"]) for entry in FUNCTION_REGISTRY) + 12
+FUNCTION_TABS_X = P_KNOBS + DIAL_STEP
+FUNCTION_TABS_W = FUNCTION_BUTTON_W * -(-len(FUNCTION_REGISTRY) // FUNCTION_ROWS)
+FUNCTION_TABS_Y = kit.DIAL_Y + (kit.DIAL_HEIGHT - FUNCTION_ROWS * kit.ROW_H) // 2
+P_SEED = FUNCTION_TABS_X + FUNCTION_TABS_W + 12
+P_SETTINGS = P_SEED + DIAL_STEP + 12
 PATTERN_PAGE_W = P_SETTINGS + (SETTINGS_SHOWN - 1) * DIAL_STEP + kit.DIAL_WIDTH + 12
 for entry in FUNCTION_REGISTRY:
     if len(entry["params"]) > SETTINGS_SHOWN:
@@ -355,23 +366,24 @@ for outlet_index, (_, stored) in enumerate(store_route_names):
 # ================= PATTERN: the grid | the status line, Undo, Swing; Voice, Function, Seed, the settings ============
 v_grid = patch.view("grid", P_GRID, VIEW_Y, P_GRID_W, kit.DEVICE_HEIGHT - 4 - VIEW_Y, "pattern", info="Grid view")
 patch.wire(brain, v_grid, 1, 0)
-patch.wire(v_grid, brain, 0, 1)                 # clicks: edit
+patch.wire(v_grid, brain, 0, 1)                 # clicks: edit, name_click
 v_status = patch.view("status", P_KNOBS, VIEW_Y, W - 12 - P_KNOBS, VIEW_H, "pattern", info="Status view")
 patch.wire(brain, v_status, 2, 0)
 
 
-patch.dial("Voice", "Voice", brain, "voice", 0, 0, 0, P_KNOBS, DIAL_Y, "pattern", items=VOICE_CHOICES, inlet=1,
+voice_dial = patch.dial("Voice", "Voice", brain, "voice", 0, 0, 0, P_KNOBS, DIAL_Y, "pattern", items=VOICE_CHOICES, inlet=1,
            initial_outside_presets=INITIAL_VOICE)
-function_dial = patch.dial("Function", "Function", brain, "function", 0, 0, 0, P_KNOBS + DIAL_STEP, DIAL_Y, "pattern",
-                           items=FUNCTION_NAMES, inlet=1, initial_outside_presets=INITIAL_FUNCTION)
-patch.groups_selected_by(function_dial, len(FUNCTION_REGISTRY), "pattern")
+function_tabs = patch.tabs("Function", "Function", FUNCTION_NAMES, FUNCTION_TABS_X, FUNCTION_TABS_Y, FUNCTION_TABS_W,
+                           "pattern", initial_outside_presets=INITIAL_FUNCTION, rows=FUNCTION_ROWS)
+patch.tell(function_tabs, "function", brain, 1)
+patch.groups_selected_by(function_tabs, len(FUNCTION_REGISTRY), "pattern")
 # Seed: a float, 0-100% of the way through the active function's variants (Live's Int type holds 256 values; the
 # functions have up to millions, and one parameter serves every function: the brain scales it)
-seed_dial = patch.dial("Seed", "Seed", brain, "seed", 0, 100, UNIT_STYLES["%"], P_KNOBS + 2 * DIAL_STEP, DIAL_Y,
+seed_dial = patch.dial("Seed", "Seed", brain, "seed", 0, 100, UNIT_STYLES["%"], P_SEED, DIAL_Y,
                        "pattern", inlet=1,
                        initial_outside_presets=FUNCTION_REGISTRY[INITIAL_FUNCTION]["initial_seed"])
 # the brain sets Seed and the settings (outlet 5: `<scripting name> value`); each echoes back, which it ignores
-parameter_targets = [(kit.varname_for("Seed"), seed_dial)]
+parameter_targets = [(kit.varname_for("Voice"), voice_dial), (kit.varname_for("Seed"), seed_dial)]
 setting_parameters = []
 for function_index, entry in enumerate(FUNCTION_REGISTRY):
     varnames = []
@@ -391,11 +403,12 @@ patch.wire(brain, parameter_route, 5, 0)
 for outlet_index, (_, target_dial) in enumerate(parameter_targets):
     patch.wire(parameter_route, target_dial, outlet_index, 0)
 
-undo_button = patch.toggle("Undo", "Undo", P_KNOBS, ROW_Y, 48, 15, "pattern", mode=0)
-# a press goes straight to its message (as 2sl stab's buttons do)
-undo_message = patch.box(cls="message", text="undo", rect=(1100, 300, 70, 22), ins=2, outs=1)
-patch.wire(undo_button, undo_message)
-patch.wire(undo_message, brain, 0, 1)
+# Undo and Clear: a press goes straight to its message (as 2sl stab's buttons do)
+for button_index, (button_name, message) in enumerate((("Undo", "undo"), ("Clear", "clear"))):
+    button = patch.toggle(button_name, button_name, P_KNOBS + button_index * DIAL_STEP, ROW_Y, 48, 15, "pattern", mode=0)
+    button_message = patch.box(cls="message", text=message, rect=(1100, 300 + 30 * button_index, 70, 22), ins=2, outs=1)
+    patch.wire(button, button_message)
+    patch.wire(button_message, brain, 0, 1)
 SWING_W = 72
 swing_x = W - 12 - SWING_W
 swing_items = [f"{level + 1}: {percent:.0f}%" for level, percent in enumerate(SWING_PERCENT)]
@@ -458,7 +471,8 @@ LAYOUT = {
     "subtitle": SUBTITLE_X,
     "pages": [
         {"rules": [P_KNOBS - 10, P_SETTINGS - 6],
-         "labels": HEADER_LABELS + [["swing", swing_x - 36, ROW_Y + 12, "label"]]},
+         "labels": HEADER_LABELS + [["swing", swing_x - 36, ROW_Y + 12, "label"],
+                                    ["function", FUNCTION_TABS_X, FUNCTION_TABS_Y - 3, "label"]]},
         {"rules": [K_MIX - 12, K_ACCENT - 12],
          "labels": HEADER_LABELS},
     ],
@@ -478,7 +492,7 @@ brain_js = patch.fill_template(brain_template, {
     "/*SWING_PERCENT*/": json.dumps(SWING_PERCENT), "/*GRADE_VELOCITY*/": json.dumps(GRADE_VELOCITY),
     "/*INITIAL_PATTERN*/": json.dumps(INITIAL_PATTERN), "/*HISTORY_LIMIT*/": str(HISTORY_LIMIT),
     "/*INITIAL_VOICE*/": str(INITIAL_VOICE), "/*INITIAL_FUNCTION*/": str(INITIAL_FUNCTION),
-    "/*SEED_PARAMETER*/": json.dumps(kit.varname_for("Seed")), "/*SETTING_PARAMETERS*/": json.dumps(setting_parameters),
+    "/*VOICE_PARAMETER*/": json.dumps(kit.varname_for("Voice")), "/*SEED_PARAMETER*/": json.dumps(kit.varname_for("Seed")), "/*SETTING_PARAMETERS*/": json.dumps(setting_parameters),
     "/*FUNCTIONS*/": FUNCTIONS_CODE.strip(), "/*KIT_CLOCK*/": clock_snippet.strip()}, "the brain template")
 VIEW_CODE = open(os.path.join(HERE, "2sl-drums-view.template.js")).read()
 VIEW_CODE = patch.fill_template(VIEW_CODE, {"/*VOICE_NAMES*/": json.dumps([v["name"] for v in VOICES]),

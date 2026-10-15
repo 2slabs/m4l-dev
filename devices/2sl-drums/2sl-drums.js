@@ -20,6 +20,8 @@
 //     seed x          0-100: how far through the function's variants (Seed)
 //     param f p x     function f's setting p is x (one Live parameter per setting, built from FUNCTIONS)
 //     undo            drop what isn't committed, else step back
+//     clear           the row(s) Voice picks become rests: commits first, then one step (none if nothing changes)
+//     name_click v    a click on voice v's name: Voice picks v (v again, or on all: see voiceOfNameClick)
 //     edit v s [g]    a click on a step: rest/ghost -> hit -> accent -> rest; with g, set grade g
 //     swing i         0-6 = the 909's shuffle 1-7
 //     steps_<voice>_a n / steps_<voice>_b n   the pattern as stored with the set (steps 1-8 / 9-16, 2 bits each)
@@ -29,7 +31,7 @@
 // out 0: to gen~: `delay_<voice> ms` then `trig_<voice> serial+velocity/2` per hit
 // out 1: to the grid display    out 2: to the status display    out 3: hits, to the mix and voice displays
 // out 4: stored values (route to the hidden parameters)
-// out 5: `<scripting name> value` to the Live parameters Seed and the settings (route to each)
+// out 5: `<scripting name> value` to the Live parameters Voice, Seed and the settings (route to each)
 inlets = 2;
 outlets = 6;
 
@@ -46,7 +48,8 @@ var INITIAL_PATTERN = ["x...x...x...x...", "....x.......x...", "................
 var HISTORY_LIMIT = 100;
 var INITIAL_VOICE = 7;        // Voice's and Function's initial values, as the patch has them
 var INITIAL_FUNCTION = 0;
-var SEED_PARAMETER = "seed";      // the scripting names outlet 5 addresses: Seed's,
+var VOICE_PARAMETER = "voice";    // the scripting names outlet 5 addresses: Voice's,
+var SEED_PARAMETER = "seed";      // Seed's,
 var SETTING_PARAMETERS = [["canned_kit", "canned_from"], ["grids_x", "grids_y", "grids_density"], ["euclid_hits", "euclid_rotation", "euclid_steps"], ["random_density", "random_accent", "random_seed"], ["shift_steps"], ["reverse_span"], ["thin_amount"], ["ghosts_amount"], ["fill_steps", "fill_density"], ["open_hh_amount"], ["accent_every", "accent_offset"]];   // and [function][setting] the settings'
 var TRIGGER_SERIAL_WRAP = 999;
 // the values sent to one Live parameter whose echo hasn't come back yet, at most (Max sends the echo at once,
@@ -585,6 +588,7 @@ var VOICE_INDEX_BY_NOTE = {};
     }
     functionSettings.push(values);
   }
+  liveParameterValues[VOICE_PARAMETER] = INITIAL_VOICE;
   liveParameterValues[SEED_PARAMETER] = seedOfPosition(FUNCTIONS[functionIndex],
                                                        variantPosition(FUNCTIONS[functionIndex], functionSettings[functionIndex]));
 })();
@@ -812,12 +816,39 @@ function settingTurned(f, p, value) {
 
 function voiceTurned(value) {
   var voice = controlInt("Voice", value, 0, ALL_VOICES);
+  if (takeEcho(VOICE_PARAMETER, voice, sameSetting)) return;
   if (voice === chosenVoice) return;
   commit();
   chosenVoice = voice;
   if (!ready) return;
   postNotesWhenNew(targetNotes());
   changed();
+}
+
+/** A click on voice v's name: that row; the row Voice already picks: all (from all, any name picks its row). */
+function voiceOfNameClick(v) { return v === chosenVoice ? ALL_VOICES : v; }
+/** Moves the Voice dial as a turn of it would (it commits), and sets the Live parameter (its echo is known). */
+function nameClicked(value) {
+  var voice = voiceOfNameClick(controlInt("the grid's name click", value, 0, VOICES.length - 1));
+  sendToLive(VOICE_PARAMETER, voice, sameSetting);
+  voiceTurned(voice);
+}
+
+/** Clear: the row(s) Voice picks become rests. What is being turned is committed first; the clear is a step of
+ *  its own, unless nothing changes. True when the pattern changed. */
+function clearTarget() {
+  var stepped = commit(), next = copyPattern(currentPattern());
+  for (var v = 0; v < VOICES.length; v++) {
+    if (chosenVoice !== ALL_VOICES && v !== chosenVoice) continue;
+    for (var s = 0; s < STEPS; s++) next[v][s] = REST;
+  }
+  if (patternsEqual(next, currentPattern())) {
+    post(DEVICE_NAME + ": Clear: " + (chosenVoice === ALL_VOICES ? "every row is" : VOICES[chosenVoice].name + " is") +
+         " already empty: no step\n");
+    return stepped;
+  }
+  append(next, "clear " + (chosenVoice === ALL_VOICES ? "every row" : VOICES[chosenVoice].name));
+  return true;
 }
 
 function functionTurned(value) {
@@ -947,6 +978,8 @@ function anything() {
     case "seed": seedTurned(value); break;
     case "param": settingTurned(a[0], a[1], a[2]); break;
     case "undo": if (undoOnce()) changed(); break;
+    case "clear": if (clearTarget()) changed(); break;
+    case "name_click": nameClicked(value); break;
     case "edit":
       v = controlInt("the grid's edit voice", value, 0, VOICES.length - 1);
       handEdit(v, controlInt("the grid's edit step", a[1], 0, STEPS - 1),

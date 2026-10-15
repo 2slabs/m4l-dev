@@ -38,6 +38,7 @@ function loadBrain(seed, echoes) {
     send(name) { deliverMessage(context, 1, name, Array.prototype.slice.call(arguments, 1)); },
     echo(name, value) {
       if (name === context.SEED_PARAMETER) { brain.send("seed", Math.fround(value)); return; }
+      if (name === context.VOICE_PARAMETER) { brain.send("voice", value); return; }
       for (let f = 0; f < context.SETTING_PARAMETERS.length; f++) {
         const p = context.SETTING_PARAMETERS[f].indexOf(name);
         if (p >= 0) { brain.send("param", f, p, value); return; }
@@ -227,7 +228,7 @@ function reachesBrainInlet1(prepend) {
 test("registry -> Live parameters: every setting is one live.dial with the registry's range, initial, unit, Info", () => {
   const c = loadBrain().context, UNIT = { int: 0, "%": 5 };
   const brainBox = BOXES.find((b) => b.text === "js 2sl-drums.js");
-  const route = BOXES.find((b) => /^route seed /.test(b.text || ""));
+  const route = BOXES.find((b) => /^route voice seed /.test(b.text || ""));
   assert.ok(LINES.some((l) => l.source[0] === brainBox.id && l.source[1] === 5 && l.destination[0] === route.id), "outlet 5 -> route");
   const routeNames = route.text.split(" ").slice(1);
   const ui = loadUi();
@@ -258,19 +259,24 @@ test("registry -> Live parameters: every setting is one live.dial with the regis
     });
   });
   const dials = BOXES.filter((b) => b.maxclass === "live.dial" && ui.context.PAGES.pattern.indexOf(b.varname) >= 0);
-  assert.strictEqual(dials.length, settings + 3, "the pattern page's dials: Voice, Function, Seed and the settings");
+  assert.strictEqual(dials.length, settings + 2, "the pattern page's dials: Voice, Seed and the settings");
   for (const preset of ui.context.PRESETS) for (const name in preset) {
     assert.ok(!/^(canned|grids|euclid|random|shift|reverse|thin|ghosts|fill|open_hh|accent)_|^(voice|function|seed)$/.test(name), name);
   }
 });
 
-test("Voice, Function and Seed: dials, Voice the voices then all, Function the registry, Seed a float 0-100%", () => {
+test("Voice and Seed dials, Function a button per function (one enum: a knob sweeps it), Seed a float 0-100%", () => {
   const c = loadBrain().context;
   const voice = boxNamed("voice").saved_attribute_attributes.valueof;
   assert.strictEqual(boxNamed("voice").maxclass, "live.dial");
   assert.deepStrictEqual(voice.parameter_enum, VOICE_IDS.concat(["all"]));
   assert.deepStrictEqual(voice.parameter_initial, [ALL]);
-  const fn = boxNamed("function").saved_attribute_attributes.valueof;
+  const functionBox = boxNamed("function"), fn = functionBox.saved_attribute_attributes.valueof;
+  assert.strictEqual(functionBox.maxclass, "live.tab");
+  assert.strictEqual(fn.parameter_type, 2, "one enum parameter");
+  assert.strictEqual(functionBox.num_lines_presentation, 2, "two rows of buttons");
+  assert.strictEqual(functionBox.presentation_rect[3], 30);
+  assert.ok(functionBox.presentation_rect[2] / 6 >= 6 * 7 + 12, "room for 'open hh' in every button");
   assert.deepStrictEqual(fn.parameter_enum, Array.from(c.FUNCTIONS, (f) => f.name));
   assert.deepStrictEqual(fn.parameter_initial, [0]);
   const seed = boxNamed("seed").saved_attribute_attributes.valueof;
@@ -463,6 +469,54 @@ test("touching any knob applies the function, the starting settings too: canned 
   assert.strictEqual(brain.lastRows()[2], brain.context.CANNED_KITS[2].rows.rs, "kit 3's rim row on rs");
   brain.send("voice", 1);
   assert.strictEqual(brain.lastRows()[2], brain.context.CANNED_KITS[2].rows.rs, "committed");
+  noErrors(brain);
+});
+
+test("Clear: the row Voice picks (every row on all) becomes rests; it commits first, is one step, Undo restores", () => {
+  const brain = readyBrain();
+  brain.choose("shift", "bd");
+  brain.setting("steps", 2);                                      // live
+  brain.clear();
+  brain.send("clear");
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "the shift committed, then the clear");
+  assert.strictEqual(brain.lastRows()[0], REST);
+  assert.deepStrictEqual(brain.lastRows().slice(1), P1.slice(1), "only bd");
+  assert.ok(/clear bd/.test(brain.lastOf(2, "history")[2]));
+  brain.send("clear");
+  assert.deepStrictEqual(brain.historyAt(), [3, 3], "clearing an empty row is no step");
+  assert.ok(brain.record.posts.some((p) => /bd is already empty: no step/.test(p)));
+  brain.send("undo");
+  assert.strictEqual(brain.lastRows()[0], "..x...x...x...x.", "Undo brings the shifted row back");
+  brain.send("voice", ALL);
+  brain.send("clear");
+  assert.deepStrictEqual(brain.lastRows(), VOICE_IDS.map(() => REST));
+  brain.send("undo");
+  assert.strictEqual(brain.lastRows()[1], P1[1]);
+  // the button sends `clear` to the brain
+  const button = boxNamed("clear"), message = wiredInto(button)[0];
+  assert.strictEqual(button.maxclass, "live.text");
+  assert.strictEqual(message.text, "clear");
+  noErrors(brain);
+});
+
+test("a click on a voice name moves Voice like a turn (commits); the picked row again: all; from all: that row", () => {
+  const brain = readyBrain();
+  brain.choose("shift", "all");
+  brain.setting("steps", 1);                                      // live on all
+  brain.clear();
+  brain.send("name_click", 1);
+  assert.deepStrictEqual(brain.sentToLive(), [["voice", 1]], "the Voice dial moves (its echo changes nothing)");
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [1]);
+  assert.deepStrictEqual(brain.historyAt(), [2, 2], "it committed, as turning Voice does");
+  brain.clear();
+  brain.send("name_click", 1);
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [ALL], "the picked row again: all");
+  assert.deepStrictEqual(brain.sentToLive(), [["voice", ALL]]);
+  brain.send("name_click", 5);
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [5]);
+  brain.send("name_click", 2);
+  assert.deepStrictEqual(brain.lastOf(1, "chosen"), [2], "another row while one is picked: that row");
+  assert.deepStrictEqual(brain.historyAt(), [2, 2], "nothing turned since: no more steps");
   noErrors(brain);
 });
 
@@ -1079,8 +1133,7 @@ test("Every display draws with its Init values, takes its messages; the grid's c
   const clicks = [[g.stepsX + 2 * g.cellW + 2, 1 + 1 * g.rowH + 3, 0], [g.stepsX + 5 * g.cellW + 2, 1 + 2 * g.rowH + 3, 1],
                   [5, 1 + 4 * g.rowH + 3, 0]];
   for (const [x, y, shift] of clicks) grid.context.onclick(x, y, 1, 0, shift, 0, 0, 0);
-  assert.deepStrictEqual(grid.record.outlets.map((o) => o.slice(1)), [["edit", 1, 2], ["edit", 2, 5, 1]],
-                         "a click on a name does nothing (Voice picks the row)");
+  assert.deepStrictEqual(grid.record.outlets.map((o) => o.slice(1)), [["edit", 1, 2], ["edit", 2, 5, 1], ["name_click", 4]]);
   grid.send("chosen", 7);
   grid.context.paint();
   const status = loadView("status", [446, 64]);

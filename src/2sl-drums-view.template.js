@@ -1,5 +1,6 @@
 // 2sl drums' displays (inserted into the kit view template by src/2sl-drums.py):
-//   grid    the pattern: a row per voice, 16 steps, the rows Voice picks lit; click a step to edit it
+//   grid    the pattern: a row per voice, 16 steps, the rows Voice picks lit; click a step to edit it, a name to
+//           pick that row (Voice)
 //   status  voice, function, Seed; the settings; what is shown (or a warning); where the history is
 //   mix     each voice's level, flashing on its hits, dimmed when the mixer's mute / solo silence it
 //   bd sd rs cp hats rd   each voice's envelope as the voice makes it (src/2sl_drums_dsp.py), flashing on hits
@@ -71,7 +72,8 @@ function gridClick(x, y, modifiers) {
   var g = gridGeometry(mgraphics.size[0], mgraphics.size[1]);
   var v = Math.floor((y - 1) / g.rowH);
   if (v < 0 || v >= VOICE_NAMES.length) return;
-  if (x >= g.stepsX && x < g.stepsX + STEPS * g.cellW) {
+  if (x < g.stepsX) outlet(0, "name_click", v);                        // the brain moves Voice
+  else if (x < g.stepsX + STEPS * g.cellW) {
     var s = Math.max(0, Math.min(STEPS - 1, Math.floor((x - g.stepsX) / g.cellW)));
     if (modifiers.shift) outlet(0, "edit", v, s, 1);                     // shift-click: a ghost
     else outlet(0, "edit", v, s);
