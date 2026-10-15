@@ -11,7 +11,7 @@
 //     edit i        cycle the step shown at display position i: rest -> hit -> accent -> rest (from the step display)
 //     shift i       0..15: play (and show) the stored pattern i 16ths later, wrapping; the stored steps don't change
 //     stepbits i / accbits i   the pattern as stored with the set (two hidden parameters)
-//     density f, throws f, length i (16ths)
+//     density f, throws f, length i (Gate: 1-4 16ths)
 //     tick bar beat units       from [transport], once per 16th while Live plays
 //     playing i / tempo f       Live's transport; stopped, the machine runs on its own clock
 //     ready         Live has finished restoring the set
@@ -373,7 +373,7 @@ function anything() {
     case "shift": shift = controlInt("Shift", v, 0, 15); showSteps(); break;
     case "density": density = controlUnit("Density", v); break;
     case "throws": throws = controlUnit("Throws", v); break;
-    case "length": length = controlInt("Gate", v, 1, 8); break;
+    case "length": length = controlInt("Gate", v, 1, 4); break;   // the Gate dial and its Info text: 1-4
     case "playing": playing = v ? 1 : 0; updateClock(); break;
     case "tempo": tempo = v; updateClock(); break;
     case "ready": ready = 1; showSteps(); break;
