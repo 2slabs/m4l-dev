@@ -318,10 +318,99 @@ def gen_patcher(code, ins, outs):
             "classnamespace": "dsp.gen", "rect": [100.0, 100.0, 760.0, 740.0], "boxes": sub_boxes, "lines": sub_lines}
 
 
+# What Live's Info View shows when a control is hovered: parameter long name -> (title, text).
+# Every visible parameter must have an entry and every entry must name a parameter (checked at build time).
+# The text says what the code does; keep it short, the Info View is small.
+INFO = {
+    # header
+    "Page": ("Page", "Shows the play, osc or shape page. Controls on hidden pages keep working."),
+    "Preset": ("Preset", "Sets every control (and the machine's pattern) to a preset; tweak from there. "
+               "When Live reopens a set, your saved tweaks win."),
+    "Volume": ("Volume", "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs. "
+               "Presets set it to match their loudness."),
+    "Stop": ("Stop", "Releases every note, clears a latched chord, fades the voices out in about 20 ms, "
+             "empties the echo and turns Freeze off. Runs by itself when Live's transport stops."),
+    # play: chord
+    "Chord": ("Chord", "What each key plays: poly plays your notes as they are; the others stack a chord on each key "
+              "(minor, m7, m9, m11, sus4, fifths, dark = 0-5-8). Default minor."),
+    "In Key": ("In Key", "Builds chords from the scale set in Live (its root and scale): each key snaps down into the "
+               "scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes."),
+    "Tone": ("Tone", "Brighter or darker: moves the cutoff up to 2.5 octaves either way, and the filter envelope with it. "
+             "-100 to +100, default 0."),
+    "Length": ("Length", "Shorter or longer tails: scales Decay and Release from x0.25 (-100) to x4 (+100). Default 0."),
+    "Drift": ("Drift", "Chance each chord gets another voicing of the same chord (inverted, top note dropped, "
+              "middle spread, or octave added). 0 = always the same."),
+    # play: machine
+    "Machine": ("Machine", "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. "
+                "Follows Live's transport; with Live stopped it runs on its own clock at Live's tempo."),
+    "Latch": ("Latch", "With Machine on, the chord keeps playing after you let go. A new chord replaces it; Stop clears it."),
+    "Pattern": ("Pattern", "Loads a 16-step stab pattern as a starting point. Click steps in the display to cycle "
+                "rest, hit, accent; edited steps are saved with the set."),
+    "Density": ("Density", "Each step fires by chance: hits at Density, accents at Density x1.4. Above 70%, empty "
+                "offbeat 16ths also fire now and then (up to 15% at 100). Default 80%."),
+    "Throws": ("Throws", "Chance each machine stab is also thrown into the echo (opens the echo for an 8th at 90% feedback)."),
+    "Gate": ("Gate", "How long each machine stab is held, in 16th notes (1-4). Default 1."),
+    # play: dub
+    "Dub": ("Dub", "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. "
+            "0 = no echo except throws."),
+    "Throw": ("Throw", "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback."),
+    "Freeze": ("Freeze", "Holds the echo loop: nothing new goes in, and the repeats go round without fading. "
+               "Stop turns it off."),
+    "Echo Time": ("Echo Time", "Echo time, synced to Live's tempo: 1/16 to 1/2 (default 1/8 dotted). "
+                  "Left and right run slightly apart; a change glides like tape."),
+    # play: pump
+    "Pump": ("Pump Depth", "How deep the output ducks on every Pump Rate step; 100% ducks to silence. "
+             "Locks to Live's beat while it plays. Default 0."),
+    "Pump Rate": ("Pump Rate", "How often the pump ducks: every quarter, 8th or 16th note."),
+    "Pump Attack": ("Pump Attack", "Time to full duck, in ms (1-40, default 6). A ramp, never a jump, so no click."),
+    "Pump Release": ("Pump Release", "How much of each step the pump takes to come back up (10% to 95%, default 55%)."),
+    "Pump Curve": ("Pump Curve", "Shape of the recovery: 0 = linear, 100 = snappy (comes back fast, then eases in). Default 50."),
+    # osc
+    "DCO1 Wave": ("DCO 1 Wave", "DCO 1 waveform: saw, pulse (width from PW), or both mixed."),
+    "DCO1 Octave": ("DCO 1 Octave", "DCO 1 footage: 16' an octave down, 8' as played, 4' an octave up. The sub follows it."),
+    "PW": ("Pulse Width", "Pulse width of both DCOs' pulse waves, 50% (square) to 95% (thin). Default 70%."),
+    "PWM": ("PWM", "How much the LFO moves the pulse width (up to +-35%): the Juno shimmer. Only heard on pulse waves."),
+    "DCO2 Wave": ("DCO 2 Wave", "DCO 2 waveform: saw, pulse (width from PW), or triangle."),
+    "DCO2 Octave": ("DCO 2 Octave", "DCO 2 footage: 16' an octave down, 8' as played, 4' an octave up."),
+    "Semi": ("DCO 2 Semi", "DCO 2 interval in semitones, -12 to +12 (default 0). 7 = a fifth up."),
+    "Fine": ("DCO 2 Fine", "Detunes DCO 2 upward, in cents (0-50, default 10)."),
+    "OSC 1": ("OSC 1 Level", "DCO 1 level in the mixer. Default 80%."),
+    "OSC 2": ("OSC 2 Level", "DCO 2 level in the mixer. Default 80%."),
+    "Sub": ("Sub Level", "Level of the sub: a square wave an octave below DCO 1. Default 0."),
+    "Noise": ("Noise Level", "Level of white noise in the mix (the 'chuff'). Default 8%."),
+    "LFO Rate": ("LFO Rate", "Speed of the sine LFO, 0.05 to 12 Hz (default 0.5). One LFO for all voices."),
+    "Vibrato": ("Vibrato", "LFO to pitch, up to +-50 cents."),
+    "LFO Filter": ("LFO Filter", "LFO to cutoff, up to +-3 octaves."),
+    # shape
+    "Cutoff": ("Cutoff", "Low-pass cutoff (24 dB ladder), 40 Hz to 12 kHz, default 700 Hz. "
+               "The envelope, key, Tone and LFO move it from here."),
+    "Resonance": ("Resonance", "Filter resonance: a peak at the cutoff. Default 30%."),
+    "Env Amount": ("Env Amount", "How far the envelope opens the cutoff: up to +6 octaves at 100%. Default 50%."),
+    "Key Track": ("Key Track", "How much the cutoff follows the note played, around middle C; 100% = fully. Default 50%."),
+    "Velocity Filter": ("Velocity Filter", "How much velocity scales Env Amount: 0 = not at all, 100% = fully. "
+                        "Velocity always sets the loudness. Default 50%."),
+    "Attack": ("Attack", "Envelope attack, 0.5 ms to 4 s (default 2 ms). One envelope for amp and filter."),
+    "Decay": ("Decay", "Envelope decay to Sustain, 5 ms to 6 s (default 260 ms). Length scales it."),
+    "Sustain": ("Sustain", "Envelope level while the note is held. Default 0: a stab."),
+    "Release": ("Release", "Envelope fade after the note ends, 5 ms to 6 s (default 240 ms). Length scales it."),
+    "Drive": ("Drive", "Tape saturation on the voices, before the echo. Default 25%."),
+}
+INFO_USED = set()
+
+
 def param(cls, name, short, rect, kind, prect, **v):
-    """A Live parameter (live.dial / live.menu), shown in presentation at `prect`."""
+    """A Live parameter (live.dial / live.menu), shown in presentation at `prect`, with its INFO text."""
     vals = {"parameter_longname": name, "parameter_shortname": short, "parameter_type": kind}
     vals.update(v)
+    annotation = {}
+    if name in INFO:
+        title, text = INFO[name]
+        INFO_USED.add(name)
+        # Max saves these on the box and mirrors them in the parameter's saved values (as it writes them itself)
+        annotation = {"annotation_name": title, "annotation": text}
+        vals.update(parameter_annotation_name=title, parameter_info=text)
+    elif not v.get("parameter_invisible"):
+        raise SystemExit(f"2sl-stab.py: parameter {name!r} has no Info View text: add it to INFO")
     outs = {"live.dial": (2, ["", "float"]), "live.menu": (3, ["", "", "float"]), "live.tab": (3, ["", "", "float"]), "live.text": (2, ["", ""]), "live.numbox": (2, ["", "float"])}[cls]
     extra = {}
     if cls == "live.text":
@@ -330,7 +419,7 @@ def param(cls, name, short, rect, kind, prect, **v):
         vals.update(parameter_enum=["off", "on"], parameter_mmax=1)
     return box(cls=cls, rect=rect, ins=1, outs=outs[0], outtype=outs[1], varname=name.lower().replace(" ", "_"),
                parameter_enable=1, presentation=1, presentation_rect=[float(x) for x in prect],
-               saved_attribute_attributes={"valueof": vals}, **extra)
+               saved_attribute_attributes={"valueof": vals}, **annotation, **extra)
 
 
 # MIDI in -> chord memory -> voice allocation
@@ -894,6 +983,9 @@ PRESETS = [
 # the Preset menu's items
 pbox = next(x["box"] for x in boxes if x["box"]["id"] == preset)
 pbox["saved_attribute_attributes"]["valueof"].update(parameter_enum=[n for n, _ in PRESETS], parameter_mmax=len(PRESETS) - 1)
+
+if set(INFO) - INFO_USED:
+    raise SystemExit(f"2sl-stab.py: INFO has text for no parameter: {sorted(set(INFO) - INFO_USED)}")
 
 presets_js = [{VALUES[k]: v for k, v in {**BASE, **p}.items()} for _, p in PRESETS]
 

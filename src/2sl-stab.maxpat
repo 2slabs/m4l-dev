@@ -1442,9 +1442,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "Page",
+							"parameter_info": "Shows the play, osc or shape page. Controls on hidden pages keep working."
 						}
 					},
+					"annotation_name": "Page",
+					"annotation": "Shows the play, osc or shape page. Controls on hidden pages keep working.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1
 				}
@@ -1527,9 +1531,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "Preset",
+							"parameter_info": "Sets every control (and the machine's pattern) to a preset; tweak from there. When Live reopens a set, your saved tweaks win."
 						}
-					}
+					},
+					"annotation_name": "Preset",
+					"annotation": "Sets every control (and the machine's pattern) to a preset; tweak from there. When Live reopens a set, your saved tweaks win."
 				}
 			},
 			{
@@ -1568,9 +1576,13 @@
 							"parameter_initial": [
 								0.0
 							],
-							"parameter_unitstyle": 4
+							"parameter_unitstyle": 4,
+							"parameter_annotation_name": "Volume",
+							"parameter_info": "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs. Presets set it to match their loudness."
 						}
-					}
+					},
+					"annotation_name": "Volume",
+					"annotation": "Output level, -36 to +12 dB (default 0). A soft clip above about -2 dBFS rounds off overs. Presets set it to match their loudness."
 				}
 			},
 			{
@@ -1622,6 +1634,8 @@
 							"parameter_longname": "Stop",
 							"parameter_shortname": "Stop",
 							"parameter_type": 2,
+							"parameter_annotation_name": "Stop",
+							"parameter_info": "Releases every note, clears a latched chord, fades the voices out in about 20 ms, empties the echo and turns Freeze off. Runs by itself when Live's transport stops.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -1629,6 +1643,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "Stop",
+					"annotation": "Releases every note, clears a latched chord, fades the voices out in about 20 ms, empties the echo and turns Freeze off. Runs by itself when Live's transport stops.",
 					"texton": "stop",
 					"mode": 0
 				}
@@ -1839,9 +1855,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								1
-							]
+							],
+							"parameter_annotation_name": "Chord",
+							"parameter_info": "What each key plays: poly plays your notes as they are; the others stack a chord on each key (minor, m7, m9, m11, sus4, fifths, dark = 0-5-8). Default minor."
 						}
-					}
+					},
+					"annotation_name": "Chord",
+					"annotation": "What each key plays: poly plays your notes as they are; the others stack a chord on each key (minor, m7, m9, m11, sus4, fifths, dark = 0-5-8). Default minor."
 				}
 			},
 			{
@@ -1897,6 +1917,8 @@
 							"parameter_initial": [
 								0
 							],
+							"parameter_annotation_name": "In Key",
+							"parameter_info": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -1904,6 +1926,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "In Key",
+					"annotation": "Builds chords from the scale set in Live (its root and scale): each key snaps down into the scale and the chord stacks scale tones on it. Scales under 5 notes fall back to the fixed shapes.",
 					"texton": "in key",
 					"mode": 1
 				}
@@ -1963,9 +1987,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Tone",
+							"parameter_info": "Brighter or darker: moves the cutoff up to 2.5 octaves either way, and the filter envelope with it. -100 to +100, default 0."
 						}
-					}
+					},
+					"annotation_name": "Tone",
+					"annotation": "Brighter or darker: moves the cutoff up to 2.5 octaves either way, and the filter envelope with it. -100 to +100, default 0."
 				}
 			},
 			{
@@ -2041,9 +2069,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Length",
+							"parameter_info": "Shorter or longer tails: scales Decay and Release from x0.25 (-100) to x4 (+100). Default 0."
 						}
-					}
+					},
+					"annotation_name": "Length",
+					"annotation": "Shorter or longer tails: scales Decay and Release from x0.25 (-100) to x4 (+100). Default 0."
 				}
 			},
 			{
@@ -2119,9 +2151,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Drift",
+							"parameter_info": "Chance each chord gets another voicing of the same chord (inverted, top note dropped, middle spread, or octave added). 0 = always the same."
 						}
-					}
+					},
+					"annotation_name": "Drift",
+					"annotation": "Chance each chord gets another voicing of the same chord (inverted, top note dropped, middle spread, or octave added). 0 = always the same."
 				}
 			},
 			{
@@ -2225,6 +2261,8 @@
 							"parameter_initial": [
 								0
 							],
+							"parameter_annotation_name": "Machine",
+							"parameter_info": "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. Follows Live's transport; with Live stopped it runs on its own clock at Live's tempo.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -2232,6 +2270,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "Machine",
+					"annotation": "With Machine on, keys don't play directly: they pick the chord the pattern plays, on 16th steps. Follows Live's transport; with Live stopped it runs on its own clock at Live's tempo.",
 					"texton": "machine",
 					"mode": 1
 				}
@@ -2289,6 +2329,8 @@
 							"parameter_initial": [
 								0
 							],
+							"parameter_annotation_name": "Latch",
+							"parameter_info": "With Machine on, the chord keeps playing after you let go. A new chord replaces it; Stop clears it.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -2296,6 +2338,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "Latch",
+					"annotation": "With Machine on, the chord keeps playing after you let go. A new chord replaces it; Stop clears it.",
 					"texton": "latch",
 					"mode": 1
 				}
@@ -2361,9 +2405,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "Pattern",
+							"parameter_info": "Loads a 16-step stab pattern as a starting point. Click steps in the display to cycle rest, hit, accent; edited steps are saved with the set."
 						}
-					}
+					},
+					"annotation_name": "Pattern",
+					"annotation": "Loads a 16-step stab pattern as a starting point. Click steps in the display to cycle rest, hit, accent; edited steps are saved with the set."
 				}
 			},
 			{
@@ -2421,9 +2469,13 @@
 								80.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Density",
+							"parameter_info": "Each step fires by chance: hits at Density, accents at Density x1.4. Above 70%, empty offbeat 16ths also fire now and then (up to 15% at 100). Default 80%."
 						}
-					}
+					},
+					"annotation_name": "Density",
+					"annotation": "Each step fires by chance: hits at Density, accents at Density x1.4. Above 70%, empty offbeat 16ths also fire now and then (up to 15% at 100). Default 80%."
 				}
 			},
 			{
@@ -2499,9 +2551,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Throws",
+							"parameter_info": "Chance each machine stab is also thrown into the echo (opens the echo for an 8th at 90% feedback)."
 						}
-					}
+					},
+					"annotation_name": "Throws",
+					"annotation": "Chance each machine stab is also thrown into the echo (opens the echo for an 8th at 90% feedback)."
 				}
 			},
 			{
@@ -2577,9 +2633,13 @@
 								1.0
 							],
 							"parameter_unitstyle": 0,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Gate",
+							"parameter_info": "How long each machine stab is held, in 16th notes (1-4). Default 1."
 						}
-					}
+					},
+					"annotation_name": "Gate",
+					"annotation": "How long each machine stab is held, in 16th notes (1-4). Default 1."
 				}
 			},
 			{
@@ -2825,6 +2885,8 @@
 							"parameter_longname": "Throw",
 							"parameter_shortname": "Throw",
 							"parameter_type": 2,
+							"parameter_annotation_name": "Throw",
+							"parameter_info": "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -2832,6 +2894,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "Throw",
+					"annotation": "Throws the sound into the echo now: opens the echo for an 8th at 90% feedback.",
 					"texton": "throw",
 					"mode": 0
 				}
@@ -2889,6 +2953,8 @@
 							"parameter_initial": [
 								0
 							],
+							"parameter_annotation_name": "Freeze",
+							"parameter_info": "Holds the echo loop: nothing new goes in, and the repeats go round without fading. Stop turns it off.",
 							"parameter_enum": [
 								"off",
 								"on"
@@ -2896,6 +2962,8 @@
 							"parameter_mmax": 1
 						}
 					},
+					"annotation_name": "Freeze",
+					"annotation": "Holds the echo loop: nothing new goes in, and the repeats go round without fading. Stop turns it off.",
 					"texton": "freeze",
 					"mode": 1
 				}
@@ -2973,9 +3041,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Dub",
+							"parameter_info": "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. 0 = no echo except throws."
 						}
-					}
+					},
+					"annotation_name": "Dub",
+					"annotation": "The echo amount: more sound sent in, longer feedback (30% to 92%), each repeat darker and more smeared. 0 = no echo except throws."
 				}
 			},
 			{
@@ -3093,9 +3165,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								2
-							]
+							],
+							"parameter_annotation_name": "Echo Time",
+							"parameter_info": "Echo time, synced to Live's tempo: 1/16 to 1/2 (default 1/8 dotted). Left and right run slightly apart; a change glides like tape."
 						}
-					}
+					},
+					"annotation_name": "Echo Time",
+					"annotation": "Echo time, synced to Live's tempo: 1/16 to 1/2 (default 1/8 dotted). Left and right run slightly apart; a change glides like tape."
 				}
 			},
 			{
@@ -3222,9 +3298,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "Pump Rate",
+							"parameter_info": "How often the pump ducks: every quarter, 8th or 16th note."
 						}
-					}
+					},
+					"annotation_name": "Pump Rate",
+					"annotation": "How often the pump ducks: every quarter, 8th or 16th note."
 				}
 			},
 			{
@@ -3318,9 +3398,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Pump Depth",
+							"parameter_info": "How deep the output ducks on every Pump Rate step; 100% ducks to silence. Locks to Live's beat while it plays. Default 0."
 						}
-					}
+					},
+					"annotation_name": "Pump Depth",
+					"annotation": "How deep the output ducks on every Pump Rate step; 100% ducks to silence. Locks to Live's beat while it plays. Default 0."
 				}
 			},
 			{
@@ -3432,9 +3516,13 @@
 								6.0
 							],
 							"parameter_unitstyle": 2,
-							"parameter_exponent": 2.0
+							"parameter_exponent": 2.0,
+							"parameter_annotation_name": "Pump Attack",
+							"parameter_info": "Time to full duck, in ms (1-40, default 6). A ramp, never a jump, so no click."
 						}
-					}
+					},
+					"annotation_name": "Pump Attack",
+					"annotation": "Time to full duck, in ms (1-40, default 6). A ramp, never a jump, so no click."
 				}
 			},
 			{
@@ -3510,9 +3598,13 @@
 								55.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Pump Release",
+							"parameter_info": "How much of each step the pump takes to come back up (10% to 95%, default 55%)."
 						}
-					}
+					},
+					"annotation_name": "Pump Release",
+					"annotation": "How much of each step the pump takes to come back up (10% to 95%, default 55%)."
 				}
 			},
 			{
@@ -3624,9 +3716,13 @@
 								50.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Pump Curve",
+							"parameter_info": "Shape of the recovery: 0 = linear, 100 = snappy (comes back fast, then eases in). Default 50."
 						}
-					}
+					},
+					"annotation_name": "Pump Curve",
+					"annotation": "Shape of the recovery: 0 = linear, 100 = snappy (comes back fast, then eases in). Default 50."
 				}
 			},
 			{
@@ -3772,9 +3868,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "DCO 1 Wave",
+							"parameter_info": "DCO 1 waveform: saw, pulse (width from PW), or both mixed."
 						}
 					},
+					"annotation_name": "DCO 1 Wave",
+					"annotation": "DCO 1 waveform: saw, pulse (width from PW), or both mixed.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1,
 					"hidden": 1
@@ -3856,9 +3956,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								1
-							]
+							],
+							"parameter_annotation_name": "DCO 1 Octave",
+							"parameter_info": "DCO 1 footage: 16' an octave down, 8' as played, 4' an octave up. The sub follows it."
 						}
 					},
+					"annotation_name": "DCO 1 Octave",
+					"annotation": "DCO 1 footage: 16' an octave down, 8' as played, 4' an octave up. The sub follows it.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1,
 					"hidden": 1
@@ -3937,9 +4041,13 @@
 								70.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Pulse Width",
+							"parameter_info": "Pulse width of both DCOs' pulse waves, 50% (square) to 95% (thin). Default 70%."
 						}
 					},
+					"annotation_name": "Pulse Width",
+					"annotation": "Pulse width of both DCOs' pulse waves, 50% (square) to 95% (thin). Default 70%.",
 					"hidden": 1
 				}
 			},
@@ -4052,9 +4160,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "PWM",
+							"parameter_info": "How much the LFO moves the pulse width (up to +-35%): the Juno shimmer. Only heard on pulse waves."
 						}
 					},
+					"annotation_name": "PWM",
+					"annotation": "How much the LFO moves the pulse width (up to +-35%): the Juno shimmer. Only heard on pulse waves.",
 					"hidden": 1
 				}
 			},
@@ -4201,9 +4313,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								0
-							]
+							],
+							"parameter_annotation_name": "DCO 2 Wave",
+							"parameter_info": "DCO 2 waveform: saw, pulse (width from PW), or triangle."
 						}
 					},
+					"annotation_name": "DCO 2 Wave",
+					"annotation": "DCO 2 waveform: saw, pulse (width from PW), or triangle.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1,
 					"hidden": 1
@@ -4285,9 +4401,13 @@
 							"parameter_initial_enable": 1,
 							"parameter_initial": [
 								1
-							]
+							],
+							"parameter_annotation_name": "DCO 2 Octave",
+							"parameter_info": "DCO 2 footage: 16' an octave down, 8' as played, 4' an octave up."
 						}
 					},
+					"annotation_name": "DCO 2 Octave",
+					"annotation": "DCO 2 footage: 16' an octave down, 8' as played, 4' an octave up.",
 					"num_lines_patching": 1,
 					"num_lines_presentation": 1,
 					"hidden": 1
@@ -4366,9 +4486,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 7,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "DCO 2 Semi",
+							"parameter_info": "DCO 2 interval in semitones, -12 to +12 (default 0). 7 = a fifth up."
 						}
 					},
+					"annotation_name": "DCO 2 Semi",
+					"annotation": "DCO 2 interval in semitones, -12 to +12 (default 0). 7 = a fifth up.",
 					"hidden": 1
 				}
 			},
@@ -4445,9 +4569,13 @@
 								10.0
 							],
 							"parameter_unitstyle": 1,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "DCO 2 Fine",
+							"parameter_info": "Detunes DCO 2 upward, in cents (0-50, default 10)."
 						}
 					},
+					"annotation_name": "DCO 2 Fine",
+					"annotation": "Detunes DCO 2 upward, in cents (0-50, default 10).",
 					"hidden": 1
 				}
 			},
@@ -4555,9 +4683,13 @@
 								80.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "OSC 1 Level",
+							"parameter_info": "DCO 1 level in the mixer. Default 80%."
 						}
 					},
+					"annotation_name": "OSC 1 Level",
+					"annotation": "DCO 1 level in the mixer. Default 80%.",
 					"hidden": 1
 				}
 			},
@@ -4670,9 +4802,13 @@
 								80.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "OSC 2 Level",
+							"parameter_info": "DCO 2 level in the mixer. Default 80%."
 						}
 					},
+					"annotation_name": "OSC 2 Level",
+					"annotation": "DCO 2 level in the mixer. Default 80%.",
 					"hidden": 1
 				}
 			},
@@ -4785,9 +4921,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Sub Level",
+							"parameter_info": "Level of the sub: a square wave an octave below DCO 1. Default 0."
 						}
 					},
+					"annotation_name": "Sub Level",
+					"annotation": "Level of the sub: a square wave an octave below DCO 1. Default 0.",
 					"hidden": 1
 				}
 			},
@@ -4900,9 +5040,13 @@
 								8.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Noise Level",
+							"parameter_info": "Level of white noise in the mix (the 'chuff'). Default 8%."
 						}
 					},
+					"annotation_name": "Noise Level",
+					"annotation": "Level of white noise in the mix (the 'chuff'). Default 8%.",
 					"hidden": 1
 				}
 			},
@@ -5082,9 +5226,13 @@
 								0.5
 							],
 							"parameter_unitstyle": 3,
-							"parameter_exponent": 3.0
+							"parameter_exponent": 3.0,
+							"parameter_annotation_name": "LFO Rate",
+							"parameter_info": "Speed of the sine LFO, 0.05 to 12 Hz (default 0.5). One LFO for all voices."
 						}
 					},
+					"annotation_name": "LFO Rate",
+					"annotation": "Speed of the sine LFO, 0.05 to 12 Hz (default 0.5). One LFO for all voices.",
 					"hidden": 1
 				}
 			},
@@ -5143,9 +5291,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Vibrato",
+							"parameter_info": "LFO to pitch, up to +-50 cents."
 						}
 					},
+					"annotation_name": "Vibrato",
+					"annotation": "LFO to pitch, up to +-50 cents.",
 					"hidden": 1
 				}
 			},
@@ -5258,9 +5410,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "LFO Filter",
+							"parameter_info": "LFO to cutoff, up to +-3 octaves."
 						}
 					},
+					"annotation_name": "LFO Filter",
+					"annotation": "LFO to cutoff, up to +-3 octaves.",
 					"hidden": 1
 				}
 			},
@@ -5404,9 +5560,13 @@
 								700.0
 							],
 							"parameter_unitstyle": 3,
-							"parameter_exponent": 3.0
+							"parameter_exponent": 3.0,
+							"parameter_annotation_name": "Cutoff",
+							"parameter_info": "Low-pass cutoff (24 dB ladder), 40 Hz to 12 kHz, default 700 Hz. The envelope, key, Tone and LFO move it from here."
 						}
 					},
+					"annotation_name": "Cutoff",
+					"annotation": "Low-pass cutoff (24 dB ladder), 40 Hz to 12 kHz, default 700 Hz. The envelope, key, Tone and LFO move it from here.",
 					"hidden": 1
 				}
 			},
@@ -5483,9 +5643,13 @@
 								30.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Resonance",
+							"parameter_info": "Filter resonance: a peak at the cutoff. Default 30%."
 						}
 					},
+					"annotation_name": "Resonance",
+					"annotation": "Filter resonance: a peak at the cutoff. Default 30%.",
 					"hidden": 1
 				}
 			},
@@ -5598,9 +5762,13 @@
 								50.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Env Amount",
+							"parameter_info": "How far the envelope opens the cutoff: up to +6 octaves at 100%. Default 50%."
 						}
 					},
+					"annotation_name": "Env Amount",
+					"annotation": "How far the envelope opens the cutoff: up to +6 octaves at 100%. Default 50%.",
 					"hidden": 1
 				}
 			},
@@ -5713,9 +5881,13 @@
 								50.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Key Track",
+							"parameter_info": "How much the cutoff follows the note played, around middle C; 100% = fully. Default 50%."
 						}
 					},
+					"annotation_name": "Key Track",
+					"annotation": "How much the cutoff follows the note played, around middle C; 100% = fully. Default 50%.",
 					"hidden": 1
 				}
 			},
@@ -5792,9 +5964,13 @@
 								50.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Velocity Filter",
+							"parameter_info": "How much velocity scales Env Amount: 0 = not at all, 100% = fully. Velocity always sets the loudness. Default 50%."
 						}
 					},
+					"annotation_name": "Velocity Filter",
+					"annotation": "How much velocity scales Env Amount: 0 = not at all, 100% = fully. Velocity always sets the loudness. Default 50%.",
 					"hidden": 1
 				}
 			},
@@ -5902,9 +6078,13 @@
 								2.0
 							],
 							"parameter_unitstyle": 2,
-							"parameter_exponent": 3.0
+							"parameter_exponent": 3.0,
+							"parameter_annotation_name": "Attack",
+							"parameter_info": "Envelope attack, 0.5 ms to 4 s (default 2 ms). One envelope for amp and filter."
 						}
 					},
+					"annotation_name": "Attack",
+					"annotation": "Envelope attack, 0.5 ms to 4 s (default 2 ms). One envelope for amp and filter.",
 					"hidden": 1
 				}
 			},
@@ -5981,9 +6161,13 @@
 								260.0
 							],
 							"parameter_unitstyle": 2,
-							"parameter_exponent": 3.0
+							"parameter_exponent": 3.0,
+							"parameter_annotation_name": "Decay",
+							"parameter_info": "Envelope decay to Sustain, 5 ms to 6 s (default 260 ms). Length scales it."
 						}
 					},
+					"annotation_name": "Decay",
+					"annotation": "Envelope decay to Sustain, 5 ms to 6 s (default 260 ms). Length scales it.",
 					"hidden": 1
 				}
 			},
@@ -6060,9 +6244,13 @@
 								0.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Sustain",
+							"parameter_info": "Envelope level while the note is held. Default 0: a stab."
 						}
 					},
+					"annotation_name": "Sustain",
+					"annotation": "Envelope level while the note is held. Default 0: a stab.",
 					"hidden": 1
 				}
 			},
@@ -6175,9 +6363,13 @@
 								240.0
 							],
 							"parameter_unitstyle": 2,
-							"parameter_exponent": 3.0
+							"parameter_exponent": 3.0,
+							"parameter_annotation_name": "Release",
+							"parameter_info": "Envelope fade after the note ends, 5 ms to 6 s (default 240 ms). Length scales it."
 						}
 					},
+					"annotation_name": "Release",
+					"annotation": "Envelope fade after the note ends, 5 ms to 6 s (default 240 ms). Length scales it.",
 					"hidden": 1
 				}
 			},
@@ -6285,9 +6477,13 @@
 								25.0
 							],
 							"parameter_unitstyle": 5,
-							"parameter_exponent": 1.0
+							"parameter_exponent": 1.0,
+							"parameter_annotation_name": "Drive",
+							"parameter_info": "Tape saturation on the voices, before the echo. Default 25%."
 						}
 					},
+					"annotation_name": "Drive",
+					"annotation": "Tape saturation on the voices, before the echo. Default 25%.",
 					"hidden": 1
 				}
 			},
