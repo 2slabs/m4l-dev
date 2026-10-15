@@ -149,7 +149,7 @@ function paint() {
   else if (MODE === "drive") driveView(w, h);
 }
 
-var LAYOUT = {"subtitle": 500, "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["click a step", 392, 136, "hint"], ["to change it", 392, 150, "hint"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [228, 456, 684], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 128, 143, "hint"], ["pwm: lfo on pw", 128, 157, "hint"], ["semi 7:", 356, 143, "hint"], ["a fifth up", 356, 157, "hint"], ["sub: square, 1 oct down", 468, 110, "hint"], ["one lfo for all voices", 696, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
+var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["click a step", 392, 136, "hint"], ["to change it", 392, 150, "hint"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [228, 456, 684], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 128, 143, "hint"], ["pwm: lfo on pw", 128, 157, "hint"], ["semi 7:", 356, 143, "hint"], ["a fifth up", 356, 157, "hint"], ["sub: square, 1 oct down", 468, 110, "hint"], ["one lfo for all voices", 696, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 
 var hover = 0;
 var SITE = "https://2sl.to";
@@ -179,7 +179,7 @@ function chromeView(w, h) {
     var L = page.labels[j];
     text(L[0], L[1], L[2], L[3] === "hint" ? T.unlit : T.label);
   }
-  var sub = "dub chord machine";
+  var sub = "dub chord machine  v" + LAYOUT.version;
   text(sub, LAYOUT.subtitle, 15, T.label);
 }
 

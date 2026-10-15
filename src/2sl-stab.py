@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """2sl stab: a dub techno chord stab instrument for Max for Live.
 
-  python3 src/2sl-stab.py   # writes src/2sl-stab.maxpat and devices/2sl-stab/2sl-stab.amxd
+  python3 src/2sl-stab.py   # writes src/2sl-stab.maxpat, devices/2sl-stab/2sl-stab.amxd (for development,
+                            # scripts alongside) and dist/2sl-stab-<version>.amxd (frozen: one file to share)
 
 Signal flow (from the research in devices/2sl-stab/README.md):
   MIDI -> chord memory (js) -> mc.noteallocator~ (16 voices)
@@ -14,6 +15,7 @@ Signal flow (from the research in devices/2sl-stab/README.md):
 """
 import json, os, subprocess, sys
 
+VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
@@ -754,6 +756,7 @@ tell(page_tabs, "page", chrome)
 HEADER = [["preset", 240, 15, "label"], ["out", 800, 15, "label"]]
 LAYOUT = {
     "subtitle": 500,
+    "version": VERSION,
     "pages": [
         {"rules": [208, 512, 720],
          "labels": HEADER + [["click a step", C2 + 172, DIAL_Y + 17, "hint"], ["to change it", C2 + 172, DIAL_Y + 31, "hint"],
@@ -927,3 +930,11 @@ json.dump(patch, open(maxpat, "w"), indent="\t")
 amxd = os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab.amxd")
 subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "pack", maxpat, amxd, "--type", "instrument"], check=True)
 print(f"wrote {os.path.relpath(maxpat, ROOT)} and {os.path.relpath(amxd, ROOT)} ({len(boxes)} boxes, {width}px wide)")
+
+# the frozen release: one self-contained file with the scripts embedded
+os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
+frozen = os.path.join(ROOT, "dist", f"2sl-stab-{VERSION}.amxd")
+scripts = [os.path.join(ROOT, "devices", "2sl-stab", n) for n in ("2sl-stab.js", "2sl-stab-ui.js", "2sl-stab-view.js")]
+subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "freeze", maxpat, frozen, "--type", "instrument",
+                "--embed", *scripts], check=True)
+print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024} KB, scripts embedded)")

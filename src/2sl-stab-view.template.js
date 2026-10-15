@@ -177,7 +177,7 @@ function chromeView(w, h) {
     var L = page.labels[j];
     text(L[0], L[1], L[2], L[3] === "hint" ? T.unlit : T.label);
   }
-  var sub = "dub chord machine";
+  var sub = "dub chord machine  v" + LAYOUT.version;
   text(sub, LAYOUT.subtitle, 15, T.label);
 }
 
