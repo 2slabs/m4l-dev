@@ -165,7 +165,14 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   (https://forum.ableton.com/viewtopic.php?t=197223). The build follows this (type 1, the file name, no `Path`) but
   keeps `Type` 2, which Live 12 wrote in both real files seen (the example, and a Live 12 set's Max device in
   https://github.com/mattypie/alsdiff, test/data/m4l_device.xml). Not yet tried in Live.
+- **Does Live check `OriginalFileSize` / `OriginalCrc`?** No source says. The Live 12 manual's Managing Files and Sets
+  (https://www.ableton.com/en/manual/managing-files-and-sets/, "Automatic Repair") says only that with "One candidate
+  found — Live accepts the candidate", not how a candidate is matched, and of manual repair: "Live will not care if
+  the file you offer is really the file that was missing." Indirect: Ableton's m4l-connection-kit has shipped
+  `OSC Leap Motion Example.adg` (Crc 63076, FileSize 234834) next to an `OSC Leap Motion.amxd` updated in 2018
+  (commit 6c285b6: 239115 bytes, CRC 64949) without updating the preset; nobody there says whether it still loads.
+  So the build writes the real size and CRC for the file each set of presets ships with, and doesn't rely on either
+  way.
 - **Not yet seen in a saved file** (a preset saved from the current build would show them): whether Live 12 loads a
-  preset with type 1 and no `Path`; whether it checks `OriginalFileSize` / `OriginalCrc` against the file it finds
-  (the build writes the real ones for the `.amxd` built with the presets); `LastModDate` (the build writes 0, so the
+  preset with type 1 and no `Path`; whether a size / CRC mismatch matters (above); `LastModDate` (the build writes 0, so the
   files are the same every build); that Hidden (parameter_invisible 2) leaves "Page" out of the file.

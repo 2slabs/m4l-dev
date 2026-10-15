@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """2sl stab: a dub techno chord stab instrument for Max for Live.
 
-  python3 src/2sl-stab.py   # writes src/2sl-stab.maxpat, devices/2sl-stab/2sl-stab.amxd (for development,
-                            # scripts alongside) and dist/2sl-stab-<version>.amxd (frozen: one file to share)
+  python3 src/2sl-stab.py   # writes src/2sl-stab.maxpat, devices/2sl-stab/2sl-stab.amxd (for development, scripts
+                            # and Live presets alongside), and the release: dist/2sl-stab-<version>/ (the frozen
+                            # 2sl-stab-<version>.amxd, one self-contained file, with Live presets made for it) and
+                            # that folder zipped, dist/2sl-stab-<version>.zip
 
 Signal flow (from the research in devices/2sl-stab/README.md):
   MIDI -> chord memory (js) -> mc.noteallocator~ (16 voices)
@@ -13,7 +15,7 @@ Signal flow (from the research in devices/2sl-stab/README.md):
           saturation and diffusion in the loop, wow/flutter, slightly offset L/R times
        -> plugout~
 """
-import gzip, json, os, re, struct, subprocess, sys
+import gzip, json, os, re, shutil, struct, subprocess, sys, zipfile
 import xml.etree.ElementTree as ElementTree
 
 VERSION = "1.0.0"
@@ -1352,14 +1354,6 @@ amxd = os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab.amxd")
 subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "pack", maxpat, amxd, "--type", "instrument"], check=True)
 print(f"wrote {os.path.relpath(maxpat, ROOT)} and {os.path.relpath(amxd, ROOT)} ({len(boxes)} boxes, {width}px wide)")
 
-# the frozen release: one self-contained file with the scripts embedded
-os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
-frozen = os.path.join(ROOT, "dist", f"2sl-stab-{VERSION}.amxd")
-scripts = [os.path.join(ROOT, "devices", "2sl-stab", n) for n in ("2sl-stab.js", "2sl-stab-ui.js", "2sl-stab-view.js")]
-subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "freeze", maxpat, frozen, "--type", "instrument",
-                "--embed", *scripts], check=True)
-print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024} KB, scripts embedded)")
-
 # ---- LIVE PRESETS: one Live device preset (.adv) per sound, next to the device ------------------------------
 # A Live preset of a Max device is gzipped XML: the device's file reference and every parameter's value, not the
 # device itself. The schema here is the one Live 12.4.6 wrote for this device (references/ableton/
@@ -1367,7 +1361,6 @@ print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024}
 # the stored-only blob is kept as Live wrote it. See references/README.md, "Live presets", for each choice below.
 
 LIVE_PRESET_TEMPLATE_PATH = os.path.join(ROOT, "references", "ableton", "example-2sl-stab-preset.xml")
-LIVE_PRESET_FOLDER = os.path.dirname(amxd)                  # next to the device: the reference is relative to it
 PARAMETER_TYPE_FLOAT, PARAMETER_TYPE_ENUM = 0, 2            # Max's parameter_type (live.* references)
 AMXD_CRC_BYTES = 16384                                      # OriginalCrc covers the file's first 16 KB
 
@@ -1440,7 +1433,6 @@ PARAMETER_PROTOTYPE = {tag: template_parameter_list.find(tag) for tag in ("MxDFl
 if None in PARAMETER_PROTOTYPE.values():
     raise SystemExit(f"2sl-stab.py: {LIVE_PRESET_TEMPLATE_PATH} needs a float and an enum parameter to copy")
 FIRST_PARAMETER_ID = min(int(p.get("Id")) for p in template_parameter_list)
-amxd_size, amxd_crc_value = os.path.getsize(amxd), amxd_crc(amxd)
 
 
 def live_parameter_element(parameter_id, index, valueof, value):
@@ -1488,40 +1480,71 @@ def live_preset_file_name(name, group):
     return file_name
 
 
-written_presets = []
-for preset_name, preset_group, preset_idea, preset_values in PRESETS:
-    root = ElementTree.fromstring(ElementTree.tostring(template_root))
-    device = root.find("MxDeviceInstrument")
-    # the device file: relative to the preset (RelativePathType 1), so the presets work wherever the folder goes;
-    # no absolute Path (the template's is a path on one Mac)
-    file_ref = device.find("PatchSlot/Value/MxPatchRef/FileRef")
-    set_value(file_ref, "RelativePathType", "1")
-    set_value(file_ref, "RelativePath", os.path.basename(amxd))
-    file_ref.remove(file_ref.find("Path"))
-    set_value(file_ref, "OriginalFileSize", str(amxd_size))
-    set_value(file_ref, "OriginalCrc", str(amxd_crc_value))
-    set_value(device, "PatchSlot/Value/MxPatchRef/LastModDate", "0")      # a fixed date: the build is repeatable
-    set_value(device, "LastSelectedTimeableIndex", "0")
-    set_value(device, "LastSelectedClipEnvelopeIndex", "0")
-    parameter_list = device.find("ParameterList/ParameterList")
-    for old_parameter in list(parameter_list):
-        parameter_list.remove(old_parameter)
-    for index, valueof in enumerate(listed_parameters):
-        value = preset_values.get(valueof["parameter_longname"], 0)         # Stop and Throw: buttons, at rest
-        parameter_list.append(live_parameter_element(FIRST_PARAMETER_ID + index, index, valueof, value))
-    hit_bits, accent_bits = pattern_bits(MACHINE_PATTERNS[preset_values["Pattern"]][1])
-    blob = device.find("BlobSlot/Value/MxDBlob/Blob")
-    if blob is None:
-        raise SystemExit(f"2sl-stab.py: {LIVE_PRESET_TEMPLATE_PATH} has no stored-only blob")
-    ElementTree.indent(root, space="\t")
-    blob.text = stored_only_blob_text({"Steps": hit_bits, "Accents": accent_bits})   # after indent(): its own layout
-    xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ElementTree.tostring(root, encoding="unicode") + "\n"
-    file_name = live_preset_file_name(preset_name, preset_group)
-    with open(os.path.join(LIVE_PRESET_FOLDER, file_name), "wb") as preset_file:
-        preset_file.write(gzip.compress(xml_text.encode(), mtime=0))       # mtime 0: the same bytes every build
-    written_presets.append(file_name)
-for stale in sorted(set(f for f in os.listdir(LIVE_PRESET_FOLDER) if f.endswith(".adv")) - set(written_presets)):
-    os.remove(os.path.join(LIVE_PRESET_FOLDER, stale))
-    print(f"removed {stale}: no preset of that name in {PRESET_DATA_NAME}")
-print(f"wrote {len(written_presets)} Live presets next to {os.path.relpath(amxd, ROOT)} "
-      f"({len(listed_parameters)} parameters each; device {amxd_size} bytes, CRC {amxd_crc_value})")
+def write_live_presets(device_path):
+    """Every preset as a Live preset next to the device file `device_path`, made for that exact file: it refers to it
+    by its file name in the same folder (RelativePathType 1) with its size and OriginalCrc. Removes other .adv files
+    there. Returns the file names written."""
+    preset_folder = os.path.dirname(device_path)
+    device_size, device_crc = os.path.getsize(device_path), amxd_crc(device_path)
+    written_presets = []
+    for preset_name, preset_group, preset_idea, preset_values in PRESETS:
+        root = ElementTree.fromstring(ElementTree.tostring(template_root))
+        device = root.find("MxDeviceInstrument")
+        # the device file: relative to the preset (RelativePathType 1), so the presets work wherever the folder goes;
+        # no absolute Path (the template's is a path on one Mac)
+        file_ref = device.find("PatchSlot/Value/MxPatchRef/FileRef")
+        set_value(file_ref, "RelativePathType", "1")
+        set_value(file_ref, "RelativePath", os.path.basename(device_path))
+        file_ref.remove(file_ref.find("Path"))
+        set_value(file_ref, "OriginalFileSize", str(device_size))
+        set_value(file_ref, "OriginalCrc", str(device_crc))
+        set_value(device, "PatchSlot/Value/MxPatchRef/LastModDate", "0")      # a fixed date: the build is repeatable
+        set_value(device, "LastSelectedTimeableIndex", "0")
+        set_value(device, "LastSelectedClipEnvelopeIndex", "0")
+        parameter_list = device.find("ParameterList/ParameterList")
+        for old_parameter in list(parameter_list):
+            parameter_list.remove(old_parameter)
+        for index, valueof in enumerate(listed_parameters):
+            value = preset_values.get(valueof["parameter_longname"], 0)         # Stop and Throw: buttons, at rest
+            parameter_list.append(live_parameter_element(FIRST_PARAMETER_ID + index, index, valueof, value))
+        hit_bits, accent_bits = pattern_bits(MACHINE_PATTERNS[preset_values["Pattern"]][1])
+        blob = device.find("BlobSlot/Value/MxDBlob/Blob")
+        if blob is None:
+            raise SystemExit(f"2sl-stab.py: {LIVE_PRESET_TEMPLATE_PATH} has no stored-only blob")
+        ElementTree.indent(root, space="\t")
+        blob.text = stored_only_blob_text({"Steps": hit_bits, "Accents": accent_bits})   # after indent(): its own layout
+        xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ElementTree.tostring(root, encoding="unicode") + "\n"
+        file_name = live_preset_file_name(preset_name, preset_group)
+        with open(os.path.join(preset_folder, file_name), "wb") as preset_file:
+            preset_file.write(gzip.compress(xml_text.encode(), mtime=0))       # mtime 0: the same bytes every build
+        written_presets.append(file_name)
+    for stale in sorted(set(f for f in os.listdir(preset_folder) if f.endswith(".adv")) - set(written_presets)):
+        os.remove(os.path.join(preset_folder, stale))
+        print(f"removed {stale}: no preset of that name in {PRESET_DATA_NAME}")
+    print(f"wrote {len(written_presets)} Live presets next to {os.path.relpath(device_path, ROOT)} "
+          f"({len(listed_parameters)} parameters each; device {device_size} bytes, CRC {device_crc})")
+    return written_presets
+
+
+# the development device: scripts and presets alongside it, in the repo
+write_live_presets(amxd)
+
+# The release: one folder, the frozen device (one self-contained file, the scripts embedded) with the presets made
+# for that file, and the folder zipped to download as one file. Made fresh every build (dist/ is not in git).
+RELEASE_NAME = f"2sl-stab-{VERSION}"
+release_folder = os.path.join(ROOT, "dist", RELEASE_NAME)
+if os.path.exists(release_folder):
+    shutil.rmtree(release_folder)
+os.makedirs(release_folder)
+frozen = os.path.join(release_folder, f"{RELEASE_NAME}.amxd")
+scripts = [os.path.join(ROOT, "devices", "2sl-stab", n) for n in ("2sl-stab.js", "2sl-stab-ui.js", "2sl-stab-view.js")]
+subprocess.run([sys.executable, os.path.join(ROOT, "tools", "amxd.py"), "freeze", maxpat, frozen, "--type", "instrument",
+                "--embed", *scripts], check=True)
+print(f"froze {os.path.relpath(frozen, ROOT)} ({os.path.getsize(frozen) // 1024} KB, scripts embedded)")
+release_presets = write_live_presets(frozen)
+release_zip = os.path.join(ROOT, "dist", f"{RELEASE_NAME}.zip")
+with zipfile.ZipFile(release_zip, "w", zipfile.ZIP_DEFLATED) as release_archive:
+    for file_name in [os.path.basename(frozen)] + sorted(release_presets):
+        release_archive.write(os.path.join(release_folder, file_name), f"{RELEASE_NAME}/{file_name}")
+print(f"zipped {os.path.relpath(release_folder, ROOT)} as {os.path.relpath(release_zip, ROOT)} "
+      f"({os.path.getsize(release_zip) // 1024} KB)")

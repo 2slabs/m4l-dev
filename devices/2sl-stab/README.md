@@ -4,7 +4,15 @@ A dub techno chord machine: chord memory, a polyphonic analog-style voice, a sta
 
 A [2sl](https://2sl.to) project. The **2sl stab** chip in the device's header links back to 2sl.to: hover it to see the link, click to open it.
 
-Drop `2sl-stab.amxd` on a MIDI track. Keep `2sl-stab.js`, `2sl-stab-ui.js` and `2sl-stab-view.js` next to it, or freeze the device before sharing.
+Drop `2sl-stab.amxd` on a MIDI track. Keep `2sl-stab.js`, `2sl-stab-ui.js` and `2sl-stab-view.js` next to it. To share it, use the release (below), not this folder.
+
+### The release
+
+The build makes the release in `dist/` (not in git):
+- `dist/2sl-stab-<version>/`: `2sl-stab-<version>.amxd`, the frozen device (one self-contained file, the scripts inside), and the presets (`.adv`) made for that file.
+- `dist/2sl-stab-<version>.zip`: that folder, to upload to the release as one file.
+
+**To install it:** download `2sl-stab-<version>.zip`, unzip it, and move the whole `2sl-stab-<version>` folder into `User Library/Presets/Instruments/Max Instrument/` (where Live keeps Max Instruments). In Live's browser it's under User Library: drag `2sl-stab-<version>.amxd` onto a MIDI track, and load the presets from the same folder. Keep the presets and the `.amxd` together, with the `.amxd`'s file name unchanged: each preset finds the device by that name in its own folder.
 
 ## Controls
 
@@ -51,7 +59,7 @@ The sounds below sit next to the device in this folder, one `.adv` each (`dub - 
 - **In place:** add `devices/` to Live's browser (Places → Add Folder) and open `2sl-stab`.
 - **In the User Library:** copy this whole folder (the `.amxd`, the three `.js` and the `.adv` files) into `User Library/Presets/Instruments/Max Instrument/`, where Live keeps Max Instruments.
 
-The presets are written for the `.amxd` built with them (they hold its size and checksum), so rebuild both together and copy them together.
+The presets are written for the `.amxd` built with them (they hold its size and checksum), so rebuild both together and copy them together. These are for the development device; the release has its own, made for the frozen device (above).
 
 **Your own:** set the device up and click **Save Preset** in its title bar. Live saves the preset in your User Library (and copies the device there for it). Don't save presets or sets inside this repo: Live turns the folder into a Live Project and copies the device into it.
 
@@ -121,7 +129,7 @@ The patch is generated. Edit these, then run `python3 src/2sl-stab.py`:
 - `src/2sl-stab-ui.template.js`: pages and recolouring.
 - `src/2sl-stab-view.template.js`: the displays.
 
-It writes `src/2sl-stab.maxpat`, this `.amxd`, `2sl-stab-ui.js`, `2sl-stab-view.js` and the `.adv` presets (Live's preset format, from the preset Live saved in `references/ableton/`). `src/cozette-glyphs.js` comes from `tools/bdf2js.py` and `cozette.bdf` (Cozette v1.30.0).
+It writes `src/2sl-stab.maxpat`, this `.amxd`, `2sl-stab-ui.js`, `2sl-stab-view.js` and the `.adv` presets (Live's preset format, from the preset Live saved in `references/ableton/`), and the release in `dist/` (above). `src/cozette-glyphs.js` comes from `tools/bdf2js.py` and `cozette.bdf` (Cozette v1.30.0).
 
 ## Credits
 
