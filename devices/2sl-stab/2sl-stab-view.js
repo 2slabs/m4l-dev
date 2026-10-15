@@ -186,7 +186,7 @@ function paint() {
 }
 var unknownModeReported = false;
 
-var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [164, 384, 604, 724], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["dco 1 divided down,", 12, 143, "hint"], ["as on the sh-101", 12, 157, "hint"], ["pw: pulse width", 284, 143, "hint"], ["pwm: lfo on pw", 284, 157, "hint"], ["semi 7:", 504, 143, "hint"], ["a fifth up", 504, 157, "hint"], ["mixer", 616, 40, "label"], ["one lfo for all voices", 736, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
+var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [136, 356, 576, 696], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 256, 143, "hint"], ["pwm: lfo on pw", 256, 157, "hint"], ["semi 7:", 476, 143, "hint"], ["a fifth up", 476, 157, "hint"], ["mixer", 588, 40, "label"], ["one lfo for all voices", 708, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 
 var hover = 0;
 var SITE = "https://2sl.to";
@@ -508,7 +508,7 @@ function oscView(w, h, n) {
  *  cycles), so -1 oct shows one cycle and -2 oct half of one. The window starts on the DCO 1 cycle that puts
  *  an edge of the sub in the middle, so the half cycle reads as the wave it is. */
 function subView(w, h) {
-  var names = ["-1 oct square", "-2 oct square", "-2 oct 25% pulse"];
+  var names = ["square -1", "square -2", "pulse 25%"];
   var mode = Math.max(0, Math.min(2, S.submode | 0));
   viewLabel("sub");
   text(names[mode], w - measure(names[mode]) - 4, 12, T.label);

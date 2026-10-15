@@ -487,7 +487,7 @@ function oscView(w, h, n) {
  *  cycles), so -1 oct shows one cycle and -2 oct half of one. The window starts on the DCO 1 cycle that puts
  *  an edge of the sub in the middle, so the half cycle reads as the wave it is. */
 function subView(w, h) {
-  var names = ["-1 oct square", "-2 oct square", "-2 oct 25% pulse"];
+  var names = ["square -1", "square -2", "pulse 25%"];
   var mode = Math.max(0, Math.min(2, S.submode | 0));
   viewLabel("sub");
   text(names[mode], w - measure(names[mode]) - 4, 12, T.label);

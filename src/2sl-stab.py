@@ -1068,9 +1068,9 @@ dial("Pump Release", "Release", fx, "pumprel", 10, 95, 5, C4 + 112, DIAL_Y, "pla
 dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 5, C4 + 168, DIAL_Y, "play", scale=0.01, views=[(v_pump, "curve")])
 
 # ================= OSC: sub | DCO 1 | DCO 2 | mixer | LFO =================
-# Sections 24 px apart with the page rule in the middle of each gap, 12 px margins: 12 + 140 + 24 + 196 + 24 + 196
-# + 24 + 96 + 24 + 212 + 12 = 960. The mixer is two columns of dials (44 + 8 + 44).
-SUB_W, DCO_W, MIX_W, LFO_W, SECTION_GAP = 140, 196, 96, 212, 24
+# Sections 24 px apart with the page rule in the middle of each gap, 12 px margins: 12 + 112 + 24 + 196 + 24 + 196
+# + 24 + 96 + 24 + 240 + 12 = 960. The mixer is two columns of dials (44 + 8 + 44).
+SUB_W, DCO_W, MIX_W, LFO_W, SECTION_GAP = 112, 196, 96, 240, 24
 OS = 12
 O1 = OS + SUB_W + SECTION_GAP
 O2 = O1 + DCO_W + SECTION_GAP
@@ -1167,8 +1167,7 @@ LAYOUT = {
         {"rules": [208, 512, 720],
          "labels": HEADER + [["echo time", C3 + 64, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
         {"rules": OSC_RULES,
-         "labels": HEADER + [["dco 1 divided down,", OS, DIAL_Y + 24, "hint"], ["as on the sh-101", OS, DIAL_Y + 38, "hint"],
-                             ["pw: pulse width", O1 + 108, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 108, DIAL_Y + 38, "hint"],
+         "labels": HEADER + [["pw: pulse width", O1 + 108, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 108, DIAL_Y + 38, "hint"],
                              ["semi 7:", O2 + 108, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 108, DIAL_Y + 38, "hint"],
                              ["mixer", O3, VIEW_Y + 12, "label"],
                              ["one lfo for all voices", O4, ROW_Y + 12, "hint"]]},

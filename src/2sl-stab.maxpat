@@ -4565,7 +4565,7 @@
 					"patching_rect": [
 						1512.0,
 						1028.0,
-						140.0,
+						112.0,
 						64.0
 					],
 					"outlettype": [
@@ -4579,7 +4579,7 @@
 					"presentation_rect": [
 						12.0,
 						28.0,
-						140.0,
+						112.0,
 						64.0
 					],
 					"border": 0,
@@ -4598,7 +4598,7 @@
 					"patching_rect": [
 						1512.0,
 						698.0,
-						140.0,
+						112.0,
 						15.0
 					],
 					"outlettype": [
@@ -4612,7 +4612,7 @@
 					"presentation_rect": [
 						12.0,
 						98.0,
-						140.0,
+						112.0,
 						15.0
 					],
 					"saved_attribute_attributes": {
@@ -4684,7 +4684,7 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
-						1676.0,
+						1648.0,
 						1028.0,
 						196.0,
 						64.0
@@ -4698,7 +4698,7 @@
 					],
 					"presentation": 1,
 					"presentation_rect": [
-						176.0,
+						148.0,
 						28.0,
 						196.0,
 						64.0
@@ -4717,7 +4717,7 @@
 					"numinlets": 1,
 					"numoutlets": 3,
 					"patching_rect": [
-						1676.0,
+						1648.0,
 						698.0,
 						120.0,
 						15.0
@@ -4731,7 +4731,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						176.0,
+						148.0,
 						98.0,
 						120.0,
 						15.0
@@ -4805,7 +4805,7 @@
 					"numinlets": 1,
 					"numoutlets": 3,
 					"patching_rect": [
-						1800.0,
+						1772.0,
 						698.0,
 						72.0,
 						15.0
@@ -4819,7 +4819,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						300.0,
+						272.0,
 						98.0,
 						72.0,
 						15.0
@@ -4893,7 +4893,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1676.0,
+						1648.0,
 						819.0,
 						44.0,
 						48.0
@@ -4906,7 +4906,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						176.0,
+						148.0,
 						119.0,
 						44.0,
 						48.0
@@ -5012,7 +5012,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1732.0,
+						1704.0,
 						819.0,
 						44.0,
 						48.0
@@ -5025,7 +5025,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						232.0,
+						204.0,
 						119.0,
 						44.0,
 						48.0
@@ -5131,7 +5131,7 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
-						1896.0,
+						1868.0,
 						1028.0,
 						196.0,
 						64.0
@@ -5145,7 +5145,7 @@
 					],
 					"presentation": 1,
 					"presentation_rect": [
-						396.0,
+						368.0,
 						28.0,
 						196.0,
 						64.0
@@ -5164,7 +5164,7 @@
 					"numinlets": 1,
 					"numoutlets": 3,
 					"patching_rect": [
-						1896.0,
+						1868.0,
 						698.0,
 						120.0,
 						15.0
@@ -5178,7 +5178,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						396.0,
+						368.0,
 						98.0,
 						120.0,
 						15.0
@@ -5252,7 +5252,7 @@
 					"numinlets": 1,
 					"numoutlets": 3,
 					"patching_rect": [
-						2020.0,
+						1992.0,
 						698.0,
 						72.0,
 						15.0
@@ -5266,7 +5266,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						520.0,
+						492.0,
 						98.0,
 						72.0,
 						15.0
@@ -5340,7 +5340,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1896.0,
+						1868.0,
 						819.0,
 						44.0,
 						48.0
@@ -5353,7 +5353,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						396.0,
+						368.0,
 						119.0,
 						44.0,
 						48.0
@@ -5423,7 +5423,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						1952.0,
+						1924.0,
 						819.0,
 						44.0,
 						48.0
@@ -5436,7 +5436,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						452.0,
+						424.0,
 						119.0,
 						44.0,
 						48.0
@@ -5506,7 +5506,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2116.0,
+						2088.0,
 						764.0,
 						44.0,
 						48.0
@@ -5519,7 +5519,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						616.0,
+						588.0,
 						64.0,
 						44.0,
 						48.0
@@ -5589,7 +5589,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2168.0,
+						2140.0,
 						764.0,
 						44.0,
 						48.0
@@ -5602,7 +5602,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						668.0,
+						640.0,
 						64.0,
 						44.0,
 						48.0
@@ -5672,7 +5672,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2116.0,
+						2088.0,
 						819.0,
 						44.0,
 						48.0
@@ -5685,7 +5685,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						616.0,
+						588.0,
 						119.0,
 						44.0,
 						48.0
@@ -5755,7 +5755,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2168.0,
+						2140.0,
 						819.0,
 						44.0,
 						48.0
@@ -5768,7 +5768,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						668.0,
+						640.0,
 						119.0,
 						44.0,
 						48.0
@@ -5838,9 +5838,9 @@
 					"numinlets": 1,
 					"numoutlets": 1,
 					"patching_rect": [
-						2236.0,
+						2208.0,
 						1028.0,
-						212.0,
+						240.0,
 						64.0
 					],
 					"outlettype": [
@@ -5852,9 +5852,9 @@
 					],
 					"presentation": 1,
 					"presentation_rect": [
-						736.0,
+						708.0,
 						28.0,
-						212.0,
+						240.0,
 						64.0
 					],
 					"border": 0,
@@ -6051,7 +6051,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2236.0,
+						2208.0,
 						819.0,
 						44.0,
 						48.0
@@ -6064,7 +6064,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						736.0,
+						708.0,
 						119.0,
 						44.0,
 						48.0
@@ -6152,7 +6152,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2300.0,
+						2272.0,
 						819.0,
 						44.0,
 						48.0
@@ -6165,7 +6165,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						800.0,
+						772.0,
 						119.0,
 						44.0,
 						48.0
@@ -6271,7 +6271,7 @@
 					"numinlets": 1,
 					"numoutlets": 2,
 					"patching_rect": [
-						2364.0,
+						2336.0,
 						819.0,
 						44.0,
 						48.0
@@ -6284,7 +6284,7 @@
 					"parameter_enable": 1,
 					"presentation": 1,
 					"presentation_rect": [
-						864.0,
+						836.0,
 						119.0,
 						44.0,
 						48.0
