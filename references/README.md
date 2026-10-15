@@ -59,3 +59,8 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   (https://cycling74.com/forums/gen-parameter-is-not-defined). `samplerate` is listed under Constants in
   https://docs.cycling74.com/userguide/gen/gen~_operators/. So the echo sizes its buffers as
   `samplerate * seconds`. (The same thread: samplerate updates on a gen~ reset/restart.)
+- **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
+  Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
+  loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
+  this value to any connected objects." The build sets every control's initial value from BASE (the
+  Init preset), and also starts the gen~ Params and the displays there.

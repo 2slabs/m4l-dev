@@ -29,18 +29,19 @@ var T = THEMES.dark;
 function pickTheme() { T = themeFromLive("the " + MODE + " display"); }
 pickTheme();
 
+// What this display draws from. The controls' values start as the Init preset (BASE) sends them, written
+// in by the build per display, so a display is right before Live recalls the controls (and they agree after).
 var S = {
   page: 0,
   name: "", pitches: [], notice: "",
   pattern: "X..x..x.........", pos: -1, machine: 0, latch: 0, held: "-", flash: {}, throwflash: {},
-  dub: 0, freeze: 0, level: 0, throwAt: 0,
-  depth: 0, rate: 1, phase: 0, curve: 0.5,
-  wave1: 2, pw: 0.7, pwm: 0, wave2: 0, semi: 0, fine: 10,
-  lforate: 0.5, vib: 0, lfofilt: 0,
-  atk: 2, dec: 260, sus: 0, rel: 240, len: 0,
-  cutoff: 700, reso: 0.3, envamt: 0.5, tone: 0,
-  drive: 0.25
+  level: 0, throwAt: 0, phase: 0
 };
+var VIEW_DEFAULTS = /*VIEW_DEFAULTS*/;
+(function () {
+  var defaults = VIEW_DEFAULTS[MODE] || {};
+  for (var key in defaults) S[key] = defaults[key];
+})();
 
 var anim = new Task(function () { mgraphics.redraw(); }, this);
 anim.interval = 33;
@@ -62,6 +63,7 @@ function anything() {
   else if (m === "hit") { S.flash[a[0]] = now(); if (a[1]) { S.throwflash[a[0]] = now(); S.throwAt = now(); } }
   else if (m === "throw") S.throwAt = now();
   else if (m in S) S[m] = a[0];
+  else error("2sl stab: the " + MODE + " display doesn't take '" + m + "' (a wiring error): ignored\n");
   mgraphics.redraw();
 }
 function bang() { pickTheme(); mgraphics.redraw(); }

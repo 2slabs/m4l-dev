@@ -13,7 +13,7 @@ Signal flow (from the research in devices/2sl-stab/README.md):
           saturation and diffusion in the loop, wow/flutter, slightly offset L/R times
        -> plugout~
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +46,7 @@ blep(t, dt) {
 	return 0;
 }
 
-Param wave1(0, min=0, max=2);           // DCO 1: 0 saw, 1 pulse, 2 saw + pulse
+Param wave1(2, min=0, max=2);           // DCO 1: 0 saw, 1 pulse, 2 saw + pulse
 Param oct1(0, min=-1, max=1);           // 16' 8' 4'
 Param pw(0.7, min=0.5, max=0.95);       // pulse width (both DCOs)
 Param wave2(0, min=0, max=2);           // DCO 2: 0 saw, 1 pulse, 2 triangle
@@ -524,6 +524,39 @@ INFO = {
 INFO_USED = set()
 
 
+# ---- BASE: the Init preset, and every control's initial value -----------------------------
+# A fresh device and the Init preset are the same sound: each control's initial value is read from here,
+# and so are the gen~ Param defaults and the displays' starting values (checked or written at build time).
+BASE = {"Chord": 1, "In Key": 0, "Tone": 0, "Length": 0, "Drift": 0, "Machine": 0, "Latch": 0, "Pattern": 0,
+        "Density": 80, "Throws": 0, "Gate": 1, "Shift": 0, "Dub": 0, "Freeze": 0, "Echo Time": 2,
+        "Pump": 0, "Pump Rate": 0, "Pump Attack": 6, "Pump Release": 55, "Pump Curve": 50,
+        "DCO1 Wave": 2, "DCO1 Octave": 1, "PW": 70, "PWM": 0, "DCO2 Wave": 0, "DCO2 Octave": 1, "Semi": 0, "Fine": 10,
+        "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Sub Mode": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
+        "Cutoff": 700, "Resonance": 30, "Env Amount": 50, "Key Track": 50, "Velocity Filter": 50,
+        "Attack": 2, "Decay": 260, "Sustain": 0, "Release": 240, "Drive": 25, "Volume": 0}
+# Pattern: 0 dub dotted, 1 one & three+, 2 offbeat chops, 3 skank, 4 deep stab, 5 3-3-2
+# Echo Time: 0 1/16, 1 1/8, 2 1/8d, 3 1/4, 4 1/4d, 5 1/2.  Chord: 0 poly, 1 minor, 2 m7, 3 m9, 4 m11, 5 sus4, 6 fifths, 7 dark
+# DCO1 Wave: 0 saw, 1 pulse, 2 both.  DCO2 Wave: 0 saw, 1 pulse, 2 tri.  Octave: 0 16', 1 8', 2 4'.  Pump Rate: 0 1/4, 1 1/8, 2 1/16
+# Volume is set afterwards from measured loudness (see LOUDNESS below).
+
+
+def initial(name, initial_outside_presets=None):
+    """A control's initial value: BASE's. Only controls presets don't set (Preset, Page) give their own."""
+    if name in BASE:
+        if initial_outside_presets is not None:
+            raise SystemExit(f"2sl-stab.py: {name!r} is in BASE, so its initial value comes from there")
+        return BASE[name]
+    if initial_outside_presets is None:
+        raise SystemExit(f"2sl-stab.py: {name!r} has no BASE value (the Init preset): add it to BASE")
+    return initial_outside_presets
+
+
+CONTROL_BY_BOX = {}       # box id -> (control name, how its value is transformed on the way: v -> v)
+VIEW_MODE_BY_BOX = {}     # jsui box id -> its view mode
+VIEW_DEFAULTS = {}        # view mode -> {message: the value it gets for BASE}
+GEN_PARAM_FROM_BASE = []  # (gen box id, Param name, the value BASE sends it, control name)
+
+
 def param(cls, name, short, rect, kind, prect, **v):
     """A Live parameter (live.dial / live.menu), shown in presentation at `prect`, with its INFO text."""
     vals = {"parameter_longname": name, "parameter_shortname": short, "parameter_type": kind}
@@ -543,9 +576,11 @@ def param(cls, name, short, rect, kind, prect, **v):
         extra = {"text": short.lower(), "texton": short.lower(), "mode": v.pop("_mode", 1)}
         vals = {k: x for k, x in vals.items() if k != "_mode"}
         vals.update(parameter_enum=["off", "on"], parameter_mmax=1)
-    return box(cls=cls, rect=rect, ins=1, outs=outs[0], outtype=outs[1], varname=name.lower().replace(" ", "_"),
+    b_id = box(cls=cls, rect=rect, ins=1, outs=outs[0], outtype=outs[1], varname=name.lower().replace(" ", "_"),
                parameter_enable=1, presentation=1, presentation_rect=[float(x) for x in prect],
                saved_attribute_attributes={"valueof": vals}, **annotation, **extra)
+    CONTROL_BY_BOX[b_id] = (name, lambda value: value)
+    return b_id
 
 
 # MIDI in -> chord memory -> voice allocation
@@ -715,10 +750,25 @@ def view(mode, x, y, w, h, page, background=False, info=None):
             jsarguments=[mode], presentation=1, presentation_rect=[float(x), float(y), float(w), float(h)], border=0,
             **extra)
     VIEWS.append(f"view_{mode}")
+    VIEW_MODE_BY_BOX[b] = mode
     return on_page(page, b, f"view_{mode}")
 
 
+def derived(b_id, control_name, transform):
+    """`b_id` passes on control `control_name`'s value transformed (e.g. [- 1], an [expr] lookup)."""
+    CONTROL_BY_BOX[b_id] = (control_name, transform)
+    return b_id
+
+
 def tell(src, msg, dst, inlet=0, scale=None):
+    if src in CONTROL_BY_BOX and msg is not None:
+        control_name, transform = CONTROL_BY_BOX[src]
+        if control_name in BASE:
+            sent = transform(BASE[control_name]) * (scale if scale is not None else 1)
+            if dst in VIEW_MODE_BY_BOX:
+                VIEW_DEFAULTS.setdefault(VIEW_MODE_BY_BOX[dst], {})[msg] = sent
+            elif dst in (voice, fx):
+                GEN_PARAM_FROM_BASE.append((dst, msg, sent, control_name))
     chain = src
     if scale is not None:
         sc = box(f"* {scale}", rect=(1300, 900 + 2 * len(boxes), 50, 22), ins=2, outtype=["float"])
@@ -732,10 +782,10 @@ def tell(src, msg, dst, inlet=0, scale=None):
     wire(pp, dst, 0, inlet)
 
 
-def dial(name, short, target, msg, mmin, mmax, init, unit, x, y, page, exp=1.0, scale=1.0, inlet=0, views=()):
+def dial(name, short, target, msg, mmin, mmax, unit, x, y, page, exp=1.0, scale=1.0, inlet=0, views=()):
     pid = param("live.dial", name, short, (1500 + x, 700 + y, DW, DH), 0, (x, y, DW, DH),
                 parameter_mmin=float(mmin), parameter_mmax=float(mmax), parameter_initial_enable=1,
-                parameter_initial=[float(init)], parameter_unitstyle=unit, parameter_exponent=float(exp))
+                parameter_initial=[float(initial(name))], parameter_unitstyle=unit, parameter_exponent=float(exp))
     vn = name.lower().replace(" ", "_")
     on_page(page, pid, vn)
     VALUES[name] = vn
@@ -747,20 +797,22 @@ def dial(name, short, target, msg, mmin, mmax, init, unit, x, y, page, exp=1.0, 
     return pid
 
 
-def menu(name, short, items, init, x, y, w, page):
+def menu(name, short, items, x, y, w, page, initial_outside_presets=None):
     pid = param("live.menu", name, short, (1500 + x, 640 + y, w, 15), 2, (x, y, w, 15),
-                parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1, parameter_initial=[init])
+                parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1,
+                parameter_initial=[initial(name, initial_outside_presets)])
     vn = name.lower().replace(" ", "_")
     VALUES[name] = vn
     CONTROLS["menu"].append(vn)
     return on_page(page, pid, vn)
 
 
-def tabs(name, short, items, init, x, y, w, page, h=15, lines=1):
+def tabs(name, short, items, x, y, w, page, h=15, lines=1):
     """Selector buttons (a live.tab), like the waveform and footage switches on a Jupiter or Juno.
     lines = len(items) stacks them vertically, like a slide switch."""
     pid = param("live.tab", name, short, (1500 + x, 600 + y, w, h), 2, (x, y, w, h),
-                parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1, parameter_initial=[init])
+                parameter_enum=items, parameter_mmax=len(items) - 1, parameter_initial_enable=1,
+                parameter_initial=[initial(name)])
     vn = name.lower().replace(" ", "_")
     find(pid).update(num_lines_patching=lines, num_lines_presentation=lines)
     VALUES[name] = vn
@@ -769,7 +821,7 @@ def tabs(name, short, items, init, x, y, w, page, h=15, lines=1):
 
 
 def toggle(name, short, x, y, w, h, page, mode=1):
-    kw = {"parameter_initial_enable": 1, "parameter_initial": [0]} if mode == 1 else {}
+    kw = {"parameter_initial_enable": 1, "parameter_initial": [initial(name)]} if mode == 1 else {}
     pid = param("live.text", name, short, (1500 + x, 660 + y, w, h), 2, (x, y, w, h), _mode=mode, **kw)
     vn = name.lower().replace(" ", "_")
     if mode == 1:
@@ -817,10 +869,10 @@ page_tabs = param("live.tab", "Page", "Page", (1500, 560, 144, 15), 2, (80.0, 3.
 find(page_tabs).update(num_lines_patching=1, num_lines_presentation=1, varname="page")
 CONTROLS["tab"].append("page")
 tell(page_tabs, "page", ui)
-preset = menu("Preset", "Preset", ["-"], 0, 284, 3, 200, None)  # items set with the presets below
+preset = menu("Preset", "Preset", ["-"], 284, 3, 200, None, initial_outside_presets=0)  # items set with the presets below
 wire(preset, ui)
 vol = param("live.numbox", "Volume", "Volume", (1500, 520, 64, 15), 0, (824.0, 3.0, 64.0, 15.0),
-            parameter_mmin=-36.0, parameter_mmax=12.0, parameter_initial_enable=1, parameter_initial=[0.0],
+            parameter_mmin=-36.0, parameter_mmax=12.0, parameter_initial_enable=1, parameter_initial=[float(initial("Volume"))],
             parameter_unitstyle=4)
 find(vol).update(varname="volume")
 VALUES["Volume"] = "volume"
@@ -851,13 +903,13 @@ for dst in (voice, fx):
 # ================= PLAY: chord | machine | dub | pump =================
 C1, C2, C3, C4 = 12, 220, 524, 732
 v_chord = view("chord", C1, VIEW_Y, 184, VIEW_H, "play", info="Chord view")
-chordm = menu("Chord", "Chord", ["poly", "minor", "m7", "m9", "m11", "sus4", "fifths", "dark"], 1, C1, ROW_Y, 112, "play")
+chordm = menu("Chord", "Chord", ["poly", "minor", "m7", "m9", "m11", "sus4", "fifths", "dark"], C1, ROW_Y, 112, "play")
 tell(chordm, "shape", memory, 1)
 ink = toggle("In Key", "In Key", C1 + 116, ROW_Y, 68, 15, "play")
 tell(ink, "inkey", memory, 1)
-dial("Tone", "Tone", voice, "tonemac", -100, 100, 0, 5, C1, DIAL_Y, "play", scale=0.01)
-dial("Length", "Length", voice, "lenmac", -100, 100, 0, 5, C1 + 70, DIAL_Y, "play", scale=0.01)
-dial("Drift", "Drift", memory, "drift", 0, 100, 0, 5, C1 + 140, DIAL_Y, "play", scale=0.01, inlet=1)
+dial("Tone", "Tone", voice, "tonemac", -100, 100, 5, C1, DIAL_Y, "play", scale=0.01)
+dial("Length", "Length", voice, "lenmac", -100, 100, 5, C1 + 70, DIAL_Y, "play", scale=0.01)
+dial("Drift", "Drift", memory, "drift", 0, 100, 5, C1 + 140, DIAL_Y, "play", scale=0.01, inlet=1)
 
 v_steps = view("steps", C2, VIEW_Y, 280, VIEW_H, "play", info="Steps view")
 wire(memory, v_steps, 2, 0)
@@ -867,13 +919,12 @@ mach = toggle("Machine", "Machine", C2, ROW_Y, 72, 15, "play")
 tell(mach, "machine", memory, 1)
 lat = toggle("Latch", "Latch", C2 + 76, ROW_Y, 56, 15, "play")
 tell(lat, "latch", memory, 1)
-pat = menu("Pattern", "Pattern", ["dub dotted", "one & three+", "offbeat chops", "skank", "deep stab", "3-3-2"],
-           0, C2 + 136, ROW_Y, 144, "play")
+pat = menu("Pattern", "Pattern", ["dub dotted", "one & three+", "offbeat chops", "skank", "deep stab", "3-3-2"], C2 + 136, ROW_Y, 144, "play")
 tell(pat, "pattern", memory, 1)
-dial("Density", "Density", memory, "density", 0, 100, 80, 5, C2, DIAL_Y, "play", scale=0.01, inlet=1)
-dial("Throws", "Throws", memory, "throws", 0, 100, 0, 5, C2 + 56, DIAL_Y, "play", scale=0.01, inlet=1)
-dial("Gate", "Gate", memory, "length", 1, 4, 1, 0, C2 + 112, DIAL_Y, "play", inlet=1)
-dial("Shift", "Shift", memory, "shift", 0, 15, 0, 0, C2 + 168, DIAL_Y, "play", inlet=1)
+dial("Density", "Density", memory, "density", 0, 100, 5, C2, DIAL_Y, "play", scale=0.01, inlet=1)
+dial("Throws", "Throws", memory, "throws", 0, 100, 5, C2 + 56, DIAL_Y, "play", scale=0.01, inlet=1)
+dial("Gate", "Gate", memory, "length", 1, 4, 0, C2 + 112, DIAL_Y, "play", inlet=1)
+dial("Shift", "Shift", memory, "shift", 0, 15, 0, C2 + 168, DIAL_Y, "play", inlet=1)
 
 sbits = stored("Steps", 73)      # dub dotted: hits on 1, 4, 7
 abits = stored("Accents", 1)
@@ -896,8 +947,8 @@ wire(throwmsg, v_echo)
 frz = toggle("Freeze", "Freeze", C3 + 96, ROW_Y, 88, 15, "play")
 tell(frz, "freeze", fx)
 tell(frz, "freeze", v_echo)
-dial("Dub", "Dub", fx, "dub", 0, 100, 0, 5, C3, DIAL_Y, "play", scale=0.01, views=[(v_echo, "dub")])
-divs = menu("Echo Time", "Time", ["1/16", "1/8", "1/8d", "1/4", "1/4d", "1/2"], 2, C3 + 64, DIAL_Y + 17, 64, "play")
+dial("Dub", "Dub", fx, "dub", 0, 100, 5, C3, DIAL_Y, "play", scale=0.01, views=[(v_echo, "dub")])
+divs = menu("Echo Time", "Time", ["1/16", "1/8", "1/8d", "1/4", "1/4d", "1/2"], C3 + 64, DIAL_Y + 17, 64, "play")
 beats = box("expr ($i1==0)*0.25 + ($i1==1)*0.5 + ($i1==2)*0.75 + ($i1==3)*1. + ($i1==4)*1.5 + ($i1==5)*2.",
             rect=(1100, 700, 400, 22), ins=1, outs=1)
 wire(divs, beats)
@@ -907,72 +958,73 @@ v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play", info="Pump view")
 ph_snap = box("snapshot~ 33", rect=(250, 430, 80, 22), ins=2, outs=1, outtype=["float"])
 wire(beat, ph_snap)
 tell(ph_snap, "phase", v_pump)
-prate = menu("Pump Rate", "Rate", ["1/4", "1/8", "1/16"], 0, C4, ROW_Y, 96, "play")
-rmult = box("expr ($i1==0)*1. + ($i1==1)*2. + ($i1==2)*4.", rect=(1100, 760, 260, 22), ins=1, outs=1)
+prate = menu("Pump Rate", "Rate", ["1/4", "1/8", "1/16"], C4, ROW_Y, 96, "play")
+rmult = derived(box("expr ($i1==0)*1. + ($i1==1)*2. + ($i1==2)*4.", rect=(1100, 760, 260, 22), ins=1, outs=1),
+                "Pump Rate", lambda v: [1.0, 2.0, 4.0][v])
 wire(prate, rmult)
 tell(rmult, "pumprate", fx)
 tell(rmult, "rate", v_pump)
-dial("Pump", "Depth", fx, "pumpdepth", 0, 100, 0, 5, C4, DIAL_Y, "play", scale=0.01, views=[(v_pump, "depth")])
-dial("Pump Attack", "Attack", fx, "pumpatk", 1, 40, 6, 2, C4 + 56, DIAL_Y, "play", exp=2.0, views=[(v_pump, "atk")])
-dial("Pump Release", "Release", fx, "pumprel", 10, 95, 55, 5, C4 + 112, DIAL_Y, "play", scale=0.01, views=[(v_pump, "rel")])
-dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 50, 5, C4 + 168, DIAL_Y, "play", scale=0.01, views=[(v_pump, "curve")])
+dial("Pump", "Depth", fx, "pumpdepth", 0, 100, 5, C4, DIAL_Y, "play", scale=0.01, views=[(v_pump, "depth")])
+dial("Pump Attack", "Attack", fx, "pumpatk", 1, 40, 2, C4 + 56, DIAL_Y, "play", exp=2.0, views=[(v_pump, "atk")])
+dial("Pump Release", "Release", fx, "pumprel", 10, 95, 5, C4 + 112, DIAL_Y, "play", scale=0.01, views=[(v_pump, "rel")])
+dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 5, C4 + 168, DIAL_Y, "play", scale=0.01, views=[(v_pump, "curve")])
 
 # ================= OSC: DCO 1 | DCO 2 | mixer + sub | LFO =================
 O1, O2, O3, O4 = 12, 240, 468, 696
 v_osc1 = view("osc1", O1, VIEW_Y, 204, VIEW_H, "osc", info="DCO1 view")
-w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], 0, O1, ROW_Y, 124, "osc")
+w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], O1, ROW_Y, 124, "osc")
 tell(w1, "wave1", voice)
 tell(w1, "wave1", v_osc1)
-o1 = tabs("DCO1 Octave", "Oct 1", ["16'", "8'", "4'"], 1, O1 + 128, ROW_Y, 76, "osc")
-o1m = box("- 1", rect=(1100, 820, 40, 22), ins=2, outtype=["int"])
+o1 = tabs("DCO1 Octave", "Oct 1", ["16'", "8'", "4'"], O1 + 128, ROW_Y, 76, "osc")
+o1m = derived(box("- 1", rect=(1100, 820, 40, 22), ins=2, outtype=["int"]), "DCO1 Octave", lambda v: v - 1)
 wire(o1, o1m)
 tell(o1m, "oct1", voice)
-dial("PW", "PW", voice, "pw", 50, 95, 70, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
-pwm_dial = dial("PWM", "PWM", voice, "pwmamt", 0, 100, 0, 5, O1 + 56, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pwm")])
+dial("PW", "PW", voice, "pw", 50, 95, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
+pwm_dial = dial("PWM", "PWM", voice, "pwmamt", 0, 100, 5, O1 + 56, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pwm")])
 
 v_osc2 = view("osc2", O2, VIEW_Y, 204, VIEW_H, "osc", info="DCO2 view")
-w2 = tabs("DCO2 Wave", "Wave 2", ["saw", "pulse", "tri"], 0, O2, ROW_Y, 124, "osc")
+w2 = tabs("DCO2 Wave", "Wave 2", ["saw", "pulse", "tri"], O2, ROW_Y, 124, "osc")
 tell(w2, "wave2", voice)
 tell(w2, "wave2", v_osc2)
-o2 = tabs("DCO2 Octave", "Oct 2", ["16'", "8'", "4'"], 1, O2 + 128, ROW_Y, 76, "osc")
-o2m = box("- 1", rect=(1150, 820, 40, 22), ins=2, outtype=["int"])
+o2 = tabs("DCO2 Octave", "Oct 2", ["16'", "8'", "4'"], O2 + 128, ROW_Y, 76, "osc")
+o2m = derived(box("- 1", rect=(1150, 820, 40, 22), ins=2, outtype=["int"]), "DCO2 Octave", lambda v: v - 1)
 wire(o2, o2m)
 tell(o2m, "oct2", voice)
-dial("Semi", "Semi", voice, "semi", -12, 12, 0, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
-dial("Fine", "Fine", voice, "fine", 0, 50, 10, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
+dial("Semi", "Semi", voice, "semi", -12, 12, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
+dial("Fine", "Fine", voice, "fine", 0, 50, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
 
 # the mixer: four levels as a square of dials (left), the SH-101 sub switch (right). No display.
 MIX_TOP_Y, MIX_COL2, SUB_X = 64, O3 + 52, O3 + 108
-dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 80, 5, O3, MIX_TOP_Y, "osc", scale=0.01)
-dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 80, 5, MIX_COL2, MIX_TOP_Y, "osc", scale=0.01)
-dial("Sub", "Sub", voice, "sublvl", 0, 100, 0, 5, O3, DIAL_Y, "osc", scale=0.01)
-dial("Noise", "Noise", voice, "noiseamt", 0, 100, 8, 5, MIX_COL2, DIAL_Y, "osc", scale=0.01)
-sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], 0, SUB_X, MIX_TOP_Y, 64, "osc", h=48, lines=3)
+dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 5, O3, MIX_TOP_Y, "osc", scale=0.01)
+dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 5, MIX_COL2, MIX_TOP_Y, "osc", scale=0.01)
+dial("Sub", "Sub", voice, "sublvl", 0, 100, 5, O3, DIAL_Y, "osc", scale=0.01)
+dial("Noise", "Noise", voice, "noiseamt", 0, 100, 5, MIX_COL2, DIAL_Y, "osc", scale=0.01)
+sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], SUB_X, MIX_TOP_Y, 64, "osc", h=48, lines=3)
 tell(sub_mode_tab, "submode", voice)
 
 v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
-dial("LFO Rate", "Rate", lfo, None, 0.05, 12, 0.5, 3, O4, DIAL_Y, "osc", exp=3.0, views=[(v_lfo, "lforate")])
-dial("Vibrato", "Vibrato", voice, "vibamt", 0, 100, 0, 5, O4 + 64, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "vib")])
-dial("LFO Filter", "Filter", voice, "lfofilt", 0, 100, 0, 5, O4 + 128, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "lfofilt")])
+dial("LFO Rate", "Rate", lfo, None, 0.05, 12, 3, O4, DIAL_Y, "osc", exp=3.0, views=[(v_lfo, "lforate")])
+dial("Vibrato", "Vibrato", voice, "vibamt", 0, 100, 5, O4 + 64, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "vib")])
+dial("LFO Filter", "Filter", voice, "lfofilt", 0, 100, 5, O4 + 128, DIAL_Y, "osc", scale=0.01, views=[(v_lfo, "lfofilt")])
 
 # ================= SHAPE: filter | envelope | drive =================
 F, E, D = 12, 376, 680
 v_filter = view("filter", F, VIEW_Y, 340, VIEW_H, "shape", info="Filter view")
-dial("Cutoff", "Cutoff", voice, "cutoff", 40, 12000, 700, 3, F, DIAL_Y, "shape", exp=3.0, views=[(v_filter, "cutoff")])
-dial("Resonance", "Reso", voice, "reso", 0, 100, 30, 5, F + 68, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "reso")])
-dial("Env Amount", "Env", voice, "envamt", 0, 100, 50, 5, F + 136, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "envamt")])
-dial("Key Track", "Key", voice, "keytrack", 0, 100, 50, 5, F + 204, DIAL_Y, "shape", scale=0.01)
-dial("Velocity Filter", "Vel", voice, "velfilt", 0, 100, 50, 5, F + 272, DIAL_Y, "shape", scale=0.01)
+dial("Cutoff", "Cutoff", voice, "cutoff", 40, 12000, 3, F, DIAL_Y, "shape", exp=3.0, views=[(v_filter, "cutoff")])
+dial("Resonance", "Reso", voice, "reso", 0, 100, 5, F + 68, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "reso")])
+dial("Env Amount", "Env", voice, "envamt", 0, 100, 5, F + 136, DIAL_Y, "shape", scale=0.01, views=[(v_filter, "envamt")])
+dial("Key Track", "Key", voice, "keytrack", 0, 100, 5, F + 204, DIAL_Y, "shape", scale=0.01)
+dial("Velocity Filter", "Vel", voice, "velfilt", 0, 100, 5, F + 272, DIAL_Y, "shape", scale=0.01)
 
 v_env = view("env", E, VIEW_Y, 280, VIEW_H, "shape", info="Envelope view")
-dial("Attack", "Attack", voice, "atk", 0.5, 4000, 2, 2, E, DIAL_Y, "shape", exp=3.0, views=[(v_env, "atk")])
-dial("Decay", "Decay", voice, "dec", 5, 6000, 260, 2, E + 70, DIAL_Y, "shape", exp=3.0, views=[(v_env, "dec")])
-dial("Sustain", "Sustain", voice, "sus", 0, 100, 0, 5, E + 140, DIAL_Y, "shape", scale=0.01, views=[(v_env, "sus")])
-dial("Release", "Release", voice, "rel", 5, 6000, 240, 2, E + 210, DIAL_Y, "shape", exp=3.0, views=[(v_env, "rel")])
+dial("Attack", "Attack", voice, "atk", 0.5, 4000, 2, E, DIAL_Y, "shape", exp=3.0, views=[(v_env, "atk")])
+dial("Decay", "Decay", voice, "dec", 5, 6000, 2, E + 70, DIAL_Y, "shape", exp=3.0, views=[(v_env, "dec")])
+dial("Sustain", "Sustain", voice, "sus", 0, 100, 5, E + 140, DIAL_Y, "shape", scale=0.01, views=[(v_env, "sus")])
+dial("Release", "Release", voice, "rel", 5, 6000, 2, E + 210, DIAL_Y, "shape", exp=3.0, views=[(v_env, "rel")])
 
 v_drive = view("drive", D, VIEW_Y, 268, VIEW_H, "shape", info="Drive view")
-dial("Drive", "Drive", fx, "drive", 0, 100, 25, 5, D, DIAL_Y, "shape", scale=0.01, views=[(v_drive, "drive")])
+dial("Drive", "Drive", fx, "drive", 0, 100, 5, D, DIAL_Y, "shape", scale=0.01, views=[(v_drive, "drive")])
 
 width = W
 
@@ -1004,18 +1056,7 @@ LAYOUT = {
     ],
 }
 
-# ---- presets: values in each control's own units ---------------------------------------
-BASE = {"Chord": 1, "In Key": 0, "Tone": 0, "Length": 0, "Drift": 0, "Machine": 0, "Latch": 0, "Pattern": 0,
-        "Density": 80, "Throws": 0, "Gate": 1, "Shift": 0, "Dub": 0, "Freeze": 0, "Echo Time": 2,
-        "Pump": 0, "Pump Rate": 0, "Pump Attack": 6, "Pump Release": 55, "Pump Curve": 50,
-        "DCO1 Wave": 2, "DCO1 Octave": 1, "PW": 70, "PWM": 0, "DCO2 Wave": 0, "DCO2 Octave": 1, "Semi": 0, "Fine": 10,
-        "OSC 1": 80, "OSC 2": 80, "Sub": 0, "Sub Mode": 0, "Noise": 8, "LFO Rate": 0.5, "Vibrato": 0, "LFO Filter": 0,
-        "Cutoff": 700, "Resonance": 30, "Env Amount": 50, "Key Track": 50, "Velocity Filter": 50,
-        "Attack": 2, "Decay": 260, "Sustain": 0, "Release": 240, "Drive": 25, "Volume": 0}
-# Pattern: 0 dub dotted, 1 one & three+, 2 offbeat chops, 3 skank, 4 deep stab, 5 3-3-2
-# Echo Time: 0 1/16, 1 1/8, 2 1/8d, 3 1/4, 4 1/4d, 5 1/2.  Chord: 0 poly, 1 minor, 2 m7, 3 m9, 4 m11, 5 sus4, 6 fifths, 7 dark
-# DCO1 Wave: 0 saw, 1 pulse, 2 both.  DCO2 Wave: 0 saw, 1 pulse, 2 tri.  Octave: 0 16', 1 8', 2 4'.  Pump Rate: 0 1/4, 1 1/8, 2 1/16
-# Volume is set afterwards from measured loudness (see LOUDNESS below).
+# ---- presets: values in each control's own units (BASE, the Init sound, is defined above the controls) --
 PRESETS = [
     ("init", {}),
 
@@ -1123,6 +1164,19 @@ PRESETS = [
 pbox = next(x["box"] for x in boxes if x["box"]["id"] == preset)
 pbox["saved_attribute_attributes"]["valueof"].update(parameter_enum=[n for n, _ in PRESETS], parameter_mmax=len(PRESETS) - 1)
 
+# the gen~ Param defaults must be what BASE sends them (the sound before Live recalls the controls)
+GEN_CODE = {voice: VOICE, fx: FX}
+gen_param_mismatches = []
+for gen_box, param_name, sent, control_name in GEN_PARAM_FROM_BASE:
+    declared = re.search(r"Param " + param_name + r"\(([^,)]+)", GEN_CODE[gen_box])
+    if not declared:
+        gen_param_mismatches.append(f"{control_name} -> {param_name}: no such Param")
+    elif abs(float(declared.group(1)) - sent) > 1e-9:
+        gen_param_mismatches.append(f"{control_name} -> Param {param_name}({declared.group(1)}), BASE sends {sent:g}")
+if gen_param_mismatches:
+    raise SystemExit("2sl-stab.py: gen~ Param defaults disagree with BASE (the Init sound):\n  "
+                     + "\n  ".join(gen_param_mismatches))
+
 if set(INFO) - INFO_USED:
     raise SystemExit(f"2sl-stab.py: INFO has text for no parameter or view: {sorted(set(INFO) - INFO_USED)}")
 
@@ -1169,7 +1223,7 @@ function themeFromLive(who) {
 view_js = open(os.path.join(HERE, "2sl-stab-view.template.js")).read()
 glyphs = open(os.path.join(HERE, "cozette-glyphs.js")).read()
 view_js = (view_js.replace("/*COZETTE*/", glyphs.strip()).replace("/*THEME_FROM_LIVE*/", THEME_FROM_LIVE_JS)
-           .replace("/*LAYOUT*/", "var LAYOUT = " + json.dumps(LAYOUT) + ";"))
+           .replace("/*VIEW_DEFAULTS*/", json.dumps(VIEW_DEFAULTS)).replace("/*LAYOUT*/", "var LAYOUT = " + json.dumps(LAYOUT) + ";"))
 open(os.path.join(ROOT, "devices", "2sl-stab", "2sl-stab-view.js"), "w").write(view_js)
 ui_js = open(os.path.join(HERE, "2sl-stab-ui.template.js")).read()
 ui_js = (ui_js.replace("/*PAGES*/", json.dumps(PAGES)).replace("/*PRESETS*/", json.dumps(presets_js, indent=1))
