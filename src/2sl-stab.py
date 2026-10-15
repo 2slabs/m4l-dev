@@ -1115,15 +1115,15 @@ wire(throwmsg, v_echo)
 frz = toggle("Freeze", "Freeze", C3 + 96, ROW_Y, 88, 15, "play")
 tell(frz, "freeze", fx)
 tell(frz, "freeze", v_echo)
-dial("Dub", "Dub", fx, "dub", 0, 100, 5, C3, DIAL_Y, "play", scale=0.01)
-divs = menu("Echo Time", "Time", ["1/16", "1/8", "1/8d", "1/4", "1/4d", "1/2"], C3 + 64, DIAL_Y + 17, 64, "play")
+dial("Dub", "Dub", fx, "dub", 0, 100, 5, C3 + 56, DIAL_Y, "play", scale=0.01)
+divs = menu("Echo Time", "Time", ["1/16", "1/8", "1/8d", "1/4", "1/4d", "1/2"], C3 + 120, DIAL_Y + 17, 64, "play")
 beats = box("expr ($i1==0)*0.25 + ($i1==1)*0.5 + ($i1==2)*0.75 + ($i1==3)*1. + ($i1==4)*1.5 + ($i1==5)*2.",
             rect=(1100, 700, 400, 22), ins=1, outs=1)
 wire(divs, beats)
 wire(beats, pak, 0, 1)
 # Send: the echo's level as the dial shows it (gain = Send / 100); exponent 2 squares the dial's travel, the curve
 # the echo send had when Dub set it (0.9 dub^2), so the low end is as fine as before
-dial("Send", "Send", fx, "echosend", 0, 100, 5, C3 + 136, DIAL_Y, "play", exp=2.0, scale=0.01, views=[(v_echo, "send")])
+dial("Send", "Send", fx, "echosend", 0, 100, 5, C3, DIAL_Y, "play", exp=2.0, scale=0.01, views=[(v_echo, "send")])
 
 v_pump = view("pump", C4, VIEW_Y, 216, VIEW_H, "play", info="Pump view")
 ph_snap = box("snapshot~ 33", rect=(250, 430, 80, 22), ins=2, outs=1, outtype=["float"])
@@ -1235,11 +1235,11 @@ tell(page_tabs, "page", chrome)
 # what the chrome draws per page: rules between sections, labels and hints (text, x, baseline, kind)
 HEADER = [["out", 800, 15, "label"]]
 LAYOUT = {
-    "subtitle": 500,
+    "subtitle": 236,               # 12 px after the page tabs (80 + 144)
     "version": VERSION,
     "pages": [
         {"rules": [208, 512, 720],
-         "labels": HEADER + [["echo time", C3 + 64, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
+         "labels": HEADER + [["echo time", C3 + 120, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
         {"rules": OSC_RULES,
          "labels": HEADER + [["dco 1 divided down", OS, DIAL_Y + 24, "hint"],
                              ["pw: pulse width", O1 + 108, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 108, DIAL_Y + 38, "hint"],
