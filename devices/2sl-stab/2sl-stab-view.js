@@ -5,6 +5,7 @@
 //   steps   the machine's 16 steps: click to edit; playhead, hits, throws, status line
 //   echo    the dub echo: repeats decaying (more and darker with Dub), throws, freeze, live level
 //   pump    the duck curve over a beat, with a moving playhead
+//   sub     the sub oscillator: its wave for Sub Mode, over DCO 1's two cycles
 //   osc1    DCO 1: its waveform (saw, pulse, both), pulse width, PWM
 //   osc2    DCO 2: its waveform (saw, pulse, triangle), interval and detune
 //   lfo     the LFO and where it goes
@@ -60,7 +61,7 @@ var S = {
   tempo: 120,                       // Live's tempo (the pump), until Live reports it
   lfophase: 0, lfophaseAt: 0        // the LFO's phase (0..1) as last read from the audio, and when
 };
-var VIEW_DEFAULTS = {"echo": {"freeze": 0, "dub": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
+var VIEW_DEFAULTS = {"echo": {"freeze": 0, "dub": 0.0}, "pump": {"rate": 1.0, "depth": 0.0, "atk": 6, "rel": 0.55, "curve": 0.5}, "sub": {"submode": 0}, "osc1": {"wave1": 2, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "osc2": {"wave2": 0, "semi": 0, "fine": 10, "pw": 0.7000000000000001, "pwm": 0.0, "lforate": 0.5}, "lfo": {"pwm": 0.0, "lforate": 0.5, "vib": 0.0, "lfofilt": 0.0}, "filter": {"cutoff": 700, "reso": 0.3, "envamt": 0.5, "tone": 0.0}, "env": {"atk": 2, "dec": 260, "sus": 0.0, "rel": 240, "len": 0.0}, "drive": {"drive": 0.25}};
 (function () {
   var defaults = VIEW_DEFAULTS[MODE] || {};
   for (var key in defaults) S[key] = defaults[key];
@@ -173,6 +174,7 @@ function paint() {
   else if (MODE === "pump") pumpView(w, h);
   else if (MODE === "env") envView(w, h);
   else if (MODE === "filter") filterView(w, h);
+  else if (MODE === "sub") subView(w, h);
   else if (MODE === "osc1") oscView(w, h, 1);
   else if (MODE === "osc2") oscView(w, h, 2);
   else if (MODE === "lfo") lfoView(w, h);
@@ -184,7 +186,7 @@ function paint() {
 }
 var unknownModeReported = false;
 
-var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [228, 456, 684], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["pw: pulse width", 128, 143, "hint"], ["pwm: lfo on pw", 128, 157, "hint"], ["semi 7:", 356, 143, "hint"], ["a fifth up", 356, 157, "hint"], ["mixer", 468, 40, "label"], ["sub", 576, 40, "label"], ["as on the", 576, 143, "hint"], ["sh-101", 576, 157, "hint"], ["one lfo for all voices", 696, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
+var LAYOUT = {"subtitle": 500, "version": "1.0.0", "pages": [{"rules": [208, 512, 720], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["echo time", 588, 131, "label"], ["pump rate", 836, 110, "hint"]]}, {"rules": [164, 384, 604, 724], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["dco 1 divided down,", 12, 143, "hint"], ["as on the sh-101", 12, 157, "hint"], ["pw: pulse width", 284, 143, "hint"], ["pwm: lfo on pw", 284, 157, "hint"], ["semi 7:", 504, 143, "hint"], ["a fifth up", 504, 157, "hint"], ["mixer", 616, 40, "label"], ["one lfo for all voices", 736, 110, "hint"]]}, {"rules": [364, 668], "labels": [["preset", 240, 15, "label"], ["out", 800, 15, "label"], ["grey: where the envelope opens it", 12, 110, "hint"], ["one envelope: amp and filter", 376, 110, "hint"], ["tape saturation, before the echo", 680, 110, "hint"]]}]};
 
 var hover = 0;
 var SITE = "https://2sl.to";
@@ -431,6 +433,31 @@ function oscView(w, h, n) {
     else if (wave === 1) v = pulse;
     else v = n === 1 ? (saw + pulse) * 0.6 : tri;
     var y = mid - amp * v / 2;                                     // +-2: the pulse's widest swing
+    if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
+  }
+  mgraphics.stroke();
+}
+
+/** The sub as the voice makes it: DCO 1 divided by 2 (-1 oct square) or 4 (-2 oct square, 25% pulse, the pulse
+ *  +1 for a quarter and -1 the rest, plus 0.5 as in the voice), over the same time as DCO 1's display (two DCO 1
+ *  cycles), so -1 oct shows one cycle and -2 oct half of one. The window starts on the DCO 1 cycle that puts
+ *  an edge of the sub in the middle, so the half cycle reads as the wave it is. */
+function subView(w, h) {
+  var names = ["-1 oct square", "-2 oct square", "-2 oct 25% pulse"];
+  var mode = Math.max(0, Math.min(2, S.submode | 0));
+  viewLabel("sub");
+  text(names[mode], w - measure(names[mode]) - 4, 12, T.label);
+  var mid = 20 + (h - 24) / 2, amp = (h - 30) / 2;
+  var division = mode === 0 ? 2 : 4;                      // DCO 1 cycles per sub cycle
+  var firstCycle = mode === 0 ? 0 : mode === 1 ? 1 : 3;    // where the window starts (in DCO 1 cycles)
+  rgba(T.mint);
+  mgraphics.set_line_width(2);
+  for (var x = 4; x <= w - 4; x++) {
+    var dco1Cycles = firstCycle + ((x - 4) / (w - 8)) * 2;
+    var phase = (dco1Cycles / division) % 1, v;
+    if (mode === 2) v = (phase < 0.25 ? 1 : -1) + 0.5;
+    else v = phase < 0.5 ? 1 : -1;
+    var y = mid - amp * v / 2;                             // +-2, the DCO displays' scale
     if (x === 4) mgraphics.move_to(x, y); else mgraphics.line_to(x, y);
   }
   mgraphics.stroke();

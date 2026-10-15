@@ -23,9 +23,10 @@ Three pages: switch with **play / osc / shape** in the header. The header also h
 
 | section | display | controls |
 |---|---|---|
+| sub | its wave for the Sub Mode, over the same time as DCO 1's two cycles (so one cycle at −1 oct, half of one at −2 oct) | **Sub Mode** switch as on the Roland SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (DCO 1 divided down, so it follows DCO 1's footage). Its level is **Sub** in the mixer |
 | dco 1 | its waveform, moving with PWM | wave buttons **saw / pulse / both**, footage **16′ / 8′ / 4′**, **PW**, **PWM** (the LFO on pulse width, the Juno shimmer) |
 | dco 2 | its waveform; on pulse, with PW's width, moving with PWM like DCO 1 | wave buttons **saw / pulse / tri**, footage, **Semi** (−12 to +12; 7 stacks a fifth), **Fine** (detune in cents) |
-| mixer | none: four level dials in a square, and the sub switch | **OSC 1**, **OSC 2**, **Sub**, **Noise**; **Sub** switch as on the Roland SH-101: a square 1 octave below DCO 1, a square 2 octaves below, or a 25% pulse 2 octaves below (DCO 1 divided down, so it follows DCO 1's footage) |
+| mixer | none: four level dials in a square | **OSC 1**, **OSC 2**, **Sub**, **Noise** |
 | lfo | the LFO moving, in step with the sound, and where it's going | **Rate**, **Vibrato** (LFO → pitch), **Filter** (LFO → cutoff). One LFO for all voices. |
 
 **Shape**

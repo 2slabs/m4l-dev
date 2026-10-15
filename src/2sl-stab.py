@@ -431,6 +431,10 @@ INFO = {
                   "A throw flashes an orange frame. The line along the bottom is the echo's level now."),
     "Pump view": ("Pump", "The output level over two beats at Live's tempo: each dip is a duck, mint while Depth "
                   "is above 0. The blue line is Live's position in the beat. Top right: Depth."),
+    "Sub view": ("Sub", "The sub as the voice makes it for Sub Mode, in mint: DCO 1 divided by 2 or 4, drawn over "
+                 "the same time as DCO 1's two cycles, so -1 oct is one cycle and -2 oct half of one (shown across an "
+                 "edge). The 25% pulse sits off centre (+1.5 / -0.5) as in the voice. Top right: the mode. Its level is "
+                 "Sub in the mixer."),
     "DCO1 view": ("DCO 1", "Two cycles of DCO 1's waveform as the voice makes it (saw, pulse or both), in mint. "
                   "Top right: the wave and pulse width. With PWM up, the pulse width moves with the LFO, in step with it."),
     "DCO2 view": ("DCO 2", "DCO 2's waveform (saw, pulse or triangle) over the same time as DCO 1's two cycles, "
@@ -979,40 +983,56 @@ dial("Pump Attack", "Attack", fx, "pumpatk", 1, 40, 2, C4 + 56, DIAL_Y, "play", 
 dial("Pump Release", "Release", fx, "pumprel", 10, 95, 5, C4 + 112, DIAL_Y, "play", scale=0.01, views=[(v_pump, "rel")])
 dial("Pump Curve", "Curve", fx, "pumpcurve", 0, 100, 5, C4 + 168, DIAL_Y, "play", scale=0.01, views=[(v_pump, "curve")])
 
-# ================= OSC: DCO 1 | DCO 2 | mixer + sub | LFO =================
-O1, O2, O3, O4 = 12, 240, 468, 696
-v_osc1 = view("osc1", O1, VIEW_Y, 204, VIEW_H, "osc", info="DCO1 view")
-w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], O1, ROW_Y, 124, "osc")
+# ================= OSC: sub | DCO 1 | DCO 2 | mixer | LFO =================
+# Sections 24 px apart with the page rule in the middle of each gap, 12 px margins: 12 + 140 + 24 + 196 + 24 + 196
+# + 24 + 96 + 24 + 212 + 12 = 960. The mixer is two columns of dials (44 + 8 + 44).
+SUB_W, DCO_W, MIX_W, LFO_W, SECTION_GAP = 140, 196, 96, 212, 24
+OS = 12
+O1 = OS + SUB_W + SECTION_GAP
+O2 = O1 + DCO_W + SECTION_GAP
+O3 = O2 + DCO_W + SECTION_GAP
+O4 = O3 + MIX_W + SECTION_GAP
+if O4 + LFO_W != W - 12:
+    raise SystemExit(f"2sl-stab.py: the osc page's sections end at {O4 + LFO_W}, not {W - 12}")
+OSC_RULES = [x - SECTION_GAP // 2 for x in (O1, O2, O3, O4)]
+DCO_WAVE_TABS_W, DCO_OCT_TABS_W = 120, 72                    # + 4 between = DCO_W
+
+# the sub: DCO 1 divided down, as on the SH-101 (its level is in the mixer)
+v_sub = view("sub", OS, VIEW_Y, SUB_W, VIEW_H, "osc", info="Sub view")
+sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], OS, ROW_Y, SUB_W, "osc")
+tell(sub_mode_tab, "submode", voice)
+tell(sub_mode_tab, "submode", v_sub)
+
+v_osc1 = view("osc1", O1, VIEW_Y, DCO_W, VIEW_H, "osc", info="DCO1 view")
+w1 = tabs("DCO1 Wave", "Wave 1", ["saw", "pulse", "both"], O1, ROW_Y, DCO_WAVE_TABS_W, "osc")
 tell(w1, "wave1", voice)
 tell(w1, "wave1", v_osc1)
-o1 = tabs("DCO1 Octave", "Oct 1", ["16'", "8'", "4'"], O1 + 128, ROW_Y, 76, "osc")
+o1 = tabs("DCO1 Octave", "Oct 1", ["16'", "8'", "4'"], O1 + DCO_WAVE_TABS_W + 4, ROW_Y, DCO_OCT_TABS_W, "osc")
 o1m = derived(box("- 1", rect=(1100, 820, 40, 22), ins=2, outtype=["int"]), "DCO1 Octave", lambda v: v - 1)
 wire(o1, o1m)
 tell(o1m, "oct1", voice)
 pw_dial = dial("PW", "PW", voice, "pw", 50, 95, 5, O1, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pw")])
 pwm_dial = dial("PWM", "PWM", voice, "pwmamt", 0, 100, 5, O1 + 56, DIAL_Y, "osc", scale=0.01, views=[(v_osc1, "pwm")])
 
-v_osc2 = view("osc2", O2, VIEW_Y, 204, VIEW_H, "osc", info="DCO2 view")
-w2 = tabs("DCO2 Wave", "Wave 2", ["saw", "pulse", "tri"], O2, ROW_Y, 124, "osc")
+v_osc2 = view("osc2", O2, VIEW_Y, DCO_W, VIEW_H, "osc", info="DCO2 view")
+w2 = tabs("DCO2 Wave", "Wave 2", ["saw", "pulse", "tri"], O2, ROW_Y, DCO_WAVE_TABS_W, "osc")
 tell(w2, "wave2", voice)
 tell(w2, "wave2", v_osc2)
-o2 = tabs("DCO2 Octave", "Oct 2", ["16'", "8'", "4'"], O2 + 128, ROW_Y, 76, "osc")
+o2 = tabs("DCO2 Octave", "Oct 2", ["16'", "8'", "4'"], O2 + DCO_WAVE_TABS_W + 4, ROW_Y, DCO_OCT_TABS_W, "osc")
 o2m = derived(box("- 1", rect=(1150, 820, 40, 22), ins=2, outtype=["int"]), "DCO2 Octave", lambda v: v - 1)
 wire(o2, o2m)
 tell(o2m, "oct2", voice)
 dial("Semi", "Semi", voice, "semi", -12, 12, 7, O2, DIAL_Y, "osc", views=[(v_osc2, "semi")])
 dial("Fine", "Fine", voice, "fine", 0, 50, 1, O2 + 56, DIAL_Y, "osc", views=[(v_osc2, "fine")])
 
-# the mixer: four levels as a square of dials (left), the SH-101 sub switch (right). No display.
-MIX_TOP_Y, MIX_COL2, SUB_X = 64, O3 + 52, O3 + 108
+# the mixer: four levels as a square of dials. No display.
+MIX_TOP_Y, MIX_COL2 = 64, O3 + 52
 dial("OSC 1", "OSC 1", voice, "lvl1", 0, 100, 5, O3, MIX_TOP_Y, "osc", scale=0.01)
 dial("OSC 2", "OSC 2", voice, "lvl2", 0, 100, 5, MIX_COL2, MIX_TOP_Y, "osc", scale=0.01)
 dial("Sub", "Sub", voice, "sublvl", 0, 100, 5, O3, DIAL_Y, "osc", scale=0.01)
 dial("Noise", "Noise", voice, "noiseamt", 0, 100, 5, MIX_COL2, DIAL_Y, "osc", scale=0.01)
-sub_mode_tab = tabs("Sub Mode", "Sub", ["-1 sq", "-2 sq", "-2 pls"], SUB_X, MIX_TOP_Y, 64, "osc", h=48, lines=3)
-tell(sub_mode_tab, "submode", voice)
 
-v_lfo = view("lfo", O4, VIEW_Y, 252, VIEW_H, "osc", info="LFO view")
+v_lfo = view("lfo", O4, VIEW_Y, LFO_W, VIEW_H, "osc", info="LFO view")
 tell(pwm_dial, "pwm", v_lfo, 0, 0.01)
 # PW and PWM shape both DCOs' pulse (the voice's `width`), so DCO 2's display gets them too
 tell(pw_dial, "pw", v_osc2, 0, 0.01)
@@ -1062,11 +1082,11 @@ LAYOUT = {
     "pages": [
         {"rules": [208, 512, 720],
          "labels": HEADER + [["echo time", C3 + 64, DIAL_Y + 12, "label"], ["pump rate", C4 + 104, ROW_Y + 12, "hint"]]},
-        {"rules": [228, 456, 684],
-         "labels": HEADER + [["pw: pulse width", O1 + 116, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 116, DIAL_Y + 38, "hint"],
-                             ["semi 7:", O2 + 116, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 116, DIAL_Y + 38, "hint"],
-                             ["mixer", O3, VIEW_Y + 12, "label"], ["sub", SUB_X, VIEW_Y + 12, "label"],
-                             ["as on the", SUB_X, DIAL_Y + 24, "hint"], ["sh-101", SUB_X, DIAL_Y + 38, "hint"],
+        {"rules": OSC_RULES,
+         "labels": HEADER + [["dco 1 divided down,", OS, DIAL_Y + 24, "hint"], ["as on the sh-101", OS, DIAL_Y + 38, "hint"],
+                             ["pw: pulse width", O1 + 108, DIAL_Y + 24, "hint"], ["pwm: lfo on pw", O1 + 108, DIAL_Y + 38, "hint"],
+                             ["semi 7:", O2 + 108, DIAL_Y + 24, "hint"], ["a fifth up", O2 + 108, DIAL_Y + 38, "hint"],
+                             ["mixer", O3, VIEW_Y + 12, "label"],
                              ["one lfo for all voices", O4, ROW_Y + 12, "hint"]]},
         {"rules": [364, 668],
          "labels": HEADER + [["grey: where the envelope opens it", F, ROW_Y + 12, "hint"],
