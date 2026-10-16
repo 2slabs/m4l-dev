@@ -1,29 +1,49 @@
 # m4l-dev
 
-Max for Live device workspace. Live 12 Suite, bundled Max 9.1.5 (no separate Max license needed).
+The 2sl kit for building Max for Live devices from Python: a device's patch is generated box by box, checked
+(layout, Init values and presets, gen~ code, ES5 scripts, what Live knows each parameter by), and written as the
+development device, Live presets, and a frozen single-file release. Used by [2sl stab](https://github.com/2slabs/2sl-stab).
+A [2sl](https://2sl.to) project.
 
-## Layout
-- `devices/` — `.amxd` files. Add this folder to Live's browser (Places → Add Folder) and drag devices onto tracks.
-- `src/` — patcher JSON (`.maxpat`) for devices authored or reviewed as text.
-- `tools/amxd.py` — convert `.maxpat` ↔ `.amxd`.
+Live 12 Suite with its bundled Max 9.1.5. Python 3.9 or later (standard library only), Duktape for the ES5 check
+(`brew install duktape`, or `apt install libduktape207`), node for the script tests.
 
-## Workflow
-1. Drop a device on a track → click the **Edit** (pencil) button in the device title bar → the Max editor opens.
-2. Patch, then **Cmd-S** in Max. Live reloads the device on save.
-3. Build the UI in **Presentation mode** (Cmd-Opt-E); device height is fixed at 169px.
-4. Only `live.*` objects with `parameter_enable` become automatable / MIDI-mappable Live parameters.
+## Use it in a device repository
 
-## Converting
-    tools/amxd.py pack   src/foo.maxpat devices/foo.amxd --type audio   # or midi / instrument
-    tools/amxd.py unpack devices/foo.amxd src/foo.maxpat
+    git submodule add https://github.com/2slabs/m4l-dev.git m4l-dev
 
-Unpack before committing if you want readable diffs (an unfrozen `.amxd` is ~JSON anyway).
+and give the repository a `build.py`, a `src/` and the rest of the layout in
+[architecture/device-repository.md](architecture/device-repository.md). A minimal `build.py`:
 
-## Sharing
-**Freeze** (snowflake button in the Max toolbar) before giving a device to anyone. Freezing embeds
-abstractions, JS, and samples. Keep the unfrozen copy as the source of truth here.
+```python
+import os, sys
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path[:0] = [os.path.join(ROOT, "m4l-dev"), os.path.join(ROOT, "src")]
+from m4l_dev.device_repository import DeviceRepository
+import my_device                       # src/my_device.py: builds a DevicePatchBuilder, calls build_device
+my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
+```
 
-## Useful references
-- Max for Live Production Guidelines: github.com/Ableton/maxdevtools
-- Live Object Model (LOM) docs: in Max, Help → Reference → "Live Object Model"
-- Max for Live Building Tools pack (free, in Live's Packs) — `live.*` UI abstractions and examples
+2sl stab's `src/stab_device.py` is the worked example.
+
+## What's here
+
+- `m4l_dev/`: the library ([architecture/overview.md](architecture/overview.md) lists each module).
+- `templates/`: the UI, views and transport-clock scripts every device gets, and the Cozette glyphs
+  (Cozette, MIT: `templates/LICENSE-Cozette.txt`).
+- `tools/`: `amxd.py` (pack / freeze / unpack / list .amxd files), `es5check.py`, `compare_device_builds.py` (compare
+  two builds of a device; exit 0 when what Live sees is the same), `bdf2js.py` (Cozette's BDF to glyphs),
+  `max_sandbox.js` (Max's [js] globals for node tests).
+- `references/`: the sources the kit follows (Max, Live, Live's preset format).
+- `architecture/`: how the kit is partitioned and the contracts a device repository keeps.
+
+## Tests
+
+    python3 -m unittest discover -s tests
+
+## Working on a device in Max
+
+Drop the development device (`devices/<name>/<name>.amxd` in the device repository) on a track; it finds its scripts
+next to it. Edit the Python, not the patch: the build overwrites the patch. Only `live.*` objects with
+`parameter_enable` are Live parameters. Useful: the Max for Live Production Guidelines
+(github.com/Ableton/maxdevtools), the Live Object Model docs (Max: Help > Reference > "Live Object Model").
