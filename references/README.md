@@ -1,32 +1,10 @@
 # References
 
-Sources the code follows. Links and what they say; the pages themselves are not mirrored here.
+Sources the kit follows: Max, Max for Live and Live. Links and what they say; the pages themselves are not mirrored
+here. A device's own sources (its sound, its DSP's sizing) are in its repository's references/. The kit's code cites
+these by section; the examples are 2sl stab's, where each rule was first found.
 
-## Roland SH-101 sub oscillator (2sl stab: Sub Mode)
-
-- **Roland, SH-4d Reference Manual v2.00, "SH-101" model page**
-  https://static.roland.com/manuals/sh-4d_v200/en-US/8651802786195467.html
-  Roland's own SH-101 model. Sub Osc Wave (the OSC 3 button): "1OCT SQR, 2OCT SQR, 2OCT PLS",
-  "Switches between sub-oscillator pitches and waveforms."
-  (Roland's support page for the 1982 hardware lists a "SUB Osci Waveform" selector switch;
-  https://support.roland.com/hc/en-us/articles/201921519-SH-101-Technical-Specifications, not
-  fetchable without a browser. The hardware owner's manual is not online from Roland.)
-- **Electric Druid, "A study of Sub-Oscillators (and Oscillator Waveshaping)"**, with the SH-101's
-  sub circuit drawn from the schematic
-  https://electricdruid.net/a-study-of-sub-oscillators/
-  "The Roland SH101 has a nice neat implementation using a CMOS 4013 dual bistable chip to offer
-  three sub-oscillator waveforms; square at -1 octave, square at -2 octaves, and 25% pulse at
-  -2 octaves." The pulse is the two flip-flop outputs through a diode-OR: "a signal which is high
-  75% of the time and low 25% of the time" (a 25% pulse, inverted: the same sound). "The 25% pulse
-  wave has the strongest 2nd harmonic of all pulse widths, so there is still a marked -1 octave
-  sound present."
-- **Zoe Blade, "Sub-oscillator"**: the SH-1, SH-09 and SH-101 divide the oscillator with two
-  flip-flops (the second clocked by the first) and combine them with diodes for the two-octave
-  pulse. https://notebook.zoeblade.com/Sub-oscillator.html
-
-So the sub is the oscillator divided by 2 or 4: locked to it, following its range (footage) switch.
-
-## Max and Live APIs (2sl stab)
+## Max and Live APIs
 
 - **Max JS global methods** (Max 7 vignette, still the current text):
   https://docs.cycling74.com/max7/vignettes/jsglobal
@@ -52,21 +30,11 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
 - **Live Object Model, Song** (fetched in LPX_Script/references/live-lom-song.md from
   https://docs.cycling74.com/apiref/lom/song/): `tempo` "Current tempo of the Live Set in BPM, 20.0 ... 999.0";
   `current_song_time` "The playing position in the Live Set, in beats."
-- **gen~ Delay** (Max reference): https://docs.cycling74.com/reference/gen_dsp_delay/
-  "The first argument specifies the maximum delay time (in samples, default samplerate)."
-  The gen~ Operators page (https://docs.cycling74.com/userguide/gen/gen~_operators/) says the same under Feedback
-  and lists `samplerate` under Constants ("The DSP samplerate"); the GenExpr page
-  (https://docs.cycling74.com/userguide/gen/gen_genexpr/) doesn't cover the Delay declaration at all. No official
-  page says the size may be an expression of `samplerate` (that was only a forum post:
-  https://cycling74.com/forums/gen-parameter-is-not-defined). So the echo's buffers are a fixed number of samples,
-  sized for the highest sample rate Live runs at (below), checked at build time against the longest echo.
-- **Live's highest sample rate** (Ableton, Live editions): https://www.ableton.com/en/live/compare-editions/
-  "Multitrack recording up to 32-bit/192 kHz", in every edition. So 192 kHz is the rate the buffers are sized for.
 - **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
   this value to any connected objects." The build sets every control's initial value from the Init
-  values (`src/2sl-stab-presets.json`), and also starts the gen~ Params and the displays there.
+  values (the device's preset book: m4l_dev/preset_book.py), and checks the gen~ Params and starts the displays there.
 - **Parameter Visibility** (Max user guide, Parameter Mode; and the live.tab / live.dial references:
   https://docs.cycling74.com/reference/live.tab): "Stored Only: Use for parameters that are part of the device's
   persistent state but should not be automated or exposed to control surfaces." "Hidden: ... Not stored in the Live
@@ -79,34 +47,14 @@ So the sub is the oscillator divided by 2 or 4: locked to it, following its rang
   1 = Stored Only is confirmed by a real preset (the example below has Steps / Accents in its blob, not in its
   automatable parameter list). 2 = Hidden is the inspector's order (Automated and Stored, Stored Only, Hidden),
   not yet seen in a saved file: a preset saved from this build should have no "Page" anywhere.
-- **cos~** (Max reference): https://docs.cycling74.com/reference/cos~
-  "Signal cosine function (0-1 range)"; output: "The cosine of 2π times the input". The LFO is
-  [phasor~] -> [cos~], the same cosine as the [cycle~] it replaces ("The default waveform is one cycle of a
-  cosine wave", https://docs.cycling74.com/reference/cycle~), with the phase readable for the displays.
-- **snapshot~** (Max reference): https://docs.cycling74.com/reference/snapshot~
-  bang: "Reports the sample value in the most recently received signal vector at the offset specified by the
-  offset attribute." int in the left inlet: "Any non-zero value turns on interval-based reporting, 0 turns it off"
-  (float: the same). So the Echo display's round snapshot~s are read with a bang, never a number.
-- **mc.noteallocator~** (Max reference): https://docs.cycling74.com/reference/mc.noteallocator~
-  "When steal is enabled, mc.noteallocator~ will re-allocate ("steal") a busy voice if it runs out of non-busy
-  voices." "The stolen voice number used will be the one least recently allocated." Busy input: "Connect an
-  optional multichannel signal to prevent mc.noteallocator~ from reallocating a voice". It "allocates and outputs
-  a voice number out its right outlet" before the note. The page doesn't say whether a stolen voice gets a
-  note-off first: so the voice can't rely on its gate falling; each note-on sends a new count (the voice's in4).
-  The signal message: "Connect an optional multichannel signal to prevent mc.noteallocator~ from reallocating a
-  voice until its audio level goes to zero."
-- **MC Managed Polyphony** (Max user guide): https://docs.cycling74.com/userguide/mc/mc_poly_without_polytilde/
-  The busy input is the left inlet: "when a note-off for an allocated voice has been received and the corresponding
-  audio signal in the multichannel input goes to zero, mc.noteallocator~ marks that channel as available".
-  Neither page says how "goes to zero" is read (per sample or per vector, exactly 0 or under a threshold), so a
-  sound crossing zero in its release could free a voice that is still sounding. The voices send an explicit busy
-  signal instead of their sound: 1 from note-on until the envelope has finished (release or Stop's ramp), else 0.
 
-## Live presets (2sl stab: the .adv files)
+## Live presets (m4l_dev/live_preset_files.py: the .adv files)
 
 - **The example** (`ableton/example-2sl-stab-preset.adv`, and `.xml`, the same gunzipped): a preset of 2sl stab saved by
-  Live 12.4.6 (`<Ableton MajorVersion="5" MinorVersion="12.0_12402" Creator="Ableton Live 12.4.6">`). The build uses it
-  as the template for its presets. What it shows:
+  Live 12.4.6 (`<Ableton MajorVersion="5" MinorVersion="12.0_12402" Creator="Ableton Live 12.4.6">`). The kit uses the
+  `.xml` as the template for every device's presets. One change from the file Live wrote (2026-10-16): the user folder in
+  the `FileRef`'s absolute `Path` is replaced by `/Users/(removed)/` (this repository is public), and the `.adv` was
+  gzipped again from that `.xml`. The kit's presets leave `Path` out anyway. What it shows:
   - An `.adv` is gzipped XML (`gzip compressed data`): `<Ableton>` > `<MxDeviceInstrument>`, no other wrapper.
   - The device isn't in it: `PatchSlot/Value/MxPatchRef/FileRef` refers to the `.amxd` (`RelativePathType`,
     `RelativePath`, an absolute `Path`, `Type` 2, `LivePackName`, `LivePackId`, `OriginalFileSize`, `OriginalCrc`).
