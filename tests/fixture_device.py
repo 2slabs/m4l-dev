@@ -1,0 +1,109 @@
+"""A small device built with the kit into a temporary device repository: the tests' fixture.
+
+It has one of everything the kit makes (a gen~ with Params, a dial with a display, a toggle, a menu, tabs, a Stored
+Only value, a button) and ships its two presets as Live preset files, so a build of it exercises every step of
+build_device. `build_fixture_device(root)` builds it into `root` (made if needed) and returns the DeviceRepository.
+"""
+import json
+import os
+import sys
+
+KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if KIT_DIRECTORY not in sys.path:
+    sys.path.insert(0, KIT_DIRECTORY)
+
+from m4l_dev import layout_rules  # noqa: E402
+from m4l_dev.device_build import build_device  # noqa: E402
+from m4l_dev.device_repository import DeviceRepository  # noqa: E402
+from m4l_dev.live_preset_files import LivePresetFiles  # noqa: E402
+from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
+from m4l_dev.preset_book import PresetBook  # noqa: E402
+
+FIXTURE_SCRIPT_NAME = "kit-fixture"
+FIXTURE_PRESET_BOOK = {
+    "init": {"Level": 50, "Bright": "off", "Shape": "round", "Mode": "a", "Volume": 0},
+    "presets": [
+        {"name": "init", "group": "init", "idea": "the Init values", "values": {}},
+        {"name": "loud", "group": "test", "idea": "louder, square", "values": {"Level": 90, "Shape": "square",
+                                                                               "Bright": "on"}},
+    ],
+}
+FIXTURE_GEN_CODE = """
+Param level(0.5, min=0, max=1);
+Param volume(0, min=-36, max=12);
+Param panic(0);
+out1 = in1 * level * dbtoa(volume);
+"""
+FIXTURE_INFO = {name: (name, f"{name}: what it does.") for name in
+                ("Link view", "Page", "Volume", "Stop", "Level", "Bright", "Shape", "Mode", "Kick", "Level view")}
+FIXTURE_VIEWS_CODE = """
+var DEVICE_STATE = { kicks: 0 };
+var ANIMATED_MODES = [];
+function deviceMessage(m, a) {
+  if (m === "kick") { S.kicks++; return true; }
+  return false;
+}
+var VIEW_PAINTERS = { level: function (w, h) { viewLabel("level"); rect(4, 20, (w - 8) * S.level, 4, T.mint); } };
+var VIEW_CLICKS = {};
+"""
+FIXTURE_BRAIN = """// the fixture's brain: takes anything, says nothing
+inlets = 2;
+outlets = 1;
+function anything() {}
+"""
+
+
+def fixture_patch(preset_book):
+    patch = DevicePatchBuilder(device_name="kit fixture", script_name=FIXTURE_SCRIPT_NAME, version="1.2.3",
+                               subtitle="a test device", link_chip_text="kit fixture", device_type="instrument",
+                               device_width=480, page_names=["one", "two"], info=dict(FIXTURE_INFO),
+                               preset_book=preset_book)
+    brain = patch.box(f"js {FIXTURE_SCRIPT_NAME}.js", rect=(30, 120, 110, 22), ins=2, outs=1)
+    gen = patch.gen_box(FIXTURE_GEN_CODE, 1, 1, rect=(30, 350, 160, 22))
+    header = patch.header(volume_target=gen)
+    patch.wire(header["ready"], brain, 0, 1)
+    patch.live_transport(brain, 1)
+    patch.stop_action(brain, 1, panic_destinations=[gen])
+    level_view = patch.view("level", 12, layout_rules.VIEW_Y, 120, layout_rules.VIEW_H, "one", info="Level view")
+    patch.dial("Level", "Level", gen, "level", 0, 100, 5, 12, layout_rules.DIAL_Y, "one", scale=0.01,
+               views=[(level_view, "level")])
+    bright = patch.toggle("Bright", "Bright", 12, layout_rules.ROW_Y, 60, 15, "one")
+    patch.tell(bright, "bright", brain, 1)
+    patch.turned_off_by_stop(bright)
+    shape = patch.menu("Shape", "Shape", ["round", "square"], 76, layout_rules.ROW_Y, 56, "one")
+    patch.tell(shape, "shape", brain, 1)
+    mode = patch.tabs("Mode", "Mode", ["a", "b", "c"], 12, layout_rules.ROW_Y, 96, "two")
+    patch.tell(mode, "mode", brain, 1)
+    kick = patch.toggle("Kick", "Kick", 120, layout_rules.ROW_Y, 48, 15, "two", mode=0)
+    patch.wire(kick, brain, 0, 1)
+    stored = patch.stored("Memory", 7)
+    patch.tell(stored, "memory", brain, 1)
+    return patch
+
+
+FIXTURE_LAYOUT = {"subtitle": 200, "pages": [{"rules": [140], "labels": []}, {"rules": [], "labels": []}]}
+
+
+def stored_memory_of_preset(preset_values):
+    return {"Memory": 7 + preset_values["Level"]}
+
+
+def make_fixture_repository(root, preset_book_data=None):
+    os.makedirs(os.path.join(root, "src"), exist_ok=True)
+    with open(os.path.join(root, "src", "presets.json"), "w", encoding="utf-8") as book_file:
+        json.dump(preset_book_data or FIXTURE_PRESET_BOOK, book_file)
+    return DeviceRepository(root)
+
+
+def build_fixture_device(root, command_line_arguments=("--accept-live-parameter-changes",), patch_edit=None,
+                         live_preset_files=True, views_code=FIXTURE_VIEWS_CODE):
+    """Build the fixture into `root`. patch_edit(patch): a change made before the build (a test's breakage)."""
+    repository = make_fixture_repository(root) if not os.path.isdir(os.path.join(root, "src")) else DeviceRepository(root)
+    preset_book = PresetBook.from_file(repository.source_path("presets.json"), "src/presets.json")
+    patch = fixture_patch(preset_book)
+    if patch_edit is not None:
+        patch_edit(patch)
+    build_device(repository, patch, FIXTURE_LAYOUT, views_code, {f"{FIXTURE_SCRIPT_NAME}.js": FIXTURE_BRAIN},
+                 live_preset_files=LivePresetFiles(stored_memory_of_preset) if live_preset_files else None,
+                 command_line_arguments=command_line_arguments)
+    return repository

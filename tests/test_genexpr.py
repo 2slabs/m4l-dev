@@ -1,56 +1,19 @@
-#!/usr/bin/env python3
-"""Tests for tools/genexpr.py. Run: python3 tools/test_genexpr.py"""
+"""Tests for m4l_dev/genexpr.py, our GenExpr subset checker and renderer. A device's own gen~ code is tested in its
+repository (2sl stab: tests/test_stab_dsp.py)."""
 
 import math
 import os
-import re
 import sys
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import genexpr  # noqa: E402
-from genexpr import GenExprError, GenProgram, check  # noqa: E402
-
-STAB_SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "2sl-stab.py")
-
-
-def extract_raw_string(script_text, variable_name):
-    match = re.search(variable_name + r' = r"""(.*?)"""', script_text, re.S)
-    if match is None:
-        raise AssertionError(f"{variable_name} = r\"\"\"...\"\"\" not found in {STAB_SCRIPT_PATH}")
-    return match.group(1)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from m4l_dev.genexpr import GenExprError, GenProgram, check  # noqa: E402
 
 
 def render_single_output(code, num_samples, inputs=None, num_inputs=1):
     program = GenProgram(code, num_inputs, 1)
     return program.run(num_samples, inputs)[0]
-
-
-class RealCodeTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        with open(STAB_SCRIPT_PATH, encoding="utf-8") as handle:
-            script_text = handle.read()
-        cls.voice_code = extract_raw_string(script_text, "VOICE")
-        cls.fx_code = extract_raw_string(script_text, "FX")
-
-    def test_voice_and_fx_check(self):
-        check(self.voice_code)
-        check(self.fx_code)
-
-    def test_voice_renders_finite_nonzero(self):
-        program = GenProgram(self.voice_code, 3, 1)
-        output = program.run(4410, [220.0, 0.8, 0.0])[0]
-        self.assertEqual(len(output), 4410)
-        self.assertTrue(all(math.isfinite(sample) for sample in output))
-        self.assertTrue(any(sample != 0.0 for sample in output))
-
-    def test_fx_renders_finite(self):
-        program = GenProgram(self.fx_code, 2, 3)
-        outputs = program.run(2000, [[0.5] * 2000, [0.0] * 2000])
-        self.assertEqual(len(outputs), 3)
-        self.assertTrue(all(math.isfinite(sample) for channel in outputs for sample in channel))
 
 
 class RejectionTests(unittest.TestCase):

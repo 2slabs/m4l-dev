@@ -1,0 +1,174 @@
+"""build_device end to end, on the kit's fixture device (tests/fixture_device.py) in temporary device repositories:
+what it writes, that it writes the same bytes every time, the Live parameter lock, stale presets, and its refusals."""
+import contextlib
+import gzip
+import hashlib
+import io
+import os
+import shutil
+import struct
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path[:0] = [HERE, os.path.dirname(HERE)]
+import fixture_device  # noqa: E402
+from m4l_dev import amxd  # noqa: E402
+from m4l_dev import live_preset_files  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.device_repository import KIT_DIRECTORY, DeviceRepository  # noqa: E402
+
+DEVICE_FOLDER = os.path.join("devices", fixture_device.FIXTURE_SCRIPT_NAME)
+
+
+def quietly(action, *arguments, **keywords):
+    with contextlib.redirect_stdout(io.StringIO()) as log:
+        result = action(*arguments, **keywords)
+    return result, log.getvalue()
+
+
+def fingerprints(root):
+    """{path relative to root: sha1} for everything the build writes (devices/ and dist/)."""
+    found = {}
+    for top in ("devices", "dist"):
+        for directory_path, _, file_names in os.walk(os.path.join(root, top)):
+            for file_name in file_names:
+                path = os.path.join(directory_path, file_name)
+                with open(path, "rb") as built_file:
+                    found[os.path.relpath(path, root)] = hashlib.sha1(built_file.read()).hexdigest()
+    return found
+
+
+class FixtureBuildTests(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="kit-fixture-")
+        quietly(fixture_device.build_fixture_device, self.root)
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def test_it_writes_the_development_build_and_the_release(self):
+        written = sorted(fingerprints(self.root))
+        self.assertEqual(written, sorted([
+            f"{DEVICE_FOLDER}/kit-fixture.maxpat", f"{DEVICE_FOLDER}/kit-fixture.amxd", f"{DEVICE_FOLDER}/kit-fixture.js",
+            f"{DEVICE_FOLDER}/kit-fixture-ui.js", f"{DEVICE_FOLDER}/kit-fixture-view.js", f"{DEVICE_FOLDER}/init.adv",
+            f"{DEVICE_FOLDER}/test - loud.adv", "dist/kit-fixture-1.2.3/kit-fixture-1.2.3.amxd",
+            "dist/kit-fixture-1.2.3/init.adv", "dist/kit-fixture-1.2.3/test - loud.adv", "dist/kit-fixture-1.2.3.zip"]))
+        with open(os.path.join(self.root, "dist/kit-fixture-1.2.3/kit-fixture-1.2.3.amxd"), "rb") as frozen_file:
+            frozen = amxd.read_device(frozen_file.read(), "the frozen fixture")
+        self.assertEqual([entry["fnam"] for entry in frozen["frozen_files"]],
+                         ["kit-fixture-1.2.3.amxd", "kit-fixture.js", "kit-fixture-ui.js", "kit-fixture-view.js"])
+        self.assertEqual({entry["mdat"] for entry in frozen["frozen_files"]}, {amxd.FROZEN_FILE_MODIFICATION_DATE})
+
+    def test_a_rebuild_writes_the_same_bytes(self):
+        before = fingerprints(self.root)
+        quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=())
+        self.assertEqual(fingerprints(self.root), before)
+
+    def test_presets_are_gzipped_with_a_fixed_header_and_hold_the_stored_only_values(self):
+        with open(os.path.join(self.root, DEVICE_FOLDER, "test - loud.adv"), "rb") as preset_file:
+            preset_bytes = preset_file.read()
+        self.assertEqual(preset_bytes[:10], live_preset_files.GZIP_HEADER)
+        xml_text = gzip.decompress(preset_bytes).decode()
+        self.assertIn('<Name Value="Level" />', xml_text)
+        self.assertNotIn('Value="Page"', xml_text, "the Hidden page switch is in no preset")
+        blob_hex = xml_text.split("<Blob>")[1].split("</Blob>")[0]
+        self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(), '{\n    "Memory": [ 97 ]\n}')
+
+    def test_a_changed_parameter_fails_with_a_diff_and_writes_nothing(self):
+        before = fingerprints(self.root)
+
+        def rename_level(patch):
+            for wrapped in patch.boxes:
+                valueof = wrapped["box"].get("saved_attribute_attributes", {}).get("valueof", {})
+                if valueof.get("parameter_longname") == "Level":
+                    valueof["parameter_shortname"] = "Lvl"
+        with self.assertRaises(BuildError) as failure:
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), patch_edit=rename_level)
+        message = str(failure.exception)
+        self.assertIn("--accept-live-parameter-changes", message)
+        self.assertIn('-    {"maxclass": "live.dial", "varname": "level", "long_name": "Level", "short_name": "Level"', message)
+        self.assertIn('+    {"maxclass": "live.dial", "varname": "level", "long_name": "Level", "short_name": "Lvl"', message)
+        self.assertEqual(fingerprints(self.root), before, "a refused build writes nothing")
+        quietly(fixture_device.build_fixture_device, self.root, patch_edit=rename_level)
+        with open(os.path.join(self.root, "src", "live-parameters.lock.json"), encoding="utf-8") as lock_file:
+            self.assertIn('"short_name": "Lvl"', lock_file.read(), "accepted: the lock is rewritten")
+
+    def test_a_missing_lock_fails_until_accepted(self):
+        os.remove(os.path.join(self.root, "src", "live-parameters.lock.json"))
+        with self.assertRaisesRegex(BuildError, "lock.json is missing"):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=())
+
+    def test_stale_presets_are_removed(self):
+        stale = os.path.join(self.root, DEVICE_FOLDER, "old sound.adv")
+        open(stale, "wb").close()
+        _, log = quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=())
+        self.assertFalse(os.path.exists(stale))
+        self.assertIn("removed old sound.adv", log)
+        quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), live_preset_files=False)
+        self.assertEqual([f for f in os.listdir(os.path.join(self.root, DEVICE_FOLDER)) if f.endswith(".adv")], [])
+
+    def test_scripts_that_are_not_es5_fail(self):
+        with self.assertRaisesRegex(BuildError, "kit-fixture-view.js: SyntaxError"):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(),
+                    views_code=fixture_device.FIXTURE_VIEWS_CODE + "\nlet modern = () => 1;\n")
+
+    def test_an_int_parameter_has_no_known_live_preset_form(self):
+        def add_an_int_dial(patch):
+            patch.info["Count"] = ("Count", "how many")
+            patch.dial("Count", "Count", next(iter(patch.gen_params_by_box)), None, 0, 7, 0, 60, 119, "one", integer=True,
+                       initial_outside_presets=0)
+        with self.assertRaisesRegex(BuildError, "'Count' has parameter_type 1"):
+            quietly(fixture_device.build_fixture_device, self.root, patch_edit=add_an_int_dial)
+
+
+class DeviceRepositoryTests(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="kit-repository-")
+        self.build_script = os.path.join(self.root, "build.py")
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def test_a_repository_needs_src(self):
+        with self.assertRaisesRegex(BuildError, "no src/"):
+            DeviceRepository.of_build_script(self.build_script)
+
+    def test_a_repository_needs_the_kit_as_its_submodule(self):
+        os.makedirs(os.path.join(self.root, "src"))
+        with self.assertRaisesRegex(BuildError, "git submodule update --init"):
+            DeviceRepository.of_build_script(self.build_script)
+        os.makedirs(os.path.join(self.root, "m4l-dev", "m4l_dev"))
+        with self.assertRaisesRegex(BuildError, "isn't a git submodule checkout"):
+            DeviceRepository.of_build_script(self.build_script)
+        open(os.path.join(self.root, "m4l-dev", ".git"), "w").close()
+        with self.assertRaisesRegex(BuildError, "not this repository's submodule"):
+            DeviceRepository.of_build_script(self.build_script)
+
+    def test_the_kit_is_never_written(self):
+        os.makedirs(os.path.join(self.root, "src"))
+        repository = DeviceRepository(self.root)
+        with self.assertRaisesRegex(BuildError, "inside the kit"):
+            repository.check_writable(os.path.join(KIT_DIRECTORY, "devices", "x.amxd"))
+        with self.assertRaisesRegex(BuildError, "outside the repository"):
+            repository.check_writable(os.path.join(tempfile.gettempdir(), "elsewhere.amxd"))
+        with self.assertRaisesRegex(BuildError, "the kit itself"):
+            DeviceRepository(KIT_DIRECTORY)
+
+
+class FrozenDeviceTests(unittest.TestCase):
+    def test_a_frozen_device_reads_back(self):
+        patch = {"patcher": {"boxes": [], "lines": []}}
+        frozen_bytes = amxd.frozen_device_bytes(patch, "audio", "x-1.amxd", [("a.js", b"var a = 1;")])
+        self.assertEqual(frozen_bytes, amxd.frozen_device_bytes(patch, "audio", "x-1.amxd", [("a.js", b"var a = 1;")]))
+        device = amxd.read_device(frozen_bytes, "x-1.amxd")
+        self.assertEqual(device["device_type"], "audio")
+        self.assertEqual([(e["fnam"], e["data"]) for e in device["frozen_files"]][1], ("a.js", b"var a = 1;"))
+        self.assertEqual(struct.unpack("<I", frozen_bytes[20:24])[0], 7)
+        with self.assertRaisesRegex(BuildError, "device type"):
+            amxd.unfrozen_device_bytes(patch, "drum rack")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
