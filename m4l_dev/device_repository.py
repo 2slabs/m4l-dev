@@ -27,12 +27,13 @@ class DeviceRepository:
         self.source_directory = os.path.join(self.root_directory, "src")
         self.devices_directory = os.path.join(self.root_directory, "devices")
         self.dist_directory = os.path.join(self.root_directory, "dist")
-        if not os.path.isdir(self.source_directory):
-            raise BuildError(f"{self.root_directory} is no device repository: it has no src/ (see m4l-dev "
-                             "architecture/device-repository.md)")
+        # the kit first: it is refused whatever it holds (it has no src/, and must not get one by accident)
         if os.path.realpath(self.root_directory) == os.path.realpath(KIT_DIRECTORY):
             raise BuildError(f"{self.root_directory} is the kit itself: a device is built from its own repository, "
                              "with the kit as its m4l-dev submodule")
+        if not os.path.isdir(self.source_directory):
+            raise BuildError(f"{self.root_directory} is no device repository: it has no src/ (see m4l-dev "
+                             "architecture/device-repository.md)")
 
     @classmethod
     def of_build_script(cls, build_script_path):
