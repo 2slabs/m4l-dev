@@ -12,10 +12,6 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `references/` | sources (Max, Live, Live presets) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies |
 | `architecture/` | this | the partitions and the contracts below |
 
-Transitional, not part of the kit (2026-10-16): `src/`, `devices/`, `PLANS/`, `references/drums/`, `fader-curve.tsv`,
-`tools/render_drums.py`, `tools/drums_hits.js`, `tests/2sl-drums.test.js` hold 2sl drums, 2sl meter, hello-gain and the
-fader calibration, until they move to their own repositories. They no longer build here (SHORTCUTS.md).
-
 ## m4l_dev/, module by module
 
 | module | concern |
