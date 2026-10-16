@@ -36,7 +36,7 @@ Design decisions where the task text left room
 
 Usage
 -----
-    python3 tools/genexpr.py check FILE [FILE...]
+    python3 -m m4l_dev.genexpr check FILE [FILE...]
 """
 
 import math
@@ -1409,7 +1409,7 @@ class GenProgram:
 
 def main(argv):
     if len(argv) < 3 or argv[1] != "check":
-        print("usage: python3 tools/genexpr.py check FILE [FILE...]", file=sys.stderr)
+        print("usage: python3 -m m4l_dev.genexpr check FILE [FILE...]", file=sys.stderr)
         return 2
     any_error = False
     for path in argv[2:]:
