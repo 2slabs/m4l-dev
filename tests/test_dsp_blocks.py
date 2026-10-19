@@ -209,7 +209,8 @@ class EchoTests(unittest.TestCase):
 
     def repeats_late_ms(self, samplerate, time_ms, repeats, **params):
         program = self.echo(samplerate, time=time_ms, **params)
-        program.run(int(samplerate * 2), [[0.0] * int(samplerate * 2)])   # the time glides to its setting first
+        settle = 2 + 2 * abs(time_ms - 375.0) / 1000           # the time glides there first (<= 0.5 ms a ms)
+        program.run(int(samplerate * settle), [[0.0] * int(samplerate * settle)])
         loop = time_ms / 1000 * samplerate
         impulse = [0.0] * (int(loop * (repeats + 1)) + 100)
         impulse[10] = 1.0
