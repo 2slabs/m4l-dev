@@ -31,8 +31,11 @@ Done 2026-10-19: the kit's blocks (architecture/dsp-blocks.md) and 2sl stab 2.1.
 
 Done 2026-10-19 (step 3): 2sl gate 0.3.7 on the kit's echo and edges block (every jump and corner of its blend
 waves and modulator; the edges block gained restart_statements for a wave run ahead and reset at a note).
-4. Gate's folder, after step 3: the DAFx-17 virtual-analog 259 wavefolder (Esqueda, Pöntynen, Parker & Bilbao,
-   "Virtual analog model of the Buchla 259 wavefolder"), anti-aliased (ADAA), as published. User 2026-10-19: DAFx first.
-5. After 4 works: the op-amp version. User 2026-10-19: "the original circuit uses underpowering opamps. always been a
-   favorite of mine". From the 259 schematic and service notes, establish how the op-amps behave (rails, clipping) and
-   model it, A/B against step 4's folder. Possibly a choice on gate's Folder menu.
+4. Gate's folder, after step 3: the 259 folder as the DAFx-17 model (Esqueda, Pöntynen, Parker & Bilbao), which is
+   already the op-amp model: each of the five cells is a CA3160 on +-6 V rails (the rest of the 259 is on +-15 V), and a
+   cell folds where its output hits its rail (2sl-gate references/buchla-259-circuit.md). User 2026-10-19: "there is not
+   enough power on the opamp rails, so that's how it folds". So: the rail voltage is the model's parameter (it moves
+   every fold point; Theelen's TL072 build ~ +-4.5 V = 0.75x), anti-aliased (ADAA, closed form per cell), plus the
+   original's extras where drive is hot: the CA3160 input clamp (one-sided, above ~8.4 V), the +-5 V zener limiter, the
+   ~10.3 kHz drive-stage lowpass, slew at several kHz. Open: Symmetry into the folder (SPEC) vs the original's separate
+   Symmetry/Order path (asked 2026-10-19).
