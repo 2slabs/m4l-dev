@@ -137,6 +137,23 @@ test("the seeded random is mulberry32: its first numbers for seed 0 and 1 are th
   assert.deepStrictEqual(draws(context, 3), expected);
 });
 
+test("the seeded random runs without ES2015 Math (Max's [js] has no Math.imul): its multiply equals Math.imul", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  assert.strictEqual(vm.runInContext("typeof Math.imul", context), "undefined", "the sandbox hides ES2015 Math, as Max does");
+  const multiply = context.multiplyLow32Bits;
+  const edges = [0, 1, 0xffff, 0x10000, 0x7fffffff, 0x80000000, 0xffffffff, 0x6D2B79F5, -1, -0x80000000];
+  let pairs = 0;
+  for (const a of edges) for (const b of edges) { assert.strictEqual(multiply(a, b), Math.imul(a, b), a + " * " + b); pairs++; }
+  let state = 12345;
+  for (let i = 0; i < 20000; i++) {
+    state = (Math.imul(state, 1103515245) + 12345) | 0;
+    const a = state; state = (Math.imul(state, 1103515245) + 12345) | 0;
+    assert.strictEqual(multiply(a, state), Math.imul(a, state), a + " * " + state); pairs++;
+  }
+  assert.ok(draws(context, 10).every((x) => x >= 0 && x < 1));
+  assert.deepStrictEqual(record.errors, []);
+});
+
 test("the seeded random is about uniform", () => {
   const { context } = load(BRAIN_SOURCE);
   const bins = new Array(10).fill(0);

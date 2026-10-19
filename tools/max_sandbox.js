@@ -6,6 +6,10 @@
 "use strict";
 const vm = require("vm");
 
+// The Math functions ES2015 added (ECMA-262 6th edition, 20.2.2), which Max's ES5 [js] engine lacks.
+const ES2015_MATH_FUNCTIONS = ["imul", "clz32", "fround", "log10", "log2", "log1p", "expm1", "cosh", "sinh", "tanh",
+                               "acosh", "asinh", "atanh", "hypot", "trunc", "sign", "cbrt"];
+
 function seededRandom(seed) {
   let state = seed >>> 0;
   return function () {
@@ -21,6 +25,9 @@ function sandbox(seed, extraGlobals) {
   const record = { outlets: [], errors: [], posts: [] };
   const seededMath = Object.create(Math);
   seededMath.random = seededRandom(seed);
+  // Max's [js] / [jsui] engine is ES5: the Math functions ES2015 added aren't there. Hide them, so a script that
+  // calls one fails here ("... is not a function") the way it would in Live, not only in Live.
+  for (const es2015MathFunction of ES2015_MATH_FUNCTIONS) seededMath[es2015MathFunction] = undefined;
   const context = Object.assign({
     Math: seededMath, JSON, isFinite, Error, Object, Array, String, Number, RegExp, Date,
     inlets: 0, outlets: 0, inlet: 0, messagename: "",
@@ -48,4 +55,4 @@ function deliverMessage(context, inletIndex, name, args) {
   return context.anything.apply(null, args);
 }
 
-module.exports = { sandbox, seededRandom, deliverMessage };
+module.exports = { sandbox, seededRandom, deliverMessage, ES2015_MATH_FUNCTIONS };
