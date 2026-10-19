@@ -31,7 +31,12 @@ Done 2026-10-19: the kit's blocks (architecture/dsp-blocks.md) and 2sl stab 2.1.
 
 Done 2026-10-19 (step 3): 2sl gate 0.3.7 on the kit's echo and edges block (every jump and corner of its blend
 waves and modulator; the edges block gained restart_statements for a wave run ahead and reset at a note).
-4. Gate's folder, after step 3: the 259 folder as the DAFx-17 model (Esqueda, Pöntynen, Parker & Bilbao), which is
+Done 2026-10-19 (step 4): 2sl gate 0.3.12's 259 folder: the CA3160 cells built from DAFx-17 Table 1 and a 6 V
+rail (the original; a model constant), straight pieces with closed-form antiderivatives (ADAA), each node floored
+0.5 V under its negative rail, the +-5.1 V limiter, the drive stage's 10.3 kHz gain, Symmetry's offset opened by Fold
+(user 2026-10-19). Exposing the rail as a control would need a new Live parameter: proposed, not added. Details in
+2sl-gate references/buchla-259-circuit.md §4.3.
+4. (was) Gate's folder, after step 3: the 259 folder as the DAFx-17 model (Esqueda, Pöntynen, Parker & Bilbao), which is
    already the op-amp model: each of the five cells is a CA3160 on +-6 V rails (the rest of the 259 is on +-15 V), and a
    cell folds where its output hits its rail (2sl-gate references/buchla-259-circuit.md). User 2026-10-19: "there is not
    enough power on the opamp rails, so that's how it folds". So: the rail voltage is the model's parameter (it moves
