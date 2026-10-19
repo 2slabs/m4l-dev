@@ -147,6 +147,33 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 76)
 
 
+class ControlRouteTests(unittest.TestCase):
+    """messages_for: what a destination gets from control values, through the routes the build wired."""
+
+    def test_a_menu_lookup_is_the_controls_value_looked_up(self):
+        patch = builder(book=preset_book(init={"A": "1/8", "Volume": 0}))
+        menu = patch.menu("A", "A", ["1/16", "1/8", "1/4"], 12, 98, 40, "one")
+        patch.tell(patch.menu_lookup(menu, [0.25, 0.5, 1.0]), "a", patch.target)
+        self.assertEqual(patch.messages_for({"A": 2}, patch.target), {"a": 1.0})
+        self.assertIn("expr ($i1==0)*0.25 + ($i1==1)*0.5 + ($i1==2)*1.0", [x["box"].get("text") for x in patch.boxes])
+
+    def test_a_tempo_synced_time_needs_the_tempo(self):
+        patch = builder(book=preset_book(init={"A": "1/8", "Volume": 0}))
+        menu = patch.menu("A", "A", ["1/16", "1/8", "1/4"], 12, 98, 40, "one")
+        tempo = patch.box("t f", rect=(0, 0, 30, 22))
+        patch.tempo_synced_milliseconds(menu, [0.25, 0.5, 1.0], tempo, "time", patch.target)
+        self.assertEqual(patch.messages_for({"A": 0}, patch.target, beats_per_minute=120), {"time": 125.0})
+        self.assertIn("pak 120. 0.5", [x["box"].get("text") for x in patch.boxes], "starts at the Init item")
+        with self.assertRaisesRegex(BuildError, "beats_per_minute"):
+            patch.messages_for({"A": 0}, patch.target)
+
+    def test_a_raw_value_is_the_message_none(self):
+        patch = builder(book=preset_book(init={"A": 0.5, "Volume": 0}))
+        phasor = patch.box("phasor~", rect=(0, 0, 50, 22), ins=2, outtype=["signal"])
+        patch.dial("A", "A", phasor, None, 0, 1, 0, 12, 119, "one")
+        self.assertEqual(patch.messages_for({"A": 0.25}, phasor), {None: 0.25})
+
+
 class InitialValueAndPresetTests(unittest.TestCase):
     def test_controls_with_their_own_initial_value_stay_out_of_presets(self):
         patch = builder()

@@ -88,6 +88,16 @@ class PresetBook:
             raise BuildError(f"{control.name!r} has no Init value: add it to 'init' in {self.source_name}")
         return value_as_held(control, self.init_values_in_own_units[control.name], f"{self.source_name}, init")
 
+    def preset_names(self):
+        return [preset["name"] for preset in self.presets_in_own_units]
+
+    def values_in_own_units(self, preset_name):
+        """`preset_name`'s values in each control's own units, Init's filled in for every control it leaves alone."""
+        for preset in self.presets_in_own_units:
+            if preset["name"] == preset_name:
+                return {**self.init_values_in_own_units, **preset["values"]}
+        raise BuildError(f"no preset named {preset_name!r} in {self.source_name}")
+
     def presets_as_held(self, saved_controls):
         """Every preset with every saved control's value as held ({control name: SavedControl}): [Preset]."""
         unknown_init = set(self.init_values_in_own_units) - set(saved_controls)

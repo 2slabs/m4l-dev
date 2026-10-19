@@ -70,7 +70,8 @@ class DevicePatchBuilder:
         self.view_defaults = {}                     # view mode -> {message: value it gets from the Init values}
         self.gen_param_from_init = []               # (gen box id, Param name, value the Init values send, control)
         self.gen_params_by_box = {}                 # gen~ box id -> {Param name: ParamDecl}
-        self.control_routes = []                    # (control, destination box, message, scale)
+        self.control_routes = []                    # (control, transform, destination box, message or None, scale)
+        self.tempo_routes = []                      # (control, beats of its value as held, destination box, message)
         self.stop_turns_off = []                    # varnames of controls the Stop action sets to 0
         self.header_boxes = None
         self.live_set_path = None                   # the live.path at live_set, once a Live Set property is observed
@@ -227,10 +228,13 @@ class DevicePatchBuilder:
 
     def tell(self, source, message, destination, inlet=0, scale=None):
         """Wire `source`'s value to `destination` as `message value` (or raw when message is None). A control's value
-        told a display becomes that display's starting value; told a gen~, it must be the Param's default."""
-        if source in self.control_by_box and message is not None:
+        told a display becomes that display's starting value; told a gen~, it must be the Param's default. Every
+        control's route is recorded for messages_for (a raw value as the message None)."""
+        if source in self.control_by_box:
             control_name, transform = self.control_by_box[source]
             self.control_routes.append((control_name, transform, destination, message, scale))
+        if source in self.control_by_box and message is not None:
+            control_name, transform = self.control_by_box[source]
             if control_name in self.initial_values:
                 sent = transform(self.initial_values[control_name]) * (scale if scale is not None else 1)
                 if destination in self.view_mode_by_box:
@@ -248,6 +252,40 @@ class DevicePatchBuilder:
         prepend = self.box(f"prepend {message}", rect=(1360, 900 + 2 * len(self.boxes), 100, 22))
         self.wire(chain, prepend)
         self.wire(prepend, destination, 0, inlet)
+
+    def menu_lookup(self, control, values):
+        """A box passing on `values[index]` for `control`'s menu index (an [expr]): a value derived from the control
+        (`derived`), so what it tells counts as the control's. Returns the box."""
+        if control not in self.control_by_box:
+            self.fail(f"menu_lookup of box {control}, which is no control's")
+        control_name, transform = self.control_by_box[control]
+        expression = "expr " + " + ".join(f"($i1=={index})*{float(value)!r}" for index, value in enumerate(values))
+        looked_up = self.derived(self.box(expression, rect=(1100, 1400 + 2 * len(self.boxes), 400, 22)), control_name,
+                                 lambda held: float(values[int(transform(held))]))
+        self.wire(control, looked_up)
+        return looked_up
+
+    def tempo_synced_milliseconds(self, control, beats_by_item, tempo, message, destination):
+        """`control`'s menu item as a time at Live's tempo, told `destination` as `message ms`:
+        beats_by_item[item] x 60000 / tempo. `tempo`: a box putting out Live's tempo (live_set_observer("tempo")).
+        messages_for gives it at the tempo it is asked for."""
+        control_name, transform = self.control_by_box[control]
+        if control_name not in self.initial_values:
+            self.fail(f"tempo_synced_milliseconds: {control_name!r} has no initial value yet")
+        beats = self.menu_lookup(control, beats_by_item)
+        initial_beats = float(beats_by_item[int(transform(self.initial_values[control_name]))])
+        y = 1400 + 2 * len(self.boxes)
+        pair = self.box(f"pak 120. {initial_beats!r}", rect=(1550, y, 90, 22), ins=2, outs=1)
+        milliseconds = self.box("expr 60000. / $f1 * $f2", rect=(1650, y, 150, 22), ins=2, outs=1)
+        prepend = self.box(f"prepend {message}", rect=(1810, y, 110, 22))
+        self.wire(tempo, pair, 0, 0)
+        self.wire(beats, pair, 0, 1)
+        self.wire(pair, milliseconds)
+        self.wire(milliseconds, prepend)
+        self.wire(prepend, destination)
+        self.tempo_routes.append((control_name, lambda held: float(beats_by_item[int(transform(held))]), destination,
+                                  message))
+        return prepend
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
              views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0):
@@ -699,10 +737,17 @@ class DevicePatchBuilder:
             "VIEW_DEFAULTS": json.dumps(self.view_defaults), "LAYOUT": "var LAYOUT = " + json.dumps(layout) + ";",
             "DEVICE_VIEWS": device_views_code.strip()}, "the kit's views script template")
 
-    def messages_for(self, control_values, destination):
-        """What `destination` gets from these control values ({control: value}), as {message: value}."""
+    def messages_for(self, control_values, destination, beats_per_minute=None):
+        """What `destination` gets from these control values ({control: value as held}), as {message: value}; a
+        raw value (tell's message None) as {None: value}. A tempo-synced time (tempo_synced_milliseconds) needs
+        `beats_per_minute`: asked without it, this fails."""
         sent = {}
         for control_name, transform, route_destination, message, scale in self.control_routes:
             if route_destination == destination and control_name in control_values:
                 sent[message] = transform(control_values[control_name]) * (scale if scale is not None else 1)
+        for control_name, beats_of, route_destination, message in self.tempo_routes:
+            if route_destination == destination and control_name in control_values:
+                if beats_per_minute is None:
+                    self.fail(f"messages_for: {control_name} is a time at Live's tempo: say the beats_per_minute")
+                sent[message] = beats_of(control_values[control_name]) * 60000 / beats_per_minute
         return sent

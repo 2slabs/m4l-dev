@@ -28,3 +28,16 @@ The same book makes either or both outputs:
 
 A preset book with presets and neither output is legal: the presets are then only checked. Stale `.adv` files (no
 preset of that name) are removed from devices/ with a line in the build's log.
+
+## Every preset about as loud as Init
+
+A device's presets are levelled to its Init sound: each preset's output level (the header's level control, a preset
+value like any other) is set so the preset plays one phrase at Init's ITU-R BS.1770-5 integrated loudness
+(`m4l_dev/preset_loudness.py`, `m4l_dev/bs1770.py`, references/itu-r-bs1770.md), its peaks under the output's clip.
+A device's suite holds every preset within `LOUDNESS_TOLERANCE_LU` of Init.
+
+The pattern: the kit holds the phrase, the meter, the comparison, and each preset's controls as the device's DSP gets
+them, read through the device's own built patch (`messages_by_preset` / `messages_for`: the routes its build wired;
+a time synced to Live's tempo at the phrase's 120 BPM). So a device builds its patch in memory (a function its build
+calls before writing) and never keeps a second map of its controls. The device's tests hold the rest: how a note
+reaches its DSP (standing in for its brain) and its render.
