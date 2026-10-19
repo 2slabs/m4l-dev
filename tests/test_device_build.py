@@ -114,6 +114,33 @@ class FixtureBuildTests(unittest.TestCase):
             quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(),
                     views_code=fixture_device.FIXTURE_VIEWS_CODE + "\nlet modern = () => 1;\n")
 
+    def test_an_audio_effect_gets_audio_effect_presets(self):
+        audio_root = tempfile.mkdtemp(prefix="kit-fixture-audio-")
+        try:
+            def make_it_an_audio_effect(patch):
+                patch.device_type = "audio"
+            quietly(fixture_device.build_fixture_device, audio_root, patch_edit=make_it_an_audio_effect)
+            with open(os.path.join(audio_root, DEVICE_FOLDER, "kit-fixture.amxd"), "rb") as device_file:
+                self.assertEqual(amxd.read_device(device_file.read(), "the fixture")["device_type"], "audio")
+            for folder in (DEVICE_FOLDER, "dist/kit-fixture-1.2.3"):
+                with open(os.path.join(audio_root, folder, "test - loud.adv"), "rb") as preset_file:
+                    xml_text = gzip.decompress(preset_file.read()).decode()
+                self.assertIn("<MxDeviceAudioEffect>", xml_text)
+                self.assertNotIn("MxDeviceInstrument", xml_text)
+                self.assertIn('<Name Value="Level" />', xml_text)
+                self.assertNotIn("<Path ", xml_text, "no absolute path: the preset finds the device next to it")
+                blob_hex = xml_text.split("<Blob>")[1].split("</Blob>")[0]
+                self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(),
+                                 '{\n    "Memory": [ 97 ]\n}')
+        finally:
+            shutil.rmtree(audio_root)
+
+    def test_a_midi_effect_has_no_known_live_preset_form(self):
+        def make_it_a_midi_effect(patch):
+            patch.device_type = "midi"
+        with self.assertRaisesRegex(BuildError, "only a Max \\['audio', 'instrument'\\] has a known form"):
+            quietly(fixture_device.build_fixture_device, self.root, patch_edit=make_it_a_midi_effect)
+
     def test_an_int_parameter_has_no_known_live_preset_form(self):
         def add_an_int_dial(patch):
             patch.info["Count"] = ("Count", "how many")

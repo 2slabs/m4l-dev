@@ -20,7 +20,7 @@ The same book makes either or both outputs:
   `build_device`: one file per preset next to the development device and next to the frozen release, named
   `<group> - <name>.adv` (`<name>.adv` for the group `init`), each made for that exact device file (its name, size and
   CRC). Stored Only parameters go in the preset's blob: the device's `stored_only_values_of_preset(values)` gives them
-  (2sl stab: the Pattern's steps). Known forms only (float and enum parameters, a Max Instrument): an Int parameter or
+  (2sl stab: the Pattern's steps). Known forms only (float and enum parameters, a Max Instrument or a Max Audio Effect): an Int parameter or
   another device type fails the build until a file Live wrote shows its form.
 - **A Preset menu** (`header(..., preset_menu=(x, width))`): a live.menu in the header listing the presets; the UI
   script sets every saved control from the chosen preset (ignored until the device is ready, so a set's saved

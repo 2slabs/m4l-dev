@@ -1,13 +1,14 @@
 """Live preset files (.adv): one per preset of the preset book, next to the device file they are made for.
 
 A Live preset of a Max device is gzipped XML: the device's file reference and every parameter's value, not the
-device itself. The schema is the one Live 12.4.6 wrote for 2sl stab (m4l-dev references/ableton/
-example-2sl-stab-preset.xml), used as the template: everything but the file reference, the parameter list and the
+device itself. Each device type's schema is a preset Live wrote, used as the template: a Max Instrument's from 2sl
+stab (Live 12.4.6, m4l-dev references/ableton/example-2sl-stab-preset.xml), a Max Audio Effect's from a probe device
+(Live 12.4.15b7, example-max-audio-effect-preset.xml). Everything but the file reference, the parameter list and the
 Stored Only blob is kept as Live wrote it. references/README.md, "Live presets", has the source for each choice.
 
-Known forms only: float and enum parameters, Automated and Stored / Stored Only / Hidden visibility, a Max
-Instrument. Anything else (an Int parameter, another device type) fails the build: its form hasn't been seen in a
-file Live wrote.
+Known forms only: float and enum parameters, Automated and Stored / Stored Only / Hidden visibility, a Max Instrument
+or a Max Audio Effect. Anything else (an Int parameter, a MIDI effect) fails the build: its form hasn't been seen in
+a file Live wrote, or isn't taught yet (the audio effect example also holds an Int parameter's form).
 """
 import os
 import re
@@ -19,8 +20,12 @@ from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
 
 KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LIVE_PRESET_TEMPLATE_PATH = os.path.join(KIT_DIRECTORY, "references", "ableton", "example-2sl-stab-preset.xml")
-DEVICE_ELEMENT_BY_TYPE = {"instrument": "MxDeviceInstrument"}     # the only one seen in a file Live wrote
+LIVE_PRESET_TEMPLATES = os.path.join(KIT_DIRECTORY, "references", "ableton")
+# device type -> (the preset Live wrote, used as the template; the device's element in it)
+LIVE_PRESET_TEMPLATE_BY_TYPE = {
+    "instrument": (os.path.join(LIVE_PRESET_TEMPLATES, "example-2sl-stab-preset.xml"), "MxDeviceInstrument"),
+    "audio": (os.path.join(LIVE_PRESET_TEMPLATES, "example-max-audio-effect-preset.xml"), "MxDeviceAudioEffect"),
+}
 AMXD_CRC_BYTES = 16384                                             # OriginalCrc covers the file's first 16 KB
 # the gzip header: no file name, mtime 0, XFL 2 (maximum compression), OS 3 (Unix), as the presets were first
 # committed. Written by hand so the bytes don't depend on the Python version (gzip.compress wrote OS 255 on 3.9).
@@ -63,7 +68,7 @@ def live_number(value):
 def _set_value(element, path, value):
     found = element.find(path)
     if found is None:
-        raise BuildError(f"the Live preset template has no {path} in <{element.tag}> ({LIVE_PRESET_TEMPLATE_PATH})")
+        raise BuildError(f"the Live preset template has no {path} in <{element.tag}> ({LIVE_PRESET_TEMPLATES})")
     found.set("Value", value)
 
 
@@ -78,10 +83,10 @@ class _LivePresetWriter:
     """The parameters as Live lists them, read once from the patch, and the template's prototypes."""
 
     def __init__(self, patch, device_type):
-        if device_type not in DEVICE_ELEMENT_BY_TYPE:
-            raise BuildError(f"Live preset files: only a Max {sorted(DEVICE_ELEMENT_BY_TYPE)} has a known form "
-                             f"(the template is a preset of one), not {device_type!r}")
-        self.device_element_name = DEVICE_ELEMENT_BY_TYPE[device_type]
+        if device_type not in LIVE_PRESET_TEMPLATE_BY_TYPE:
+            raise BuildError(f"Live preset files: only a Max {sorted(LIVE_PRESET_TEMPLATE_BY_TYPE)} has a known form "
+                             f"(each template is a preset of one), not {device_type!r}")
+        self.template_path, self.device_element_name = LIVE_PRESET_TEMPLATE_BY_TYPE[device_type]
         # Automated and Stored parameters go in the parameter list, Stored Only ones in the blob, Hidden ones
         # nowhere (as in Live's own file). The list is ordered by name, as Live wrote it.
         self.listed_parameters, self.stored_only_names = [], []
@@ -99,14 +104,14 @@ class _LivePresetWriter:
             else:
                 raise BuildError(f"Live preset files: {name!r} has Parameter Visibility {visibility}, with no known form")
         self.listed_parameters.sort(key=lambda valueof: valueof["parameter_longname"])
-        self.template_root = ElementTree.parse(LIVE_PRESET_TEMPLATE_PATH).getroot()
+        self.template_root = ElementTree.parse(self.template_path).getroot()
         template_device = self.template_root.find(self.device_element_name)
         if template_device is None:
-            raise BuildError(f"{LIVE_PRESET_TEMPLATE_PATH} has no <{self.device_element_name}>")
+            raise BuildError(f"{self.template_path} has no <{self.device_element_name}>")
         template_parameter_list = template_device.find("ParameterList/ParameterList")
         self.prototypes = {tag: template_parameter_list.find(tag) for tag in ("MxDFloatParameter", "MxDEnumParameter")}
         if None in self.prototypes.values():
-            raise BuildError(f"{LIVE_PRESET_TEMPLATE_PATH} needs a float and an enum parameter to copy")
+            raise BuildError(f"{self.template_path} needs a float and an enum parameter to copy")
         self.first_parameter_id = min(int(p.get("Id")) for p in template_parameter_list)
 
     def parameter_element(self, parameter_id, index, valueof, value):
@@ -177,7 +182,7 @@ class _LivePresetWriter:
             parameter_list.append(self.parameter_element(self.first_parameter_id + index, index, valueof, value))
         blob = device.find("BlobSlot/Value/MxDBlob/Blob")
         if blob is None:
-            raise BuildError(f"{LIVE_PRESET_TEMPLATE_PATH} has no stored-only blob")
+            raise BuildError(f"{self.template_path} has no stored-only blob")
         ElementTree.indent(root, space="\t")
         blob.text = self.stored_only_blob_text(stored_only_values)              # after indent(): its own layout
         xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ElementTree.tostring(root, encoding="unicode") + "\n"

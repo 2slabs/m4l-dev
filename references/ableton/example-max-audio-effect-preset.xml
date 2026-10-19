@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="12.0_12402" SchemaChangeCount="5" Creator="Ableton Live 12.4.15b7" Revision="4b9fa49e05e2c54d01dc4cc511ad03f4158d7559">
+	<MxDeviceAudioEffect>
+		<LomId Value="0" />
+		<LomIdView Value="0" />
+		<IsExpanded Value="true" />
+		<BreakoutIsExpanded Value="false" />
+		<On>
+			<LomId Value="0" />
+			<Manual Value="true" />
+			<AutomationTarget Id="0">
+				<LockEnvelope Value="0" />
+			</AutomationTarget>
+			<MidiCCOnOffThresholds>
+				<Min Value="64" />
+				<Max Value="127" />
+			</MidiCCOnOffThresholds>
+		</On>
+		<ModulationSourceCount Value="0" />
+		<ParametersListWrapper LomId="0" />
+		<Pointee Id="0" />
+		<LastSelectedTimeableIndex Value="3" />
+		<LastSelectedClipEnvelopeIndex Value="3" />
+		<LastPresetRef>
+			<Value />
+		</LastPresetRef>
+		<LockedScripts />
+		<IsFolded Value="false" />
+		<ShouldShowPresetName Value="true" />
+		<UserName Value="" />
+		<Annotation Value="" />
+		<SourceContext>
+			<Value />
+		</SourceContext>
+		<MpePitchBendUsesTuning Value="true" />
+		<ViewData Value="{}" />
+		<OverwriteProtectionNumber Value="3076" />
+		<AudioOutputsListWrapper LomId="0" />
+		<AudioInputsListWrapper LomId="0" />
+		<MidiOutputsListWrapper LomId="0" />
+		<MidiInputsListWrapper LomId="0" />
+		<PatchSlot>
+			<Value>
+				<MxPatchRef Id="1">
+					<FileRef>
+						<RelativePathType Value="6" />
+						<RelativePath Value="Presets/Audio Effects/Max Audio Effect/Imported/2sl-probe.amxd" />
+						<Path Value="/Users/(removed)/Music/Ableton/User Library/Presets/Audio Effects/Max Audio Effect/Imported/2sl-probe.amxd" />
+						<Type Value="2" />
+						<LivePackName Value="" />
+						<LivePackId Value="" />
+						<OriginalFileSize Value="57927" />
+						<OriginalCrc Value="6654" />
+						<SourceHint Value="" />
+					</FileRef>
+					<LastModDate Value="1792383013" />
+					<SourceContext />
+					<SampleUsageHint Value="0" />
+				</MxPatchRef>
+			</Value>
+		</PatchSlot>
+		<ParameterList>
+			<ParameterList>
+				<MxDEnumParameter Id="0">
+					<Index Value="0" />
+					<Type Value="2" />
+					<Name Value="Probe Enum" />
+					<ShortName Value="Probe Enum" />
+					<MinValue Value="0" />
+					<MaxValue Value="2" />
+					<Default Value="0" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="1" />
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+					</Timeable>
+					<Names>
+						<Name Id="0">
+							<Name Value="a" />
+						</Name>
+						<Name Id="1">
+							<Name Value="b" />
+						</Name>
+						<Name Id="2">
+							<Name Value="c" />
+						</Name>
+					</Names>
+				</MxDEnumParameter>
+				<MxDFloatParameter Id="1">
+					<Index Value="1" />
+					<Type Value="0" />
+					<Name Value="Probe Float" />
+					<ShortName Value="Probe Float" />
+					<MinValue Value="0" />
+					<MaxValue Value="100" />
+					<Default Value="10" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="37.5590553" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+				</MxDFloatParameter>
+				<MxDIntParameter Id="2">
+					<Index Value="2" />
+					<Type Value="1" />
+					<Name Value="Probe Int" />
+					<ShortName Value="Probe Int" />
+					<MinValue Value="0" />
+					<MaxValue Value="10" />
+					<Default Value="1" />
+					<ModType Value="0" />
+					<MinMod Value="-1" />
+					<MaxMod Value="1" />
+					<IsUndoable Value="true" />
+					<IsStored Value="true" />
+					<Timeable>
+						<LomId Value="0" />
+						<Manual Value="5" />
+						<MidiControllerRange>
+							<Min Value="0" />
+							<Max Value="1" />
+						</MidiControllerRange>
+						<AutomationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</AutomationTarget>
+						<ModulationTarget Id="0">
+							<LockEnvelope Value="0" />
+						</ModulationTarget>
+					</Timeable>
+					<ScrollPosArranger Value="-14" />
+					<ScrollPosEnvelope Value="-1073741824" />
+				</MxDIntParameter>
+			</ParameterList>
+		</ParameterList>
+		<FileDropList>
+			<FileDropList />
+		</FileDropList>
+		<IdRefList>
+			<IdRefList />
+		</IdRefList>
+		<BlobSlot>
+			<Value>
+				<MxDBlob Id="3">
+					<Blob>
+						7B0A202020202250726F62652053746F726564223A205B203132332E30205D0A7D00
+					</Blob>
+					<HasData Value="true" />
+				</MxDBlob>
+			</Value>
+		</BlobSlot>
+		<Routables>
+			<InRoutings>
+				<MxDInRoutable Id="0">
+					<Routable>
+						<Target Value="AudioIn/None" />
+						<UpperDisplayString Value="3-NW_PKTR3_98_vocal_phrase_Nope_Bm" />
+						<LowerDisplayString Value="Post Mixer" />
+						<MpeSettings>
+							<ZoneType Value="0" />
+							<FirstNoteChannel Value="1" />
+							<LastNoteChannel Value="15" />
+						</MpeSettings>
+						<MpePitchBendUsesTuning Value="true" />
+					</Routable>
+					<LomId Value="0" />
+				</MxDInRoutable>
+				<MxDInRoutable Id="1">
+					<Routable>
+						<Target Value="AudioIn/None" />
+						<UpperDisplayString Value="No Output" />
+						<LowerDisplayString Value="" />
+						<MpeSettings>
+							<ZoneType Value="0" />
+							<FirstNoteChannel Value="1" />
+							<LastNoteChannel Value="15" />
+						</MpeSettings>
+						<MpePitchBendUsesTuning Value="true" />
+					</Routable>
+					<LomId Value="0" />
+				</MxDInRoutable>
+			</InRoutings>
+			<OutRoutings>
+				<MxDOutRoutable Id="0">
+					<Routable>
+						<Target Value="AudioOut/None" />
+						<UpperDisplayString Value="No Output" />
+						<LowerDisplayString Value="" />
+						<MpeSettings>
+							<ZoneType Value="0" />
+							<FirstNoteChannel Value="1" />
+							<LastNoteChannel Value="15" />
+						</MpeSettings>
+						<MpePitchBendUsesTuning Value="true" />
+					</Routable>
+					<LomId Value="0" />
+				</MxDOutRoutable>
+			</OutRoutings>
+			<MidiInRoutings />
+			<MidiOutRoutings />
+		</Routables>
+		<MpeEnabled Value="false" />
+		<MpeTuningEnabled Value="false" />
+	</MxDeviceAudioEffect>
+</Ableton>

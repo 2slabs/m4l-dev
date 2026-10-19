@@ -50,6 +50,14 @@ these by section; the examples are 2sl stab's, where each rule was first found.
 
 ## Live presets (m4l_dev/live_preset_files.py: the .adv files)
 
+- **The Max Audio Effect example** (`ableton/example-max-audio-effect-preset.adv`, and `.xml`): a preset Live
+  12.4.15b7 saved (2026-10-18) from a probe audio effect with a float, an enum (live.tab), an Int (live.numbox) and a
+  Stored Only parameter. The kit uses its `.xml` as the template for audio effects' presets. The user folder in
+  `Path` is replaced by `/Users/(removed)/`, as below. What it shows beyond the instrument example: the device element
+  is `<MxDeviceAudioEffect>`, with the same `PatchSlot` / `FileRef`, `ParameterList` and `BlobSlot` layout; Live
+  copied the device into `Presets/Audio Effects/Max Audio Effect/Imported/` and refers to it there
+  (`RelativePathType` 6); an Int parameter is `<MxDIntParameter>` (Type 1, `Manual` the integer, `MidiControllerRange`
+  0-1 for 0..10), not yet taught to the writer; the Stored Only blob holds `{"Probe Stored": [ 123.0 ]}`.
 - **The example** (`ableton/example-2sl-stab-preset.adv`, and `.xml`, the same gunzipped): a preset of 2sl stab saved by
   Live 12.4.6 (`<Ableton MajorVersion="5" MinorVersion="12.0_12402" Creator="Ableton Live 12.4.6">`). The kit uses the
   `.xml` as the template for every device's presets. One change from the file Live wrote (2026-10-16): the user folder in

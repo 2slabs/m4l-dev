@@ -12,7 +12,8 @@ Things done the quick way, to come back to. Each with when it was taken.
   `brew --prefix`), since Homebrew ships only libduktape.so and ctypes.util.find_library misses it on macOS.
 - 2026-10-16: the Live preset writer knows only a Max Instrument with float and enum parameters (the one example Live
   wrote). An audio or MIDI effect, or an Int parameter, fails the build. Proper: save a preset of each from Live into
-  references/ableton/ and teach the writer their form.
+  references/ableton/ and teach the writer their form. 2026-10-18: a Max Audio Effect is taught (from a preset Live
+  saved, for 2sl filter); the same file holds an Int parameter's form, not taught yet. A MIDI effect is still unseen.
 - 2026-10-16: a device without a Preset menu still gets the UI script's Preset-menu code (`PRESETS = []`, msg_int, which
   then only errors). Proper, if it matters: leave the code out when there is no menu.
 - 2026-10-18: how wide a live.dial / live.menu / live.text must be for its text (`m4l_dev/layout_rules.py`:
