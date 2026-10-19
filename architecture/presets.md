@@ -46,3 +46,20 @@ them, read through the device's own built patch (`messages_by_preset` / `message
 a time synced to Live's tempo at the phrase's 120 BPM). So a device builds its patch in memory (a function its build
 calls before writing) and never keeps a second map of its controls. The device's tests hold the rest: how a note
 reaches its DSP (standing in for its brain) and its render.
+
+## An audio effect: as loud as bypass
+
+An audio effect has no Init sound of its own to level to: its output is its input plus what it does. So each preset's
+output level is set so that its **median gain** is 0 dB: switching the device off and on is level-matched. The gain
+on one input is the loudest moment out minus the loudest moment in (the same max momentary loudness, Mix as the
+preset has it); the median is over the kit's effect inputs (`effect_inputs`): drums, bass, a pad, a full mix of the
+three, and the chord phrase as saws every bar with a kick on every beat, EFFECT_INPUT_SECONDS (four bars at 120 BPM,
+Live stopped) each at −18 LUFS integrated, generated from seeds (no samples), at EFFECT_SAMPLE_RATE. A device's suite
+holds every preset's median within `EFFECT_LOUDNESS_TOLERANCE_LU` (±1.5) of 0 dB (`presets_off_bypass`) and every
+peak under its clip (`presets_over_the_clip`, at the same rate, so no allowance). Each preset's **worst miss** (its
+largest distance from the median over the inputs) is reported, not tested: an effect whose gain depends on the input
+by nature (a self-oscillating filter, triggers, a gate) can't match bypass on everything, and its level is a
+compromise.
+
+The device gives a module-level render (its preset's messages and a mono input, played on both channels, to its
+left and right); `effect_measures_by_preset` plays every preset on every input in worker processes, one per CPU.

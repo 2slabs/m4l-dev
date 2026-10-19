@@ -14,8 +14,22 @@ The phrase, at 120 BPM, velocity 100:
 - chords: three chords a dotted 8th apart (0.375 s), roots C3, Ab2, Bb2, each key up after 0.3 s; a stored shape
   (m7, m9) at its own intervals (the kit's chord block), "held notes" played as an m7;
 then the tail, PHRASE_SECONDS in all. Short, because a suite renders it for every preset.
+
+An audio effect is levelled to bypass instead (architecture/presets.md, "An audio effect: as loud as bypass"): its
+loudness change on music. The kit generates the music (effect_inputs: drums, bass, pad, a full mix, chords and a
+kick; EFFECT_INPUT_SECONDS each at EFFECT_INPUT_LOUDNESS_LUFS, from seeds, no samples), plays every preset on all of
+it in worker processes (effect_measures_by_preset, with the device's own render), and reads each preset's gain on
+each input (the loudest moment out minus the loudest moment in), their median (what the preset's output level sets
+to 0 dB) and the worst miss from that median (information: an effect whose gain depends on its input, a
+self-oscillating filter, triggers, can't match bypass on everything).
 """
+import concurrent.futures
+import functools
+import math
+import os
 import random
+import statistics
+import sys
 
 from m4l_dev import bs1770
 from m4l_dev.build_error import BuildError
@@ -117,3 +131,227 @@ def presets_off_init(loudness_by_preset, init_name, tolerance_lu=LOUDNESS_TOLERA
     init = loudness_by_preset[init_name]
     return {name: round(loudness - init, 2) for name, loudness in loudness_by_preset.items()
             if abs(loudness - init) > tolerance_lu}
+
+
+# ---- an audio effect: levelled to bypass on generated music ----
+
+# 22050 Hz: the inputs' content (the hats reach 11 kHz) fits, and BS.1770's K-weighting there is within 0.3 dB of the
+# standard's below 0.4 x the rate (tests/test_bs1770.py); a quarter of 44.1 kHz's cost would lose the hats.
+EFFECT_SAMPLE_RATE = 22050
+EFFECT_INPUT_SECONDS = 8.0                 # four bars at 120 BPM
+EFFECT_INPUT_LOUDNESS_LUFS = -18.0         # integrated, the pair (the input on both channels)
+EFFECT_FULL_MIX_PART_LUFS = -20.0          # drums, bass and pad each at this before they are summed
+EFFECT_LOUDNESS_TOLERANCE_LU = 1.5         # a preset's median gain further from 0 dB fails a device's suite
+EFFECT_INPUT_NAMES = ("drums", "bass", "pad", "full mix", "chords and kick")
+EFFECT_INPUT_SEED = 3341
+KICK_SECONDS = 0.25
+KICK_AMPLITUDE = 0.5
+
+
+def _polyblep_saw(frequency, samples, rate, start_phase, amplitude):
+    """A saw (-amplitude..amplitude, falling edge at the phase's wrap) with polyBLEP's two-sample correction at each
+    wrap: band-limited enough for a level measure, and one step a sample."""
+    out = [0.0] * samples
+    increment = frequency / rate
+    phase = start_phase % 1.0
+    for i in range(samples):
+        value = 2 * phase - 1
+        if phase < increment:
+            t = phase / increment
+            value -= t + t - t * t - 1
+        elif phase > 1 - increment:
+            t = (phase - 1) / increment
+            value -= t * t + t + t + 1
+        out[i] = amplitude * value
+        phase += increment
+        if phase >= 1:
+            phase -= 1
+    return out
+
+
+def _add_at(destination, source, start):
+    for i, value in enumerate(source[:max(0, len(destination) - start)]):
+        destination[start + i] += value
+
+
+def _kick(rate):
+    """A sine kick: 120 Hz falling to 45 Hz (30 ms), decaying over 120 ms, KICK_SECONDS long."""
+    out, phase = [], 0.0
+    for i in range(int(KICK_SECONDS * rate)):
+        age = i / rate
+        phase += 2 * math.pi * (45 + 75 * math.exp(-age / 0.03)) / rate
+        out.append(KICK_AMPLITUDE * math.exp(-age / 0.12) * math.sin(phase))
+    return out
+
+
+def _noise_burst(rate, seconds, decay_seconds, amplitude, draws, high_pass_hz, tone_hz=None):
+    """White noise through a one-pole high-pass, decaying; with tone_hz, a snare: noise and a short sine body."""
+    out, previous_input, high_passed = [], 0.0, 0.0
+    pole = math.exp(-2 * math.pi * high_pass_hz / rate)
+    for i in range(int(seconds * rate)):
+        white = draws.uniform(-1, 1)
+        high_passed = pole * (high_passed + white - previous_input)
+        previous_input = white
+        value = high_passed
+        if tone_hz:
+            value = 0.6 * high_passed + 0.6 * math.sin(2 * math.pi * tone_hz * i / rate) * math.exp(-(i / rate) / 0.05)
+        out.append(amplitude * math.exp(-(i / rate) / decay_seconds) * value)
+    return out
+
+
+def _beat_seconds():
+    return 60.0 / BEATS_PER_MINUTE
+
+
+def _drums(rate, draws):
+    """A kick on every beat, a snare on 2 and 4, closed hats on the 16ths with an open hat on the off-beat."""
+    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    beat = _beat_seconds()
+    kick = _kick(rate)
+    for number in range(int(EFFECT_INPUT_SECONDS / beat)):
+        _add_at(out, kick, int(number * beat * rate))
+        if number % 2 == 1:
+            _add_at(out, _noise_burst(rate, 0.2, 0.06, 0.35, draws, 800, tone_hz=190), int(number * beat * rate))
+        for sixteenth in range(4):
+            start = int((number * beat + sixteenth * beat / 4) * rate)
+            if sixteenth == 2:
+                _add_at(out, _noise_burst(rate, 0.25, 0.08, 0.12, draws, 7000), start)
+            else:
+                _add_at(out, _noise_burst(rate, 0.05, 0.012, 0.09 if sixteenth == 0 else 0.06, draws, 7000), start)
+    return out
+
+
+def _bass(rate, draws):
+    """A 16th-note saw bassline on C1..Bb1, plucked (150 ms decay), the bar repeated."""
+    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    pattern = [24, None, 24, 36, None, 24, 27, None, 24, None, 31, 24, None, 34, 24, None]
+    step = _beat_seconds() / 4
+    length = int(step * 0.9 * rate)
+    for bar in range(int(EFFECT_INPUT_SECONDS / (16 * step))):
+        for index, pitch in enumerate(pattern):
+            if pitch is None:
+                continue
+            note = _polyblep_saw(440.0 * 2 ** ((pitch - 69) / 12), length, rate, draws.random(), 0.4)
+            for i in range(length):
+                age = i / rate
+                note[i] *= math.exp(-age / 0.15) * min(1, age / 0.002) * min(1, (step * 0.9 - age) / 0.005)
+            _add_at(out, note, int((bar * 16 + index) * step * rate))
+    return out
+
+
+def _pad(rate, draws):
+    """Detuned saw chords (Cm7, Abmaj7, Bb7, Gm7), a bar each, a slow attack and release, softened above 2.5 kHz."""
+    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    chords = [[48, 51, 55, 58], [44, 48, 51, 55], [46, 50, 53, 56], [43, 46, 50, 53]]
+    seconds_each = EFFECT_INPUT_SECONDS / len(chords)
+    length = int(seconds_each * rate)
+    for number, pitches in enumerate(chords):
+        for pitch in pitches:
+            for detune in (-0.07, 0.07):
+                voice = _polyblep_saw(440.0 * 2 ** ((pitch - 69 + detune) / 12), length, rate, draws.random(), 0.05)
+                for i in range(length):
+                    age = i / rate
+                    voice[i] *= min(1, age / 0.15) * min(1, (seconds_each - age) / 0.3)
+                _add_at(out, voice, number * length)
+    pole = math.exp(-2 * math.pi * 2500 / rate)
+    smoothed = 0.0
+    for i, value in enumerate(out):
+        smoothed = (1 - pole) * value + pole * smoothed
+        out[i] = smoothed
+    return out
+
+
+def _chords_and_kick(rate):
+    """The kit's chord phrase (m7 on C3, Ab2, Bb2) as saws at the seeded start phases, every bar, a kick every beat."""
+    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    bar = 4 * _beat_seconds()
+    start_phases = oscillator_start_phases()
+    events = chord_phrase("m7", 4)
+    for bar_number in range(int(EFFECT_INPUT_SECONDS / bar)):
+        for (seconds, pitches), (end_seconds, _) in zip(events[0::2], events[1::2]):
+            length = int(round((end_seconds - seconds) * rate))
+            for pitch in pitches:
+                note = _polyblep_saw(440.0 * 2 ** ((pitch - 69) / 12), length, rate, next(start_phases), 0.08)
+                _add_at(out, note, int(round((bar_number * bar + seconds) * rate)))
+    kick = _kick(rate)
+    for number in range(int(EFFECT_INPUT_SECONDS / _beat_seconds())):
+        _add_at(out, kick, int(number * _beat_seconds() * rate))
+    return out
+
+
+def _at_loudness(signal, rate, loudness_lufs):
+    gain = 10 ** ((loudness_lufs - bs1770.integrated_loudness([signal, signal], rate)) / 20)
+    return [value * gain for value in signal]
+
+
+@functools.lru_cache(maxsize=4)
+def effect_inputs(rate=EFFECT_SAMPLE_RATE):
+    """{name: mono samples (a tuple)}, EFFECT_INPUT_NAMES in order, each EFFECT_INPUT_SECONDS at
+    EFFECT_INPUT_LOUDNESS_LUFS integrated (the input on both channels, as the effect gets it): the same on every run."""
+    draws = random.Random(EFFECT_INPUT_SEED)
+    drums, bass, pad = _drums(rate, draws), _bass(rate, draws), _pad(rate, draws)
+    parts = [_at_loudness(part, rate, EFFECT_FULL_MIX_PART_LUFS) for part in (drums, bass, pad)]
+    unlevelled = {"drums": drums, "bass": bass, "pad": pad, "full mix": [sum(values) for values in zip(*parts)],
+                  "chords and kick": _chords_and_kick(rate)}
+    return {name: tuple(_at_loudness(unlevelled[name], rate, EFFECT_INPUT_LOUDNESS_LUFS)) for name in EFFECT_INPUT_NAMES}
+
+
+@functools.lru_cache(maxsize=4)
+def _effect_input_loudest_moments(rate):
+    """{name: the effect input's max momentary loudness}, the input on both channels."""
+    return {name: bs1770.max_momentary_loudness([list(mono), list(mono)], rate)
+            for name, mono in effect_inputs(rate).items()}
+
+
+class EffectMeasures:
+    """A preset's measures on the effect inputs: gain_db_by_input (the loudest moment out minus in, LU, per input),
+    median_gain_db, worst_miss_db (the largest distance of an input's gain from the median) and peak_db (the sample
+    peak over all the inputs)."""
+
+    def __init__(self, gain_db_by_input, peak_db):
+        self.gain_db_by_input = dict(gain_db_by_input)
+        self.median_gain_db = statistics.median(self.gain_db_by_input.values())
+        self.worst_miss_db = max(abs(gain - self.median_gain_db) for gain in self.gain_db_by_input.values())
+        self.peak_db = peak_db
+
+    def __repr__(self):
+        return (f"EffectMeasures(median {self.median_gain_db:+.2f} LU, worst miss {self.worst_miss_db:.2f} LU, "
+                f"peak {self.peak_db:+.2f} dBFS)")
+
+
+def effect_measures(render, messages, rate=EFFECT_SAMPLE_RATE):
+    """EffectMeasures of one preset: render(messages, mono input, rate) -> (left, right) plays the preset (its
+    messages, as the device's DSP gets them) on each effect input."""
+    gains, peak = {}, -math.inf
+    for name, mono in effect_inputs(rate).items():
+        channels = [list(channel) for channel in render(messages, list(mono), rate)]
+        if len(channels) != 2 or any(len(channel) != len(mono) for channel in channels):
+            raise BuildError(f"preset_loudness: the render of {name!r} isn't two channels of {len(mono)} samples")
+        gains[name] = bs1770.max_momentary_loudness(channels, rate) - _effect_input_loudest_moments(rate)[name]
+        peak = max(peak, bs1770.sample_peak_db(channels))
+    return EffectMeasures(gains, peak)
+
+
+def _worker_starts(search_path):
+    sys.path[:] = search_path
+
+
+def _measures_of_one(render, rate, name_and_messages):
+    name, messages = name_and_messages
+    return name, effect_measures(render, messages, rate)
+
+
+def effect_measures_by_preset(render, messages_by_preset, rate=EFFECT_SAMPLE_RATE):
+    """{preset: EffectMeasures} of every preset ({name: messages}), in worker processes, one per CPU. `render` is a
+    module-level function (it is sent to the workers by name, and they get this process's sys.path)."""
+    _effect_input_loudest_moments(rate)    # made once here: workers forked from this process inherit them
+    with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count(), initializer=_worker_starts,
+                                                initargs=(list(sys.path),)) as pool:
+        return dict(pool.map(functools.partial(_measures_of_one, render, rate), messages_by_preset.items()))
+
+
+def presets_off_bypass(measures_by_preset, tolerance_lu=EFFECT_LOUDNESS_TOLERANCE_LU):
+    """{preset: median gain LU (2 decimals)} of every preset whose median gain is further than `tolerance_lu` from
+    0 dB (bypass): empty when every preset is levelled."""
+    return {name: round(measures.median_gain_db, 2) for name, measures in measures_by_preset.items()
+            if abs(measures.median_gain_db) > tolerance_lu}

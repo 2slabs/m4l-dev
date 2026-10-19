@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import preset_loudness  # noqa: E402
+from m4l_dev import bs1770, preset_loudness  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 
 
@@ -53,6 +53,48 @@ class PhraseTests(unittest.TestCase):
         self.assertEqual(phases, [next(again) for _ in range(32)])
         self.assertTrue(all(0 <= phase < 1 for phase in phases))
         self.assertGreater(len({round(phase, 3) for phase in phases}), 30)
+
+
+
+def identity_render(messages, mono, rate):
+    """An effect that passes its input, times messages["gain"]: the effect mode's stand-in device."""
+    return [value * messages["gain"] for value in mono], [value * messages["gain"] for value in mono]
+
+
+class EffectTests(unittest.TestCase):
+    def test_the_effect_inputs_are_eight_seconds_at_minus_18_lufs_and_repeat(self):
+        rate = preset_loudness.EFFECT_SAMPLE_RATE
+        inputs = preset_loudness.effect_inputs(rate)
+        self.assertEqual(tuple(inputs), ("drums", "bass", "pad", "full mix", "chords and kick"))
+        for name, mono in inputs.items():
+            with self.subTest(input=name):
+                self.assertEqual(len(mono), int(preset_loudness.EFFECT_INPUT_SECONDS * rate))
+                self.assertAlmostEqual(bs1770.integrated_loudness([list(mono)] * 2, rate), -18.0, places=6)
+                self.assertLess(bs1770.sample_peak_db([list(mono)]), -1.0)
+        preset_loudness.effect_inputs.cache_clear()
+        self.assertEqual(preset_loudness.effect_inputs(rate), inputs)
+
+    def test_an_effect_is_measured_by_its_median_gain_against_bypass(self):
+        bypass = preset_loudness.effect_measures(identity_render, {"gain": 1.0})
+        self.assertAlmostEqual(bypass.median_gain_db, 0.0, places=9)
+        self.assertAlmostEqual(bypass.worst_miss_db, 0.0, places=9)
+        halved = preset_loudness.effect_measures(identity_render, {"gain": 0.5})
+        self.assertAlmostEqual(halved.median_gain_db, 20 * math.log10(0.5), places=6)
+        self.assertEqual(preset_loudness.presets_off_bypass({"bypass": bypass, "halved": halved}),
+                         {"halved": -6.02})
+
+    def test_the_median_and_the_worst_miss(self):
+        measures = preset_loudness.EffectMeasures({"a": -1.0, "b": 0.5, "c": 3.0}, -6.0)
+        self.assertEqual((measures.median_gain_db, measures.worst_miss_db), (0.5, 2.5))
+
+    def test_presets_are_measured_in_worker_processes(self):
+        measures = preset_loudness.effect_measures_by_preset(identity_render, {"one": {"gain": 1.0},
+                                                                               "two": {"gain": 2.0}})
+        self.assertAlmostEqual(measures["two"].median_gain_db - measures["one"].median_gain_db, 20 * math.log10(2))
+
+    def test_a_render_of_the_wrong_shape_fails(self):
+        with self.assertRaisesRegex(BuildError, "two channels"):
+            preset_loudness.effect_measures(lambda messages, mono, rate: (mono,), {})
 
 
 if __name__ == "__main__":
