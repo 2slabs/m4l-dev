@@ -54,7 +54,7 @@ class DevicePatchBuilder:
         layout_rules.check_on_grid(f"{script_name}: the device width", device_width)
         self.device_width = device_width
         self.page_names = list(page_names)
-        self.info = info
+        self.info = dict(info)                     # its own copy: blocks add their controls' text to it
         self.preset_book = preset_book
         self.info_used = set()
         self.boxes, self.lines = [], []

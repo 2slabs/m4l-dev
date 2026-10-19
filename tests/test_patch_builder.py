@@ -147,6 +147,20 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 76)
 
 
+class InfoTests(unittest.TestCase):
+    def test_a_builder_leaves_the_devices_info_alone(self):
+        # a device builds twice in one process (its build, then its tests' in-memory build): a block adding its
+        # controls' text to the info must not find it there the second time
+        from m4l_dev.seeded_random import SeededRandom
+        info = dict(INFO)
+        for _ in range(2):
+            patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
+                                       device_type="instrument", device_width=400, page_names=["one"], info=info,
+                                       preset_book=preset_book())
+            SeededRandom(patch, patch.box("js t.js", rect=(0, 0, 50, 22), ins=2), 1)
+        self.assertEqual(info, INFO)
+
+
 class ControlRouteTests(unittest.TestCase):
     """messages_for: what a destination gets from control values, through the routes the build wired."""
 
