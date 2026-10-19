@@ -5,7 +5,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 
 | partition | what it is | the pattern |
 |---|---|---|
-| `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
+| `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
 | `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display) and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests) |
 | `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing |
@@ -27,7 +27,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `generated_scripts.py` | `fill_template` and the ES5 check of every generated script |
 | `device_build.py` | `build_device`: checks, scripts, lock, devices/, dist/ |
 | `amxd.py` | .amxd bytes: unfrozen and frozen |
-| `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler) |
+| `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `gen_ladder.py`, `gen_saturator.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, band-limited edges, tape echo (dsp-blocks.md) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak (references/itu-r-bs1770.md) |

@@ -6,7 +6,8 @@ development device, Live presets, and a frozen single-file release. Used by [2sl
 A [2sl](https://2sl.to) project.
 
 Live 12 Suite with its bundled Max 9.1.5. Python 3.9 or later (standard library only), Duktape for the ES5 check
-(`brew install duktape`, or `apt install libduktape207`), node for the script tests.
+(`brew install duktape`, or `apt install libduktape207`), node for the script tests, a C compiler (`cc`: Xcode's
+command line tools, or `apt install gcc`) for the DSP tests (m4l_dev/genexpr.py builds each gen~ program to render it).
 
 ## Use it in a device repository
 

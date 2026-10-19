@@ -40,14 +40,30 @@ Design decisions where the task text left room
   d.write(x); are errors.
 * Function arguments may be reassigned (they are locals of the function).
 
+Rendering
+---------
+GenProgram translates the program to C once, builds it with the system C compiler ($CC, default `cc`) into a cache
+directory ($M4L_DEV_GENEXPR_CACHE, default ~/.cache/m4l-dev/genexpr; one shared library per program text, compiler and
+flags) and runs it through ctypes: about 25x the speed of rendering in Python (2sl gate's core: 3.5 s -> 0.14 s per
+second of audio at 44.1 kHz). No compiler: GenExprBuildError, saying so. Checking (check, analyze) needs no compiler.
+The C reproduces CPython's arithmetic: every non-NaN value is the bits Python's float and math module give for the
+same expressions (and noise() is random.Random(seed).random()'s sequence); a NaN comes out where Python's would, with
+its sign and payload left open, as IEEE 754 leaves them.
+
 Usage
 -----
     python3 -m m4l_dev.genexpr check FILE [FILE...]
 """
 
+import array
+import ctypes
+import hashlib
 import math
+import os
 import random
 import re
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 
@@ -984,152 +1000,448 @@ def check(code, num_inputs=None, num_outputs=None):
 
 
 # ----------------------------------------------------------------------------
-# Transpiler: AST -> Python source
+# Renderer: AST -> C source, built once by the system C compiler, run through ctypes
 # ----------------------------------------------------------------------------
+#
+# Every value is an IEEE double, as in Python. Each builtin below reproduces what CPython's float and math module give
+# for the same call, including the special cases (inf, nan, -0.0, domain and overflow errors), so a render is the bits
+# CPython computes evaluating the same expressions (NaN sign and payload aside: which NaN an operation on two NaNs
+# returns depends on operand order, which neither C nor CPython's own build fixes).
+# Evaluation order is fixed where it can be seen (only noise() has a side effect): left to right, as Python. C leaves
+# the order of operands open, so wherever two operands could draw noise they are sequenced into temporaries; a
+# division evaluates its divisor first and skips its dividend when the divisor is 0 (x / 0 reads 0).
+# The compiler must not contract or reassociate floating point, and must call libm for every math function as CPython
+# does rather than inline its own (-fno-builtin: an inlined fmod returns other NaNs). -O0: a test suite runs as fast as
+# at -O1 or -O2 (its time is no longer the rendering), and a large program (2sl gate's core) builds in 0.4 s against
+# 1.2 s and 3.4 s.
 
-SIMPLE_PYTHON_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+C_COMPILER_ENVIRONMENT_VARIABLE = "CC"
+COMPILER_FLAGS = ("-O0", "-std=c99", "-fPIC", "-shared", "-ffp-contract=off", "-fno-fast-math", "-fno-builtin")
+CACHE_DIRECTORY_ENVIRONMENT_VARIABLE = "M4L_DEV_GENEXPR_CACHE"
 
-# builtin name -> format string over already-translated argument expressions
-BUILTIN_TEMPLATES = {
-    "abs": "abs({0})", "sign": "_sign({0})", "floor": "_floor({0})", "ceil": "_ceil({0})",
-    "trunc": "_trunc({0})", "fract": "_fract({0})", "min": "min({0}, {1})", "max": "max({0}, {1})",
-    "clamp": "_clamp({0}, {1}, {2})", "wrap": "_wrap({0}, {1}, {2})", "mix": "_mix({0}, {1}, {2})",
-    "exp": "_exp({0})", "log": "_log({0})", "log2": "_log2({0})", "log10": "_log10({0})",
-    "pow": "_pow({0}, {1})", "sqrt": "_sqrt({0})", "sin": "_sin({0})", "cos": "_cos({0})",
-    "tan": "_tan({0})", "tanh": "_tanh({0})", "atan": "_atan({0})", "atan2": "_atan2({0}, {1})",
-    "noise": "(_random_uniform() * 2.0 - 1.0)",
-    "dbtoa": "_dbtoa({0})", "atodb": "_atodb({0})",
+C_PRELUDE = r"""
+#include <math.h>
+#include <stdint.h>
+#include <string.h>
+
+typedef struct { uint32_t words[624]; int32_t index; } genexpr_noise_state;
+static genexpr_noise_state *genexpr_noise_source;
+
+/* CPython's float("nan"): the positive quiet NaN */
+static double genexpr_python_nan(void) { uint64_t bits = 0x7ff8000000000000ULL; double value; memcpy(&value, &bits, 8); return value; }
+static const double genexpr_infinity = HUGE_VAL;
+
+/* CPython Modules/_randommodule.c: genrand_uint32 and random_random (MT19937, 53-bit result) */
+static uint32_t genexpr_mersenne_next(void) {
+    static const uint32_t matrix_by_low_bit[2] = {0x0U, 0x9908b0dfU};
+    uint32_t *words = genexpr_noise_source->words;
+    uint32_t y;
+    if (genexpr_noise_source->index >= 624) {
+        int k;
+        for (k = 0; k < 624 - 397; k++) {
+            y = (words[k] & 0x80000000U) | (words[k + 1] & 0x7fffffffU);
+            words[k] = words[k + 397] ^ (y >> 1) ^ matrix_by_low_bit[y & 0x1U];
+        }
+        for (; k < 624 - 1; k++) {
+            y = (words[k] & 0x80000000U) | (words[k + 1] & 0x7fffffffU);
+            words[k] = words[k + (397 - 624)] ^ (y >> 1) ^ matrix_by_low_bit[y & 0x1U];
+        }
+        y = (words[623] & 0x80000000U) | (words[0] & 0x7fffffffU);
+        words[623] = words[396] ^ (y >> 1) ^ matrix_by_low_bit[y & 0x1U];
+        genexpr_noise_source->index = 0;
+    }
+    y = words[genexpr_noise_source->index++];
+    y ^= (y >> 11);
+    y ^= (y << 7) & 0x9d2c5680U;
+    y ^= (y << 15) & 0xefc60000U;
+    y ^= (y >> 18);
+    return y;
+}
+static double genexpr_noise(void) {
+    uint32_t high = genexpr_mersenne_next() >> 5, low = genexpr_mersenne_next() >> 6;
+    return ((high * 67108864.0 + low) * (1.0 / 9007199254740992.0)) * 2.0 - 1.0;
 }
 
+/* Python's min(a, b) / max(a, b): the second replaces the first only if strictly less / greater */
+static double genexpr_min(double a, double b) { return b < a ? b : a; }
+static double genexpr_max(double a, double b) { return b > a ? b : a; }
+static double genexpr_sign(double x) { return x > 0 ? 1.0 : (x < 0 ? -1.0 : 0.0); }
+/* float(math.floor(x)) goes through a Python int: -0.0 comes back as 0.0; inf and nan pass through */
+static double genexpr_through_int(double rounded) { return rounded == 0.0 ? 0.0 : rounded; }
+static double genexpr_floor(double x) { return isfinite(x) ? genexpr_through_int(floor(x)) : x; }
+static double genexpr_ceil(double x) { return isfinite(x) ? genexpr_through_int(ceil(x)) : x; }
+static double genexpr_trunc(double x) { return isfinite(x) ? genexpr_through_int(trunc(x)) : x; }
+static double genexpr_fract(double x) { return x - genexpr_floor(x); }
+static double genexpr_clamp(double x, double low, double high) {
+    if (low > high) { double swap = low; low = high; high = swap; }
+    return x < low ? low : (x > high ? high : x);
+}
+/* CPython float_rem: the remainder takes the divisor's sign */
+static double genexpr_python_float_remainder(double dividend, double divisor) {
+    double remainder = fmod(dividend, divisor);
+    if (remainder != 0.0) {
+        if ((divisor < 0) != (remainder < 0)) remainder += divisor;
+    } else {
+        remainder = copysign(0.0, divisor);
+    }
+    return remainder;
+}
+static double genexpr_wrap(double x, double low, double high) {
+    if (high < low) { double swap = low; low = high; high = swap; }
+    if (low <= x && x < high) return x;
+    double span = high - low;
+    if (span == 0) return low;
+    double wrapped = low + genexpr_python_float_remainder(x - low, span);
+    return wrapped >= high ? low : wrapped;
+}
+static double genexpr_mix(double a, double b, double t) { return a + (b - a) * t; }
+/* math.exp: overflow raises, read as inf */
+static double genexpr_exp(double x) { return exp(x); }
+/* math.log / log2 / log10 (CPython m_log*): nan and inf come back as themselves; x <= 0 reads 0 (our rule) */
+static double genexpr_log(double x) { if (isnan(x)) return x; if (x <= 0) return 0.0; if (isinf(x)) return x; return log(x); }
+static double genexpr_log2(double x) { if (isnan(x)) return x; if (x <= 0) return 0.0; if (isinf(x)) return x; return log2(x); }
+static double genexpr_log10(double x) { if (isnan(x)) return x; if (x <= 0) return 0.0; if (isinf(x)) return x; return log10(x); }
+/* math.pow (CPython math_pow): its own non-finite cases, then libm; a domain error reads nan, an overflow +inf */
+static double genexpr_pow(double base, double exponent) {
+    if (!isfinite(base) || !isfinite(exponent)) {
+        if (isnan(base)) return exponent == 0.0 ? 1.0 : base;
+        if (isnan(exponent)) return base == 1.0 ? 1.0 : exponent;
+        if (isinf(base)) {
+            int odd_exponent = isfinite(exponent) && fmod(fabs(exponent), 2.0) == 1.0;
+            if (exponent > 0.) return odd_exponent ? base : fabs(base);
+            if (exponent == 0.) return 1.;
+            return odd_exponent ? copysign(0., base) : 0.;
+        }
+        if (fabs(base) == 1.0) return 1.;
+        if (exponent > 0. && fabs(base) > 1.0) return exponent;
+        if (exponent < 0. && fabs(base) < 1.0) return -exponent;
+        return 0.;
+    }
+    double result = pow(base, exponent);
+    if (!isfinite(result)) {
+        if (isnan(result)) return genexpr_python_nan();
+        if (base == 0.) return genexpr_python_nan();
+        return genexpr_infinity;
+    }
+    return result;
+}
+/* math.sqrt; x < 0 reads 0 (our rule) */
+static double genexpr_sqrt(double x) { return (x >= 0 || x != x) ? sqrt(x) : 0.0; }
+/* math.sin / cos / tan: a nan from a non-nan argument (inf) raises, read as nan */
+static double genexpr_sin(double x) { return isinf(x) ? genexpr_python_nan() : sin(x); }
+static double genexpr_cos(double x) { return isinf(x) ? genexpr_python_nan() : cos(x); }
+static double genexpr_tan(double x) { return isinf(x) ? genexpr_python_nan() : tan(x); }
+/* math.atan2 (CPython m_atan2) */
+static double genexpr_atan2(double y, double x) {
+    if (isnan(x) || isnan(y)) return genexpr_python_nan();
+    if (isinf(y)) {
+        if (isinf(x)) return copysign(copysign(1., x) == 1. ? 0.25 * 3.141592653589793 : 0.75 * 3.141592653589793, y);
+        return copysign(0.5 * 3.141592653589793, y);
+    }
+    if (isinf(x) || y == 0.) return copysign(1., x) == 1. ? copysign(0., y) : copysign(3.141592653589793, y);
+    return atan2(y, x);
+}
+/* math.fmod (CPython math_fmod); a zero divisor reads 0 (our rule) */
+static double genexpr_modulo(double dividend, double divisor) {
+    if (divisor == 0) return 0.0;
+    if (isinf(divisor) && isfinite(dividend)) return dividend;
+    double remainder = fmod(dividend, divisor);
+    if (isnan(remainder) && !isnan(dividend) && !isnan(divisor)) return genexpr_python_nan();
+    return remainder;
+}
+/* 10.0 ** (db / 20.0): overflow raises, read as inf */
+static double genexpr_dbtoa(double db) { return pow(10.0, db / 20.0); }
+static double genexpr_atodb(double x) {
+    if (x > 0) return 20.0 * (isinf(x) ? x : log10(x));
+    return x == x ? -999.0 : genexpr_python_nan();
+}
 
-class Transpiler:
+static long genexpr_wrap_index(long index, long size) { index %= size; return index < 0 ? index + size : index; }
+static double genexpr_clamp_delay_time(double time_in_samples, long size) {
+    if (time_in_samples < 0.0) return 0.0;
+    if (time_in_samples > (double)(size - 1)) return (double)(size - 1);
+    return time_in_samples;
+}
+static double genexpr_delay_read_none(const double *buffer, long position, long size, double time_in_samples) {
+    if (time_in_samples != time_in_samples) return genexpr_python_nan();
+    long whole = (long)genexpr_clamp_delay_time(time_in_samples, size);
+    return buffer[genexpr_wrap_index(position - whole, size)];
+}
+static double genexpr_delay_read_linear(const double *buffer, long position, long size, double time_in_samples) {
+    if (time_in_samples != time_in_samples) return genexpr_python_nan();
+    time_in_samples = genexpr_clamp_delay_time(time_in_samples, size);
+    long whole = (long)time_in_samples;
+    double fraction = time_in_samples - (double)whole;
+    double newer = buffer[genexpr_wrap_index(position - whole, size)];
+    if (fraction == 0.0) return newer;
+    double older = buffer[genexpr_wrap_index(position - whole - 1, size)];
+    return newer + (older - newer) * fraction;
+}
+/* Catmull-Rom through the samples at delays whole-1, whole, whole+1, whole+2 */
+static double genexpr_delay_read_spline(const double *buffer, long position, long size, double time_in_samples) {
+    if (time_in_samples != time_in_samples) return genexpr_python_nan();
+    time_in_samples = genexpr_clamp_delay_time(time_in_samples, size);
+    long whole = (long)time_in_samples;
+    double fraction = time_in_samples - (double)whole;
+    double y_before = buffer[genexpr_wrap_index(position - whole + 1, size)];
+    double y_start = buffer[genexpr_wrap_index(position - whole, size)];
+    double y_end = buffer[genexpr_wrap_index(position - whole - 1, size)];
+    double y_after = buffer[genexpr_wrap_index(position - whole - 2, size)];
+    double c1 = 0.5 * (y_end - y_before);
+    double c2 = y_before - 2.5 * y_start + 2.0 * y_end - 0.5 * y_after;
+    double c3 = 0.5 * (y_after - y_before) + 1.5 * (y_start - y_end);
+    return ((c3 * fraction + c2) * fraction + c1) * fraction + y_start;
+}
+"""
+
+# builtin name -> C function (every builtin but noise, mstosamps and sampstoms, which CTranslator writes inline)
+BUILTIN_C_FUNCTIONS = {
+    "abs": "fabs", "sign": "genexpr_sign", "floor": "genexpr_floor", "ceil": "genexpr_ceil", "trunc": "genexpr_trunc",
+    "fract": "genexpr_fract", "min": "genexpr_min", "max": "genexpr_max", "clamp": "genexpr_clamp",
+    "wrap": "genexpr_wrap", "mix": "genexpr_mix", "exp": "genexpr_exp", "log": "genexpr_log", "log2": "genexpr_log2",
+    "log10": "genexpr_log10", "pow": "genexpr_pow", "sqrt": "genexpr_sqrt", "sin": "genexpr_sin",
+    "cos": "genexpr_cos", "tan": "genexpr_tan", "tanh": "tanh", "atan": "atan", "atan2": "genexpr_atan2",
+    "dbtoa": "genexpr_dbtoa", "atodb": "genexpr_atodb",
+}
+INLINE_BUILTINS = frozenset({"noise", "mstosamps", "sampstoms"})
+assert set(BUILTIN_C_FUNCTIONS) | INLINE_BUILTINS == set(BUILTIN_ARITY), "every builtin needs a C translation"
+
+# interp="cubic" is rendered as the same Catmull-Rom as "spline" (module docstring)
+DELAY_READ_C_FUNCTIONS = {"none": "genexpr_delay_read_none", "linear": "genexpr_delay_read_linear",
+                          "cubic": "genexpr_delay_read_spline", "spline": "genexpr_delay_read_spline"}
+
+
+def c_double_literal(value):
+    """An exact C literal for a finite double (hexadecimal floating point)."""
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(f"internal error: no C literal for the non-finite constant {value}")
+    return f"({value.hex()})" if value >= 0 else f"(-{(-value).hex()})"
+
+
+class CTranslator:
+    """One GenExpr program as one C translation unit with
+    void genexpr_render(long sample_count, const double *params, double *histories, double *delay_memory,
+                        long *delay_positions, const double *const *inputs, double *const *outputs,
+                        genexpr_noise_state *noise)."""
+
     def __init__(self, program, info, samplerate):
         self.program = program
         self.info = info
         self.samplerate = float(samplerate)
         self.lines = []
         self.indent = 0
-        self.temporary_counter = 0
         self.constants = {
-            "samplerate": repr(self.samplerate),
-            "pi": repr(math.pi), "twopi": repr(2 * math.pi),
-            "halfpi": repr(math.pi / 2), "e": repr(math.e),
+            "samplerate": c_double_literal(self.samplerate),
+            "pi": c_double_literal(math.pi), "twopi": c_double_literal(2 * math.pi),
+            "halfpi": c_double_literal(math.pi / 2), "e": c_double_literal(math.e),
         }
+        self.functions_that_draw_noise = set()
+        self.temporary_count = 0
 
     def emit(self, text):
         self.lines.append("    " * self.indent + text)
 
     def new_temporary(self):
-        self.temporary_counter += 1
-        return f"_t{self.temporary_counter}"
+        self.temporary_count += 1
+        return f"t_{self.temporary_count}"
+
+    def declare_temporaries_at(self, line_index):
+        if self.temporary_count:
+            names = ", ".join(f"t_{number}" for number in range(1, self.temporary_count + 1))
+            self.lines.insert(line_index, "    " * self.indent + f"double {names};")
 
     # -- program --
-    def transpile(self):
+    def translate(self):
+        self.lines.append(C_PRELUDE)
         for function in self.program.functions:
             self.emit_function(function)
         self.emit_render()
         return "\n".join(self.lines) + "\n"
 
     def emit_function(self, function):
-        arguments = ", ".join(f"v_{name}" for name, _, _ in function.parameters)
-        self.emit(f"def f_{function.name}({arguments}):")
+        if self.statements_draw_noise(function.body.statements):
+            self.functions_that_draw_noise.add(function.name)
+        arguments = ", ".join(f"double v_{name}" for name, _, _ in function.parameters) or "void"
+        self.emit(f"static double f_{function.name}({arguments}) {{")
         self.indent += 1
+        parameter_names = {name for name, _, _ in function.parameters}
+        locals_assigned = sorted(self.assigned_names(function.body.statements) - parameter_names)
+        if locals_assigned:
+            self.emit("double " + ", ".join(f"v_{name}" for name in locals_assigned) + ";")
+        self.temporary_count = 0
+        temporaries_line = len(self.lines)
         self.emit_statements(function.body.statements)
-        self.emit("return 0.0")
+        self.emit("return 0.0;")
+        self.declare_temporaries_at(temporaries_line)
         self.indent -= 1
+        self.emit("}")
         self.emit("")
 
     def emit_render(self):
         info = self.info
-        self.emit("def _render(_n, _params, _hist, _dbuf, _dpos, _inputs, _outputs):")
+        self.emit("void genexpr_render(long sample_count, const double *params, double *histories, double *delay_memory, "
+                  "long *delay_positions, const double *const *inputs, double *const *outputs, "
+                  "genexpr_noise_state *noise) {")
         self.indent += 1
-        for name in info.params:
-            self.emit(f"v_{name} = _params[{name!r}]")
-        for name in info.histories:
-            self.emit(f"v_{name} = _hist[{name!r}]")
-        for name in info.delays:
-            self.emit(f"d_{name} = _dbuf[{name!r}]")
-            self.emit(f"p_{name} = _dpos[{name!r}]")
+        self.emit("genexpr_noise_source = noise;")
+        for index, name in enumerate(info.params):
+            self.emit(f"const double v_{name} = params[{index}];")
+        for index, name in enumerate(info.histories):
+            self.emit(f"double v_{name} = histories[{index}];")
+        delay_offset = 0
+        for index, (name, delay) in enumerate(info.delays.items()):
+            self.emit(f"double *const d_{name} = delay_memory + {delay_offset};")
+            self.emit(f"long p_{name} = delay_positions[{index}];")
+            delay_offset += delay.size
         for number in sorted(info.used_inputs):
-            self.emit(f"_in_{number} = _inputs[{number - 1}]")
+            self.emit(f"const double *const in_{number} = inputs[{number - 1}];")
         for number in sorted(info.used_outputs):
-            self.emit(f"_out_{number} = _outputs[{number - 1}]")
-        self.emit("for _i in range(_n):")
+            self.emit(f"double *const out_{number} = outputs[{number - 1}];")
+        global_names = set(info.params) | set(info.histories) | {f"in{n}" for n in info.used_inputs} \
+            | {f"out{n}" for n in info.used_outputs}
+        locals_assigned = sorted(self.assigned_names(self.program.statements) - global_names)
+        if locals_assigned:
+            self.emit("double " + ", ".join(f"v_{name}" for name in locals_assigned) + ";")
+        self.temporary_count = 0
+        temporaries_line = len(self.lines)
+        self.emit("for (long sample_index = 0; sample_index < sample_count; sample_index++) {")
         self.indent += 1
         for number in sorted(info.used_inputs):
-            self.emit(f"v_in{number} = _in_{number}[_i]")
+            self.emit(f"const double v_in{number} = in_{number}[sample_index];")
         for number in sorted(info.used_outputs):
-            self.emit(f"v_out{number} = 0.0")
+            self.emit(f"double v_out{number} = 0.0;")
         self.emit_statements(self.program.statements)
         for number in sorted(info.used_outputs):
-            self.emit(f"_out_{number}[_i] = v_out{number}")
+            self.emit(f"out_{number}[sample_index] = v_out{number};")
         for name, delay in info.delays.items():
-            self.emit(f"p_{name} += 1")
-            self.emit(f"if p_{name} == {delay.size}: p_{name} = 0")
+            self.emit(f"p_{name} += 1;")
+            self.emit(f"if (p_{name} == {delay.size}) p_{name} = 0;")
         self.indent -= 1
-        for name in info.histories:
-            self.emit(f"_hist[{name!r}] = v_{name}")
-        for name in info.delays:
-            self.emit(f"_dpos[{name!r}] = p_{name}")
+        self.emit("}")
+        self.declare_temporaries_at(temporaries_line)
+        for index, name in enumerate(info.histories):
+            self.emit(f"histories[{index}] = v_{name};")
+        for index, name in enumerate(info.delays):
+            self.emit(f"delay_positions[{index}] = p_{name};")
         self.indent -= 1
+        self.emit("}")
+
+    @staticmethod
+    def assigned_names(statements):
+        names = set()
+        for statement in statements:
+            if isinstance(statement, Assign):
+                names.add(statement.name)
+            elif isinstance(statement, If):
+                for _, block in statement.branches:
+                    names |= CTranslator.assigned_names(block.statements)
+                if statement.else_block is not None:
+                    names |= CTranslator.assigned_names(statement.else_block.statements)
+        return names
+
+    # -- noise: the one side effect, whose order Python fixes and C does not --
+    def statements_draw_noise(self, statements):
+        for statement in statements:
+            if isinstance(statement, (Assign, Return)) and self.draws_noise(statement.expression):
+                return True
+            if isinstance(statement, MethodStatement) and self.draws_noise(statement.call.arguments[0]):
+                return True
+            if isinstance(statement, If):
+                for condition, block in statement.branches:
+                    if self.draws_noise(condition) or self.statements_draw_noise(block.statements):
+                        return True
+                if statement.else_block is not None and self.statements_draw_noise(statement.else_block.statements):
+                    return True
+        return False
+
+    def draws_noise(self, node):
+        if isinstance(node, (Number, Name)):
+            return False
+        if isinstance(node, Unary):
+            return self.draws_noise(node.operand)
+        if isinstance(node, Binary):
+            return self.draws_noise(node.left) or self.draws_noise(node.right)
+        if isinstance(node, Ternary):
+            return any(self.draws_noise(part) for part in (node.condition, node.when_true, node.when_false))
+        if isinstance(node, Call):
+            if node.name == "noise" or node.name in self.functions_that_draw_noise:
+                return True
+            return any(self.draws_noise(argument) for argument in node.arguments)
+        if isinstance(node, MethodCall):
+            return any(self.draws_noise(argument) for argument in node.arguments)
+        raise GenExprError("internal error: unknown expression type", node.line, node.col)
+
+    def operands_in_python_order(self, operand_nodes, translate):
+        """C translations of operands that Python evaluates left to right. When two or more of them draw noise, those
+        are evaluated into temporaries first, in order: returns (sequencing prefix, [operand C expressions])."""
+        translations = [translate(node) for node in operand_nodes]
+        if sum(1 for node in operand_nodes if self.draws_noise(node)) < 2:
+            return "", translations
+        prefix_parts = []
+        for index, node in enumerate(operand_nodes):
+            if self.draws_noise(node):
+                temporary = self.new_temporary()
+                prefix_parts.append(f"{temporary} = {translations[index]}")
+                translations[index] = temporary
+        return "".join(part + ", " for part in prefix_parts), translations
 
     # -- statements --
     def emit_statements(self, statements):
-        start_length = len(self.lines)
         for statement in statements:
             self.emit_statement(statement)
-        if len(self.lines) == start_length:
-            self.emit("pass")
 
     def emit_statement(self, statement):
         if isinstance(statement, Assign):
-            self.emit(f"v_{statement.name} = {self.value(statement.expression)}")
+            self.emit(f"v_{statement.name} = {self.value(statement.expression)};")
         elif isinstance(statement, Return):
-            self.emit(f"return {self.value(statement.expression)}")
+            self.emit(f"return {self.value(statement.expression)};")
         elif isinstance(statement, MethodStatement):
             call = statement.call
-            self.emit(f"d_{call.object_name}[p_{call.object_name}] = {self.value(call.arguments[0])}")
+            self.emit(f"d_{call.object_name}[p_{call.object_name}] = {self.value(call.arguments[0])};")
         elif isinstance(statement, If):
             for branch_index, (condition, block) in enumerate(statement.branches):
-                keyword = "if" if branch_index == 0 else "elif"
-                self.emit(f"{keyword} {self.condition(condition)}:")
+                keyword = "if" if branch_index == 0 else "} else if"
+                self.emit(f"{keyword} ({self.condition(condition)}) {{")
                 self.indent += 1
                 self.emit_statements(block.statements)
                 self.indent -= 1
             if statement.else_block is not None:
-                self.emit("else:")
+                self.emit("} else {")
                 self.indent += 1
                 self.emit_statements(statement.else_block.statements)
                 self.indent -= 1
+            self.emit("}")
         else:
             raise GenExprError("internal error: cannot translate statement", statement.line, statement.col)
 
     # -- expressions --
     def condition(self, node):
-        """Python boolean expression for the truth of `node` (nonzero = true)."""
+        """C truth expression for `node` (nonzero = true)."""
         if isinstance(node, Binary):
             if node.operator in COMPARISON_OPERATORS:
-                return f"({self.value(node.left)} {node.operator} {self.value(node.right)})"
+                prefix, (left, right) = self.operands_in_python_order([node.left, node.right], self.value)
+                return f"({prefix}{left} {node.operator} {right})"
             if node.operator == "&&":
-                return f"({self.condition(node.left)} and {self.condition(node.right)})"
+                return f"({self.condition(node.left)} && {self.condition(node.right)})"
             if node.operator == "||":
-                return f"({self.condition(node.left)} or {self.condition(node.right)})"
+                return f"({self.condition(node.left)} || {self.condition(node.right)})"
         if isinstance(node, Unary) and node.operator == "!":
-            return f"(not {self.condition(node.operand)})"
+            return f"(!{self.condition(node.operand)})"
         return f"({self.value(node)} != 0.0)"
 
     def value(self, node):
-        """Python float expression for `node`."""
+        """C double expression for `node`."""
         if isinstance(node, Number):
-            return repr(float(node.value))
+            return c_double_literal(node.value)
         if isinstance(node, Name):
             return self.constants.get(node.name, f"v_{node.name}")
         if isinstance(node, Unary):
             if node.operator == "-":
                 return f"(-{self.value(node.operand)})"
-            return f"(1.0 if {self.condition(node)} else 0.0)"
+            return f"({self.condition(node)} ? 1.0 : 0.0)"
         if isinstance(node, Ternary):
-            return f"({self.value(node.when_true)} if {self.condition(node.condition)} else {self.value(node.when_false)})"
+            return f"({self.condition(node.condition)} ? {self.value(node.when_true)} : {self.value(node.when_false)})"
         if isinstance(node, Binary):
             return self.binary_value(node)
         if isinstance(node, Call):
@@ -1141,214 +1453,139 @@ class Transpiler:
     def binary_value(self, node):
         operator = node.operator
         if operator in COMPARISON_OPERATORS or operator in ("&&", "||"):
-            return f"(1.0 if {self.condition(node)} else 0.0)"
-        left = self.value(node.left)
-        right = self.value(node.right)
-        if operator in ("+", "-", "*"):
-            return f"({left} {operator} {right})"
+            return f"({self.condition(node)} ? 1.0 : 0.0)"
         if operator == "/":
+            # x / 0 reads 0. Python evaluated `left / right if right else 0.0`: the divisor first, the dividend only
+            # when the divisor is not 0.
             if isinstance(node.right, Number):
-                return "0.0" if node.right.value == 0 else f"({left} / {right})"
-            if SIMPLE_PYTHON_NAME.match(right):
-                return f"({left} / {right} if {right} else 0.0)"
-            temporary = self.new_temporary()
-            return f"({left} / {temporary} if ({temporary} := {right}) else 0.0)"
-        return f"_modulo({left}, {right})"
+                return "0.0" if node.right.value == 0 else f"({self.value(node.left)} / {self.value(node.right)})"
+            divisor = self.new_temporary()
+            return f"({divisor} = {self.value(node.right)}, {divisor} != 0.0 ? {self.value(node.left)} / {divisor} : 0.0)"
+        prefix, (left, right) = self.operands_in_python_order([node.left, node.right], self.value)
+        if operator in ("+", "-", "*"):
+            return f"({prefix}{left} {operator} {right})"
+        if operator == "%":
+            return f"({prefix}genexpr_modulo({left}, {right}))"
+        raise GenExprError(f"internal error: cannot translate operator '{operator}'", node.line, node.col)
 
     def call_value(self, node):
-        arguments = [self.value(argument) for argument in node.arguments]
         name = node.name
-        if name in BUILTIN_TEMPLATES:
-            return BUILTIN_TEMPLATES[name].format(*arguments)
+        if name == "noise":
+            return "genexpr_noise()"
+        prefix, arguments = self.operands_in_python_order(node.arguments, self.value)
         if name == "mstosamps":
-            return f"({arguments[0]} * {self.samplerate!r} / 1000.0)"
+            return f"({prefix}{arguments[0]} * {c_double_literal(self.samplerate)} / 1000.0)"
         if name == "sampstoms":
-            return f"({arguments[0]} * 1000.0 / {self.samplerate!r})"
-        return f"f_{name}({', '.join(arguments)})"
+            return f"({prefix}{arguments[0]} * 1000.0 / {c_double_literal(self.samplerate)})"
+        function = BUILTIN_C_FUNCTIONS.get(name, f"f_{name}")
+        return f"({prefix}{function}({', '.join(arguments)}))"
 
     def delay_read_value(self, node):
         mode_token = node.keywords.get("interp")
         mode = mode_token.text if mode_token else "linear"
         delay = self.info.delays[node.object_name]
-        return (f"_delay_read_{mode}(d_{node.object_name}, p_{node.object_name}, "
-                f"{delay.size}, {self.value(node.arguments[0])})")
+        return (f"{DELAY_READ_C_FUNCTIONS[mode]}(d_{node.object_name}, p_{node.object_name}, {delay.size}, "
+                f"{self.value(node.arguments[0])})")
 
 
-# ----------------------------------------------------------------------------
-# Runtime helpers (the namespace the generated code runs in)
-# ----------------------------------------------------------------------------
-
-NOT_A_NUMBER = float("nan")
-INFINITY = float("inf")
+class GenExprBuildError(RuntimeError):
+    """The C compiler is missing or refused the generated C: the renderer cannot run."""
 
 
-def _sign(x):
-    return 1.0 if x > 0 else (-1.0 if x < 0 else 0.0)
+class NoiseState(ctypes.Structure):
+    _fields_ = [("words", ctypes.c_uint32 * 624), ("index", ctypes.c_int32)]
 
 
-def _rounding(function):
-    def rounded(x):
+_compiler_identity_by_command = {}
+_loaded_render_functions_by_digest = {}
+
+
+def c_compiler_command():
+    command = os.environ.get(C_COMPILER_ENVIRONMENT_VARIABLE, "cc")
+    if shutil.which(command) is None:
+        raise GenExprBuildError(
+            f"the GenExpr renderer builds each program with a C compiler and '{command}' is not on PATH: install one "
+            f"(gcc or clang) or set {C_COMPILER_ENVIRONMENT_VARIABLE}=/path/to/compiler")
+    return command
+
+
+def c_compiler_identity(command):
+    if command not in _compiler_identity_by_command:
         try:
-            return float(function(x))
-        except (OverflowError, ValueError):
-            return x   # inf and nan pass through
-    return rounded
+            completed = subprocess.run([command, "--version"], capture_output=True, text=True, check=True)
+        except (OSError, subprocess.CalledProcessError) as problem:
+            raise GenExprBuildError(f"the C compiler '{command}' does not answer --version: {problem}") from problem
+        _compiler_identity_by_command[command] = shutil.which(command) + "\n" + completed.stdout
+    return _compiler_identity_by_command[command]
 
 
-_floor = _rounding(math.floor)
-_ceil = _rounding(math.ceil)
-_trunc = _rounding(math.trunc)
+def build_cache_directory():
+    directory = os.environ.get(CACHE_DIRECTORY_ENVIRONMENT_VARIABLE)
+    if not directory:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+        directory = os.path.join(base, "m4l-dev", "genexpr")
+    os.makedirs(directory, exist_ok=True)
+    return directory
 
 
-def _fract(x):
-    return x - _floor(x)
-
-
-def _clamp(x, low, high):
-    if low > high:
-        low, high = high, low
-    return low if x < low else (high if x > high else x)
-
-
-def _wrap(x, low, high):
-    if high < low:
-        low, high = high, low
-    if low <= x < high:
-        return x
-    span = high - low
-    if span == 0:
-        return low
-    wrapped = low + (x - low) % span
-    return low if wrapped >= high else wrapped
-
-
-def _mix(a, b, t):
-    return a + (b - a) * t
-
-
-def _exp(x):
+def build_library(command, c_source, library_path):
+    source_path = f"{library_path}.{os.getpid()}.c"
+    building_path = f"{library_path}.{os.getpid()}.building"
+    with open(source_path, "w", encoding="utf-8") as handle:
+        handle.write(c_source)
     try:
-        return math.exp(x)
-    except OverflowError:
-        return INFINITY
+        completed = subprocess.run([command, *COMPILER_FLAGS, "-o", building_path, source_path, "-lm"],
+                                   capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise GenExprBuildError(f"genexpr internal error: the C compiler refused the generated C "
+                                    f"({source_path} kept):\n{completed.stderr}")
+        os.replace(building_path, library_path)   # atomic: a reader never sees half a library
+        os.remove(source_path)
+    finally:
+        if os.path.exists(building_path):
+            os.remove(building_path)
 
 
-def _logarithm(function):
-    def logarithm(x):
-        return function(x) if x > 0 or x != x else 0.0
-    return logarithm
+def load_render_function(c_source):
+    """The compiled genexpr_render of `c_source`: built once per source, compiler and flags into the cache directory
+    (shared between processes and runs), loaded once per process."""
+    command = c_compiler_command()
+    digest = hashlib.sha256("\n".join((c_compiler_identity(command), " ".join(COMPILER_FLAGS), c_source))
+                            .encode("utf-8")).hexdigest()
+    if digest in _loaded_render_functions_by_digest:
+        return _loaded_render_functions_by_digest[digest]
+    directory = build_cache_directory()
+    library_path = os.path.join(directory, f"{digest}.so")
+    if not os.path.exists(library_path):
+        import fcntl   # POSIX only: parallel test processes that want the same program wait for one build of it
+        with open(f"{library_path}.lock", "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not os.path.exists(library_path):
+                build_library(command, c_source, library_path)
+    library = ctypes.CDLL(library_path)
+    render = library.genexpr_render
+    render.restype = None
+    render.argtypes = [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                       ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoiseState)]
+    _loaded_render_functions_by_digest[digest] = render
+    return render
 
 
-_log = _logarithm(math.log)
-_log2 = _logarithm(math.log2)
-_log10 = _logarithm(math.log10)
+_translations_by_program_text = {}
 
 
-def _pow(base, exponent):
-    try:
-        return math.pow(base, exponent)
-    except OverflowError:
-        return INFINITY
-    except ValueError:
-        return NOT_A_NUMBER
+def translated_program(code, num_inputs, num_outputs, samplerate):
+    """(program, info, C source) of `code`, analysed and translated once per process (the AST and info are only read
+    from here on: a GenProgram keeps its own state)."""
+    key = (code, num_inputs, num_outputs, samplerate)
+    if key not in _translations_by_program_text:
+        program, info = analyze(code, num_inputs, num_outputs)
+        _translations_by_program_text[key] = (program, info, CTranslator(program, info, samplerate).translate())
+    return _translations_by_program_text[key]
 
 
-def _sqrt(x):
-    return math.sqrt(x) if x >= 0 or x != x else 0.0
-
-
-def _trigonometric(function):
-    def trigonometric(x):
-        try:
-            return function(x)
-        except (ValueError, OverflowError):
-            return NOT_A_NUMBER
-    return trigonometric
-
-
-_sin = _trigonometric(math.sin)
-_cos = _trigonometric(math.cos)
-_tan = _trigonometric(math.tan)
-
-
-def _modulo(a, b):
-    if b == 0:
-        return 0.0
-    try:
-        return math.fmod(a, b)
-    except ValueError:
-        return NOT_A_NUMBER
-
-
-def _dbtoa(db):
-    try:
-        return 10.0 ** (db / 20.0)
-    except OverflowError:
-        return INFINITY
-
-
-def _atodb(x):
-    return 20.0 * math.log10(x) if x > 0 else (-999.0 if x == x else NOT_A_NUMBER)
-
-
-def _clamp_delay_time(time_in_samples, size):
-    if time_in_samples < 0.0:
-        return 0.0
-    if time_in_samples > size - 1:
-        return float(size - 1)
-    return time_in_samples
-
-
-def _delay_read_none(buffer, position, size, time_in_samples):
-    if time_in_samples != time_in_samples:
-        return NOT_A_NUMBER
-    whole = int(_clamp_delay_time(time_in_samples, size))
-    return buffer[(position - whole) % size]
-
-
-def _delay_read_linear(buffer, position, size, time_in_samples):
-    if time_in_samples != time_in_samples:
-        return NOT_A_NUMBER
-    time_in_samples = _clamp_delay_time(time_in_samples, size)
-    whole = int(time_in_samples)
-    fraction = time_in_samples - whole
-    newer = buffer[(position - whole) % size]
-    if fraction == 0.0:
-        return newer
-    older = buffer[(position - whole - 1) % size]
-    return newer + (older - newer) * fraction
-
-
-def _delay_read_cubic(buffer, position, size, time_in_samples):
-    if time_in_samples != time_in_samples:
-        return NOT_A_NUMBER
-    time_in_samples = _clamp_delay_time(time_in_samples, size)
-    whole = int(time_in_samples)
-    fraction = time_in_samples - whole
-    # Catmull-Rom through the samples at delays whole-1, whole, whole+1, whole+2.
-    y_before = buffer[(position - whole + 1) % size]
-    y_start = buffer[(position - whole) % size]
-    y_end = buffer[(position - whole - 1) % size]
-    y_after = buffer[(position - whole - 2) % size]
-    c1 = 0.5 * (y_end - y_before)
-    c2 = y_before - 2.5 * y_start + 2.0 * y_end - 0.5 * y_after
-    c3 = 0.5 * (y_after - y_before) + 1.5 * (y_start - y_end)
-    return ((c3 * fraction + c2) * fraction + c1) * fraction + y_start
-
-
-_delay_read_spline = _delay_read_cubic
-
-
-def _make_namespace():
-    return {
-        "_sign": _sign, "_floor": _floor, "_ceil": _ceil, "_trunc": _trunc, "_fract": _fract,
-        "_clamp": _clamp, "_wrap": _wrap, "_mix": _mix, "_exp": _exp, "_log": _log,
-        "_log2": _log2, "_log10": _log10, "_pow": _pow, "_sqrt": _sqrt, "_sin": _sin,
-        "_cos": _cos, "_tan": _tan, "_tanh": math.tanh, "_atan": math.atan, "_atan2": math.atan2,
-        "_modulo": _modulo, "_dbtoa": _dbtoa, "_atodb": _atodb,
-        "_delay_read_none": _delay_read_none, "_delay_read_linear": _delay_read_linear,
-        "_delay_read_cubic": _delay_read_cubic, "_delay_read_spline": _delay_read_spline,
-    }
+def buffer_address(double_array):
+    return double_array.buffer_info()[0]
 
 
 # ----------------------------------------------------------------------------
@@ -1360,29 +1597,31 @@ class GenProgram:
         self.samplerate = float(samplerate)
         self.num_inputs = num_inputs
         self.num_outputs = num_outputs
-        program, info = analyze(code, num_inputs, num_outputs)
+        program, info, c_source = translated_program(code, num_inputs, num_outputs, self.samplerate)
         self.params = {
             name: {"default": decl.default, "min": decl.minimum, "max": decl.maximum}
             for name, decl in info.params.items()
         }
         self.histories = list(info.histories)
-        self._param_values = {name: decl.default for name, decl in info.params.items()}
-        self._history_values = {name: decl.initial for name, decl in info.histories.items()}
-        self._delay_buffers = {name: [0.0] * decl.size for name, decl in info.delays.items()}
-        self._delay_positions = {name: 0 for name in info.delays}
-        self.python_source = Transpiler(program, info, self.samplerate).transpile()
-        self._namespace = _make_namespace()
+        self._param_index = {name: index for index, name in enumerate(info.params)}
+        self._history_index = {name: index for index, name in enumerate(info.histories)}
+        self._param_values = array.array("d", (decl.default for decl in info.params.values()))
+        self._history_values = array.array("d", (decl.initial for decl in info.histories.values()))
+        self._delay_memory = array.array("d", bytes(8 * sum(decl.size for decl in info.delays.values())))
+        self._delay_positions = (ctypes.c_long * max(1, len(info.delays)))()
+        self._noise_state = NoiseState()
+        self.c_source = c_source
+        self._render = load_render_function(c_source)
         self.set_seed(seed)
-        try:
-            exec(compile(self.python_source, "<genexpr>", "exec"), self._namespace)
-        except SyntaxError as problem:
-            raise RuntimeError(f"genexpr internal error: generated Python is invalid ({problem}); "
-                               "most likely the expression nesting is too deep") from problem
-        self._render = self._namespace["_render"]
 
     def set_seed(self, seed):
-        self._noise_generator = random.Random(seed)
-        self._namespace["_random_uniform"] = self._noise_generator.random
+        """Noise draws Python's random.Random(seed).random() sequence (Mersenne Twister), as 2 * draw - 1."""
+        version, internal_state, _ = random.Random(seed).getstate()
+        if version != 3 or len(internal_state) != 625:
+            raise RuntimeError(f"genexpr: random.Random's state format changed (version {version}, "
+                               f"{len(internal_state)} words): the C noise source copies version 3's 624 words + index")
+        self._noise_state.words[:] = internal_state[:624]
+        self._noise_state.index = internal_state[624]
 
     def set_param(self, name, value):
         if name not in self.params:
@@ -1395,17 +1634,17 @@ class GenProgram:
             value = limits["min"]
         if limits["max"] is not None and value > limits["max"]:
             value = limits["max"]
-        self._param_values[name] = value
+        self._param_values[self._param_index[name]] = value
 
     def get_param(self, name):
         if name not in self.params:
             raise KeyError(f"unknown Param '{name}'; this program declares: {', '.join(self.params) or '(none)'}")
-        return self._param_values[name]
+        return self._param_values[self._param_index[name]]
 
     def get_history(self, name):
-        if name not in self._history_values:
+        if name not in self._history_index:
             raise KeyError(f"unknown History '{name}'; this program declares: {', '.join(self.histories) or '(none)'}")
-        return self._history_values[name]
+        return self._history_values[self._history_index[name]]
 
     def run(self, num_samples, inputs=None):
         if num_samples < 0:
@@ -1414,18 +1653,25 @@ class GenProgram:
             inputs = [0.0] * self.num_inputs
         if len(inputs) != self.num_inputs:
             raise ValueError(f"expected {self.num_inputs} input sequence(s), got {len(inputs)}")
-        input_sequences = []
+        input_arrays = []
         for input_index, source in enumerate(inputs):
             if isinstance(source, (int, float)):
-                input_sequences.append([float(source)] * num_samples)
+                input_arrays.append(array.array("d", [float(source)]) * num_samples)
                 continue
             if len(source) < num_samples:
                 raise ValueError(f"input {input_index + 1} has {len(source)} samples, need {num_samples}")
-            input_sequences.append([float(sample) for sample in source[:num_samples]])
-        outputs = [[0.0] * num_samples for _ in range(self.num_outputs)]
-        self._render(num_samples, self._param_values, self._history_values,
-                     self._delay_buffers, self._delay_positions, input_sequences, outputs)
-        return outputs
+            input_arrays.append(array.array("d", source[:num_samples]))   # a non-number raises TypeError
+        output_arrays = [array.array("d", bytes(8 * num_samples)) for _ in range(self.num_outputs)]
+        if num_samples == 0:
+            return [[] for _ in output_arrays]
+        input_pointers = (ctypes.c_void_p * max(1, len(input_arrays)))(*map(buffer_address, input_arrays))
+        output_pointers = (ctypes.c_void_p * max(1, len(output_arrays)))(*map(buffer_address, output_arrays))
+        self._render(num_samples, buffer_address(self._param_values) if self._param_values else None,
+                     buffer_address(self._history_values) if self._history_values else None,
+                     buffer_address(self._delay_memory) if self._delay_memory else None,
+                     ctypes.addressof(self._delay_positions), input_pointers, output_pointers,
+                     ctypes.byref(self._noise_state))
+        return [output.tolist() for output in output_arrays]
 
 
 # ----------------------------------------------------------------------------

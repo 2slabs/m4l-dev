@@ -3,12 +3,15 @@ repository (2sl stab: tests/test_stab_dsp.py)."""
 
 import math
 import os
+import random
+import struct
 import sys
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.genexpr import GenExprError, GenProgram, check  # noqa: E402
+from m4l_dev.genexpr import GenExprBuildError, GenExprError, GenProgram, check  # noqa: E402
 
 
 def render_single_output(code, num_samples, inputs=None, num_inputs=1):
@@ -200,6 +203,76 @@ class SemanticsTests(unittest.TestCase):
         self.assertEqual(outputs, [[1.0] * 3, [0.0] * 3])
 
 
+class PythonArithmeticTests(unittest.TestCase):
+    """The renderer runs C (built by the system compiler) and gives what Python's float and math module give, bit for
+    bit: the cases where C and Python differ unless the translation takes care."""
+
+    def assert_same_bits(self, rendered, expected):
+        self.assertEqual(struct.pack(">d", rendered).hex(), struct.pack(">d", expected).hex(), (rendered, expected))
+
+    def test_libm_functions_are_pythons(self):
+        arguments = [0.3, -2.7, 1e-300, 123.456, 700.0]
+        for name, python_function in (("exp", math.exp), ("tanh", math.tanh), ("atan", math.atan), ("sin", math.sin),
+                                      ("cos", math.cos), ("tan", math.tan), ("log", math.log), ("sqrt", math.sqrt)):
+            for argument in arguments:
+                if name in ("log", "sqrt") and argument <= 0:
+                    continue
+                self.assert_same_bits(render_single_output(f"out1 = {name}(in1);", 1, [[argument]])[0],
+                                      python_function(argument))
+        self.assert_same_bits(render_single_output("out1 = pow(in1, 1.7) + atan2(in1, 3) + in1 % 0.7;", 1, [[2.3]])[0],
+                              math.pow(2.3, 1.7) + math.atan2(2.3, 3) + math.fmod(2.3, 0.7))
+        self.assert_same_bits(render_single_output("out1 = dbtoa(in1) + atodb(in1);", 1, [[3.1]])[0],
+                              10.0 ** (3.1 / 20.0) + 20.0 * math.log10(3.1))
+
+    def test_rounding_goes_through_a_python_int(self):
+        """float(math.floor(-0.5)) is 0.0, not C's -0.0; inf and nan pass through."""
+        for name in ("floor", "ceil", "trunc"):
+            expected = float(getattr(math, name)(-0.3))
+            self.assert_same_bits(render_single_output(f"out1 = {name}(in1);", 1, [[-0.3]])[0], expected)
+            self.assertEqual(render_single_output(f"out1 = {name}(in1);", 1, [[math.inf]])[0], math.inf)
+            self.assertTrue(math.isnan(render_single_output(f"out1 = {name}(in1);", 1, [[math.nan]])[0]))
+
+    def test_domain_and_overflow_errors_read_as_python_raised_them(self):
+        self.assertTrue(math.isnan(render_single_output("out1 = pow(0, -1);", 1, [0.0])[0]))      # ValueError
+        self.assertEqual(render_single_output("out1 = pow(-10, 309);", 1, [0.0])[0], math.inf)     # OverflowError
+        self.assertTrue(math.isnan(render_single_output("out1 = sin(in1);", 1, [[math.inf]])[0]))
+        self.assertTrue(math.isnan(render_single_output("out1 = in1 % 2;", 1, [[math.inf]])[0]))
+        self.assertEqual(render_single_output("out1 = exp(1000);", 1, [0.0])[0], math.inf)
+        self.assert_same_bits(render_single_output("out1 = in1 % -3;", 1, [[-7.5]])[0], math.fmod(-7.5, -3.0))
+        self.assert_same_bits(render_single_output("out1 = wrap(in1, 0, 0.7);", 1, [[-2.5]])[0], 0.0 + (-2.5 % 0.7))
+
+    def test_min_and_max_keep_the_first_on_a_tie(self):
+        """Python's min(0.0, -0.0) is 0.0 (the second replaces the first only when strictly less)."""
+        self.assert_same_bits(render_single_output("out1 = min(0, -in1);", 1, [[0.0]])[0], min(0.0, -0.0))
+        self.assert_same_bits(render_single_output("out1 = max(-in1, 0);", 1, [[0.0]])[0], max(-0.0, 0.0))
+
+    def test_noise_is_python_randoms_sequence_drawn_left_to_right(self):
+        draws = random.Random(3)
+        expected = []
+        for _ in range(50):
+            first, second = draws.random() * 2 - 1, draws.random() * 2 - 1
+            expected.append(first - second * 3)
+        self.assertEqual(GenProgram("out1 = noise() - noise() * 3;", 0, 1, seed=3).run(50)[0], expected)
+
+    def test_division_draws_its_divisor_first_and_skips_its_dividend_on_zero(self):
+        draws = random.Random(5)
+        divisor_noise, dividend_noise = draws.random() * 2 - 1, draws.random() * 2 - 1
+        program = GenProgram("out1 = noise() / (noise() + in1);", 1, 1, seed=5)
+        self.assertEqual(program.run(1, [[2.0]])[0][0], dividend_noise / (divisor_noise + 2.0))
+        draws = random.Random(5)
+        first_draw = draws.random() * 2 - 1
+        program = GenProgram("out1 = noise() / in1;", 1, 1, seed=5)
+        self.assertEqual(program.run(2, [[0.0, 1.0]])[0], [0.0, first_draw])   # no draw while the divisor is 0
+
+    def test_no_c_compiler_fails_loudly(self):
+        with mock.patch.dict(os.environ, {"CC": "no-such-c-compiler"}):
+            with self.assertRaises(GenExprBuildError) as caught:
+                GenProgram("out1 = in1 * 0.5;", 1, 1)
+        self.assertIn("no-such-c-compiler", str(caught.exception))
+        self.assertIn("C compiler", str(caught.exception))
+        check("out1 = in1 * 0.5;", num_inputs=1, num_outputs=1)   # checking needs no compiler
+
+
 class SpeedTests(unittest.TestCase):
     def test_speed_smoke(self):
         lines = ["History s(0);", "Param amount(0.5, min=0, max=1);"]
@@ -217,7 +290,7 @@ class SpeedTests(unittest.TestCase):
         rate = num_samples / elapsed
         print(f"\n[speed] ~300 statements: {rate:,.0f} samples/second")
         self.assertTrue(all(math.isfinite(sample) for sample in output))
-        self.assertGreater(rate, 2000)
+        self.assertGreater(rate, 250_000, "the renderer runs compiled C: ~1M samples/s here; Python's was ~120k")
 
 
 if __name__ == "__main__":
