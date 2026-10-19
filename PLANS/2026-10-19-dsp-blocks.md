@@ -29,7 +29,8 @@ scripts and `sources/`).
 
 Done 2026-10-19: the kit's blocks (architecture/dsp-blocks.md) and 2sl stab 2.1.0 on them.
 
-3. Gate on the new kit: echo + edges. After the gate DC-offset diagnosis lands. Push.
+Done 2026-10-19 (step 3): 2sl gate 0.3.7 on the kit's echo and edges block (every jump and corner of its blend
+waves and modulator; the edges block gained restart_statements for a wave run ahead and reset at a note).
 4. Gate's folder, after step 3: the DAFx-17 virtual-analog 259 wavefolder (Esqueda, Pöntynen, Parker & Bilbao,
    "Virtual analog model of the Buchla 259 wavefolder"), anti-aliased (ADAA), as published. User 2026-10-19: DAFx first.
 5. After 4 works: the op-amp version. User 2026-10-19: "the original circuit uses underpowering opamps. always been a
