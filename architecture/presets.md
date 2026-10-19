@@ -32,11 +32,16 @@ preset of that name) are removed from devices/ with a line in the build's log.
 ## Every preset about as loud as Init
 
 A device's presets are levelled to its Init sound: each preset's output level (the header's level control, a preset
-value like any other) is set so the preset plays one phrase at Init's ITU-R BS.1770-5 integrated loudness
-(`m4l_dev/preset_loudness.py`, `m4l_dev/bs1770.py`, references/itu-r-bs1770.md), its peaks under the output's clip.
-A device's suite holds every preset within `LOUDNESS_TOLERANCE_LU` of Init.
+value like any other) is set so the preset's loudest moment on one phrase is as loud as Init's: the maximum momentary
+loudness, EBU Tech 3341's 400 ms sliding window over ITU-R BS.1770-5's K-weighted loudness (`m4l_dev/preset_loudness.py`
+`phrase_measures`, `m4l_dev/bs1770.py`, references/itu-r-bs1770.md, references/ebu-tech-3341.md), its peaks under the
+device's clip (`presets_over_the_clip`). The loudest moment, not the phrase's average: a ping and a pad at the same
+level hit as hard, where the integrated loudness would pay the pad for lasting. A device's suite holds every preset
+within `LOUDNESS_TOLERANCE_LU` of Init and every peak under its clip.
 
-The pattern: the kit holds the phrase, the meter, the comparison, and each preset's controls as the device's DSP gets
+The pattern: the kit holds the phrase, the meter, the comparison, where a voice's oscillators start
+(`oscillator_start_phases`: unrelated phases, seeded, as Live's voices are after running on between notes; a player
+sets them through `GenProgram.set_history`), and each preset's controls as the device's DSP gets
 them, read through the device's own built patch (`messages_by_preset` / `messages_for`: the routes its build wired;
 a time synced to Live's tempo at the phrase's 120 BPM). So a device builds its patch in memory (a function its build
 calls before writing) and never keeps a second map of its controls. The device's tests hold the rest: how a note

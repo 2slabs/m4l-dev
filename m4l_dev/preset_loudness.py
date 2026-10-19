@@ -1,10 +1,13 @@
 """Every preset played the same way, and how loud it comes out: what a device's tests level its presets by.
 
-A device's presets are levelled to its Init sound: each preset's output level (its own control) set so the preset
-plays the phrase below at Init's loudness (ITU-R BS.1770-5 integrated loudness, m4l_dev/bs1770.py). The kit holds
-the phrase, the meter, the comparison, and how a preset's controls reach the device's DSP: through the device's own
-patch (DevicePatchBuilder.messages_for, the routes its build wired), never a copy of them. The device's tests hold
-what only the device knows: how a note reaches its DSP (they stand in for its brain) and its render.
+A device's presets are levelled to its Init sound: each preset's output level (its own control) set so the preset's
+loudest moment on the phrase below is as loud as Init's: the maximum momentary loudness (EBU Tech 3341's 400 ms
+sliding window over ITU-R BS.1770-5's K-weighted loudness, m4l_dev/bs1770.py), not the phrase's average, so a ping
+is not paid back for being short; its peaks under the device's clip. The kit holds the phrase, the meter, the
+comparison, where a voice's oscillators are when a note reaches it, and how a preset's controls reach the device's
+DSP: through the device's own patch (DevicePatchBuilder.messages_for, the routes its build wired), never a copy of
+them. The device's tests hold what only the device knows: how a note reaches its DSP (they stand in for its brain)
+and its render.
 
 The phrase, at 120 BPM, velocity 100:
 - mono: C2 G2 C3 Eb3 G3 C4, a 16th note each (0.125 s), each key up after 0.1 s;
@@ -12,6 +15,9 @@ The phrase, at 120 BPM, velocity 100:
   (m7, m9) at its own intervals (the kit's chord block), "held notes" played as an m7;
 then the tail, PHRASE_SECONDS in all. Short, because a suite renders it for every preset.
 """
+import random
+
+from m4l_dev import bs1770
 from m4l_dev.build_error import BuildError
 from m4l_dev.chord_block import CHORD_SHAPES
 
@@ -28,7 +34,15 @@ SAMPLE_RATE = 44100                 # the rate presets are levelled at
 # A suite's render rate: a quarter of the cost. BS.1770's K-weighting there is within 0.3 dB of the standard's below
 # 0.4 x the rate (tests/test_bs1770.py); 2sl gate's presets read within 0.3 LU of SAMPLE_RATE's (2026-10-19).
 FAST_SAMPLE_RATE = 11025
-LOUDNESS_TOLERANCE_LU = 1.5         # a preset this far from Init, at FAST_SAMPLE_RATE, fails a device's suite
+LOUDNESS_TOLERANCE_LU = 1.0         # a preset this far from Init, at FAST_SAMPLE_RATE, fails a device's suite
+# A sample peak at FAST_SAMPLE_RATE reads up to ~0.3 dB off SAMPLE_RATE's (2sl stab, 2026-10-19): a preset set under
+# its device's clip at SAMPLE_RATE may read this far over it in a suite.
+FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB = 0.3
+# Where a voice's oscillators are when a note reaches it. In Live a device's voices run on between notes at their last
+# note's pitch, so a chord's notes land on unrelated phases; a voice the harness creates at its first note would start
+# every oscillator at 0 together, lining up the attacks and fixing the beating of detuned oscillators. So a device's
+# player starts each oscillator at the next of these phases: unrelated, and the same on every run.
+OSCILLATOR_PHASE_SEED = 1770
 
 
 def mono_phrase():
@@ -73,6 +87,28 @@ def messages_by_preset(patch, destinations, beats_per_minute=BEATS_PER_MINUTE):
     return {preset.name: {name: patch.messages_for(preset.values, box, beats_per_minute)
                           for name, box in destinations.items()}
             for preset in patch.preset_book.presets_as_held(patch.saved_controls)}
+
+
+def phrase_measures(channels, rate):
+    """(loudness LUFS, sample peak dBFS) of a preset's render (`channels`: L and R lists at `rate`): its loudest
+    moment (bs1770.max_momentary_loudness), what presets are levelled by, and its peak, what must stay under the
+    device's clip."""
+    return bs1770.max_momentary_loudness(channels, rate), bs1770.sample_peak_db(channels)
+
+
+def oscillator_start_phases():
+    """An endless source of oscillator phases (0..1), unrelated to each other, seeded (OSCILLATOR_PHASE_SEED): call
+    next() on it for each oscillator a player sets up, in a fixed order."""
+    draws = random.Random(OSCILLATOR_PHASE_SEED)
+    while True:
+        yield draws.random()
+
+
+def presets_over_the_clip(peak_by_preset, clip_knee_db, rate):
+    """{preset: sample peak dBFS (2 decimals)} of every preset whose peak, rendered at `rate`, is over the device's
+    clip knee (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB over it at FAST_SAMPLE_RATE): empty when every preset is clean."""
+    allowance = FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB if rate == FAST_SAMPLE_RATE else 0.0
+    return {name: round(peak, 2) for name, peak in peak_by_preset.items() if peak > clip_knee_db + allowance}
 
 
 def presets_off_init(loudness_by_preset, init_name, tolerance_lu=LOUDNESS_TOLERANCE_LU):

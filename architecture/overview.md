@@ -30,8 +30,8 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `gen_ladder.py`, `gen_saturator.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, band-limited edges, tape echo (dsp-blocks.md) |
-| `bs1770.py` | ITU-R BS.1770-5 loudness and true peak (references/itu-r-bs1770.md) |
-| `preset_loudness.py` | the phrase every preset is measured on, each preset's controls through the device's own patch (`messages_for`), the comparison against Init: what a device's tests level its presets by (presets.md) |
+| `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
+| `preset_loudness.py` | the phrase every preset is measured on, its loudest moment and peak, the oscillators' start phases, each preset's controls through the device's own patch (`messages_for`), the comparison against Init: what a device's tests level its presets by (presets.md) |
 | `es5.py` | Duktape through ctypes |
 | `themes.py` | the 2sl colour tokens and `themeFromLive` |
 

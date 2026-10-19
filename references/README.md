@@ -13,6 +13,8 @@ The DSP blocks' sources (the ladder, the saturator, band-limited edges, the tape
 
 ITU-R BS.1770-5 (loudness and true peak), the meter every device's presets are levelled by: `itu-r-bs1770.md`, with
 tables and pages; `fetch-itu-r-bs1770.sh` downloads and checks the PDF (not kept in git).
+EBU Tech 3341 ("EBU Mode": the momentary loudness, a sliding 400 ms window, and its maximum), what presets are
+levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks the PDF (not kept in git).
 
 ## Max and Live APIs
 

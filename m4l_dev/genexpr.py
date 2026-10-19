@@ -1646,6 +1646,16 @@ class GenProgram:
             raise KeyError(f"unknown History '{name}'; this program declares: {', '.join(self.histories) or '(none)'}")
         return self._history_values[self._history_index[name]]
 
+    def set_history(self, name, value):
+        """Sets a History's state, as if the program had run to it: a measurement's starting point (an oscillator's
+        phase where Live's would be, m4l_dev/preset_loudness.py's oscillator_start_phases)."""
+        if name not in self._history_index:
+            raise KeyError(f"unknown History '{name}'; this program declares: {', '.join(self.histories) or '(none)'}")
+        value = float(value)
+        if value != value:
+            raise ValueError(f"History '{name}' cannot be set to NaN")
+        self._history_values[self._history_index[name]] = value
+
     def run(self, num_samples, inputs=None):
         if num_samples < 0:
             raise ValueError("num_samples must be >= 0")

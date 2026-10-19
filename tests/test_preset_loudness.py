@@ -1,4 +1,5 @@
 """The kit's preset-loudness harness (m4l_dev/preset_loudness.py): the phrase, and the comparison against Init."""
+import math
 import os
 import sys
 import unittest
@@ -26,7 +27,32 @@ class PhraseTests(unittest.TestCase):
             preset_loudness.chord_phrase("nope", 4)
 
     def test_presets_off_init_names_only_those_outside_the_tolerance(self):
-        self.assertEqual(preset_loudness.presets_off_init({"init": -20, "a": -19, "b": -22.5}, "init"), {"b": -2.5})
+        self.assertEqual(preset_loudness.presets_off_init({"init": -20, "a": -19.2, "b": -21.5}, "init"), {"b": -1.5})
+
+    def test_presets_over_the_clip_allow_the_fast_rates_peak_error_only_at_the_fast_rate(self):
+        peaks = {"init": -6.0, "a": -1.8, "b": -1.5}
+        self.assertEqual(preset_loudness.presets_over_the_clip(peaks, -1.94, preset_loudness.FAST_SAMPLE_RATE),
+                         {"b": -1.5})
+        self.assertEqual(preset_loudness.presets_over_the_clip(peaks, -1.94, preset_loudness.SAMPLE_RATE),
+                         {"a": -1.8, "b": -1.5})
+
+    def test_a_preset_is_measured_by_its_loudest_moment(self):
+        # a 100 ms ping and the same tone held for 1 s: the same peak; the held tone fills the loudest 400 ms window,
+        # the ping a quarter of it, so 6 dB apart
+        rate = preset_loudness.FAST_SAMPLE_RATE
+        tone = [0.5 * math.sin(2 * math.pi * 997 * n / rate) for n in range(rate)]
+        ping = tone[:rate // 10] + [0.0] * (rate - rate // 10)
+        held_loudness, held_peak = preset_loudness.phrase_measures([tone, tone], rate)
+        ping_loudness, ping_peak = preset_loudness.phrase_measures([ping, ping], rate)
+        self.assertAlmostEqual(held_peak, ping_peak, places=6)
+        self.assertAlmostEqual(held_loudness - ping_loudness, 10 * math.log10(4), delta=0.1)
+
+    def test_oscillator_start_phases_are_unrelated_and_repeat(self):
+        first, again = preset_loudness.oscillator_start_phases(), preset_loudness.oscillator_start_phases()
+        phases = [next(first) for _ in range(32)]
+        self.assertEqual(phases, [next(again) for _ in range(32)])
+        self.assertTrue(all(0 <= phase < 1 for phase in phases))
+        self.assertGreater(len({round(phase, 3) for phase in phases}), 30)
 
 
 if __name__ == "__main__":

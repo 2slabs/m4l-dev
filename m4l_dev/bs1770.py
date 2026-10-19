@@ -1,8 +1,9 @@
 """ITU-R BS.1770-5 loudness and true peak (references/itu-r-bs1770.md): the K-weighting pre-filter (its two 48 kHz
 stages, Tables 1 and 2, redone at another rate for the same response), gated integrated loudness (400 ms blocks
 overlapping 75 %, the absolute gate at -70 LKFS, the relative gate 10 LU under the absolute-gated loudness; equations
-2-7), and Annex 2's true peak (4x over-sampling with its 48-tap interpolating FIR). Standard library only: a device's
-tests measure its presets with it (m4l_dev/preset_loudness.py).
+2-7), EBU Mode's momentary loudness (EBU Tech 3341: the same loudness over a sliding 400 ms window, not gated) and its
+maximum, and Annex 2's true peak (4x over-sampling with its 48-tap interpolating FIR). Standard library only: a
+device's tests measure its presets with it (m4l_dev/preset_loudness.py).
 """
 import math
 
@@ -92,39 +93,64 @@ def _biquad(samples, b, a):
     return out
 
 
-def integrated_loudness(channels, rate):
-    """BS.1770-5 gated loudness (LKFS) of `channels` (lists of samples; L and R, each weight 1.0). Fails loudly when
-    the signal is too short for one gating block or every block is under the absolute gate."""
-    block = int(round(0.4 * rate))
-    step = block // 4                                             # 75 % overlap
-    if any(len(channel) < block for channel in channels):
-        raise ValueError(f"{min(map(len, channels))} samples: under one 400 ms gating block")
+def _weighted_power_sums(channels, rate):
+    """The running sum of the K-weighted channels' squares, the channels added (each weight 1.0, L and R):
+    [0, x0^2, x0^2 + x1^2, ...], so any window's mean square is one subtraction."""
     stages = k_weighting_stages(rate)
-    block_powers = None
+    summed = None
     for channel in channels:
         weighted = channel
         for b, a in stages:
             weighted = _biquad(weighted, b, a)
-        # running sums of the squares, so each block's mean square is one subtraction
         cumulative = [0.0]
         total = 0.0
         for y in weighted:
             total += y * y
             cumulative.append(total)
-        powers = [(cumulative[start + block] - cumulative[start]) / block
-                  for start in range(0, len(weighted) - block + 1, step)]
-        block_powers = powers if block_powers is None else [p + q for p, q in zip(block_powers, powers)]
+        summed = cumulative if summed is None else [p + q for p, q in zip(summed, cumulative)]
+    return summed
 
-    def loudness_of(power):
-        return -0.691 + 10 * math.log10(power) if power > 0 else -math.inf
 
+def _loudness_of(power):
+    """Equation 2: the loudness (LKFS) of a mean square summed over the channels."""
+    return -0.691 + 10 * math.log10(power) if power > 0 else -math.inf
+
+
+def _window_samples(channels, rate):
+    """400 ms "to the nearest sample", failing loudly when a channel is shorter."""
+    window = int(round(0.4 * rate))
+    if any(len(channel) < window for channel in channels):
+        raise ValueError(f"{min(map(len, channels))} samples: under one 400 ms window")
+    return window
+
+
+def integrated_loudness(channels, rate):
+    """BS.1770-5 gated loudness (LKFS) of `channels` (lists of samples; L and R, each weight 1.0). Fails loudly when
+    the signal is too short for one gating block or every block is under the absolute gate."""
+    block = _window_samples(channels, rate)
+    step = block // 4                                             # 75 % overlap
+    sums = _weighted_power_sums(channels, rate)
+    block_powers = [(sums[start + block] - sums[start]) / block for start in range(0, len(sums) - block, step)]
     absolute_gate = -70.0
-    above_absolute = [power for power in block_powers if loudness_of(power) > absolute_gate]
+    above_absolute = [power for power in block_powers if _loudness_of(power) > absolute_gate]
     if not above_absolute:
         raise ValueError("every gating block is under -70 LKFS: silence")
-    relative_gate = loudness_of(sum(above_absolute) / len(above_absolute)) - 10
-    gated = [power for power in above_absolute if loudness_of(power) > relative_gate]
-    return loudness_of(sum(gated) / len(gated))
+    relative_gate = _loudness_of(sum(above_absolute) / len(above_absolute)) - 10
+    gated = [power for power in above_absolute if _loudness_of(power) > relative_gate]
+    return _loudness_of(sum(gated) / len(gated))
+
+
+def max_momentary_loudness(channels, rate):
+    """The loudest moment of `channels` (LUFS): EBU Mode's Momentary Loudness (EBU Tech 3341 §2.2: BS.1770's
+    loudness over "a sliding rectangular time window of length 0.4 s", "not gated") at its maximum, the window slid
+    one sample at a time over every full 400 ms of the signal (a file meter's exact start, Tech 3341 test case 13).
+    Fails loudly when the signal is shorter than one window or silent."""
+    window = _window_samples(channels, rate)
+    sums = _weighted_power_sums(channels, rate)
+    loudest = max(sums[end] - sums[end - window] for end in range(window, len(sums)))
+    if loudest <= 0:
+        raise ValueError("every 400 ms window is silent")
+    return _loudness_of(loudest / window)
 
 
 # Annex 2: 4x over-sampling, the 48-tap interpolating FIR, one row per phase.

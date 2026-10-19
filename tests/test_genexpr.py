@@ -96,6 +96,15 @@ class SemanticsTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             program.get_history("nope")
 
+    def test_a_history_set_from_outside_is_where_the_program_goes_on(self):
+        program = GenProgram("History n(0);\nn = n + 1;\nout1 = n;", 1, 1)
+        program.set_history("n", 0.25)
+        self.assertEqual(program.run(2)[0], [1.25, 2.25])
+        with self.assertRaises(KeyError):
+            program.set_history("nope", 0)
+        with self.assertRaises(ValueError):
+            program.set_history("n", float("nan"))
+
     def test_locals_do_not_persist_and_history_initial_value(self):
         program = GenProgram("History h(1.5);\nout1 = h;", 1, 1)
         self.assertEqual(program.run(1)[0], [1.5])
