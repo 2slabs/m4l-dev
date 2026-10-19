@@ -88,6 +88,39 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
 **Chowdhury, "Real-time physical modelling for analog tape machines", DAFx-19** (`chowdhury-tape-dafx19.pdf`):
 tape as hysteresis plus playback-head loss filters. Not modelled; the block's tape is a saturating loop.
 
+## Switched-capacitor filter (m4l_dev/gen_switched_capacitor.py)
+
+**Linear Technology, LTC1060 datasheet, rev. "1060fb"** (`ltc1060-1060fb.pdf`; a university mirror,
+https://www.komponenten.es.aau.dk/fileadmin/komponenten/Data_Sheet/Switch_Cap/LTC1060.pdf, sha256 4114b99d...;
+official copy https://www.analog.com/media/en/technical-documentation/data-sheets/1060fb.pdf).
+- p. 1: "pin compatible with MF10"; p. 2: "Clock Feedthrough, fCLK ≤ 1MHz: 10 mV(P-P)"; the clock-to-center ratio
+  tested at 50:1 and 100:1.
+- p. 7 (pin 12): "When Pin 12 is shorted to the negative supply pin, the filter operation is stopped and the bandpass
+  and lowpass outputs act as a S/H circuit holding the last sample. The hold step is 20mV and the droop rate is
+  150µV/second!"; "With low supply operation, the maximum input clock frequency is about 500kHz. Beyond this, the
+  device exhibits its excessive Q enhancement and center frequency errors."
+- p. 8: "The LTC1060 is a sampled data filter and it only approximates continuous time filters"; "From Graph 4 at
+  ±7.5V supply, 50:1 and 1.4MHz clock, a Q of 5 has about 8% error"; "Mode 3 ... and the modes of operation where R4
+  is finite, are 'slower' than the basic mode 1 ... The finite GBW of this op amp creates an additional phase shift
+  and enhances the Q value at high clock frequencies."
+
+**Texas Instruments (National), MF10-N datasheet, SNOS547C (2013)** (`mf10-n.pdf`,
+https://www.ti.com/lit/ds/symlink/mf10-n.pdf, sha256 0e837564...).
+- p. 4: "Clock Feedthrough, Q = 10, Mode 1: 10 mV"; voltage swing ±3.8 V min, ±4.25 V typ (N/AP/HP, ±5 V).
+- p. 26, "Sampled data system considerations": an input above half the clock "will be 'reflected' to a frequency
+  less than one-half the sampling frequency"; "the output signal changes amplitude once every sampling period,
+  resulting in 'steps' in the output voltage which occur at the clock rate"; "A ratio of 100:1 will reduce any
+  aliasing problems ... a ratio of 50:1 ... will result in 3 dB lower output noise."
+
+**Which chip, which ratio** (the device that asked for it, 2sl filter: its references/sherman-filterbank.md §2.0):
+the Sherman Filterbank's designer, in a 2025 interview, "the clock is ratio 100 to one".
+
+The block is our construction from these: the two-integrator section stepped per tick with LDI integrators (forward
+and backward Euler in the loop, the standard discrete form of a switched-capacitor biquad, whose poles sit at
+F = 2 sin(pi f0 / f_clock); not stated in either datasheet), Q enhancement as the excess-phase law Q' = Q / (1 - Q c
+f_clock) fitted to the LTC1060's one number, the 10 mV p-p feedthrough against the MF10's ±4 V swing as full scale,
+hold as stopped ticks. The band-limiting is the kit edges block (above), chosen by measurement (module docstring).
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):
