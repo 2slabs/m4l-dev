@@ -4,6 +4,11 @@ Sources the kit follows: Max, Max for Live and Live. Links and what they say; th
 here. A device's own sources (its sound, its DSP's sizing) are in its repository's references/. The kit's code cites
 these by section; the examples are 2sl stab's, where each rule was first found.
 
+## DSP
+
+The DSP blocks' sources (the ladder, the saturator, band-limited edges, the tape echo, and what gen~ accepts) are in
+`dsp.md`, with quotes and pages; `fetch-dsp-sources.sh` downloads and checks them (not kept in git).
+
 ## Max and Live APIs
 
 - **Max JS global methods** (Max 7 vignette, still the current text):

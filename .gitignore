@@ -2,3 +2,4 @@
 __pycache__/
 # Finder adds Icon\r files to folders with custom icons
 Icon?
+references/dsp-sources/

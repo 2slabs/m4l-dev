@@ -9,7 +9,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display) and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests) |
 | `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing |
-| `references/` | sources (Max, Live, Live presets) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies |
+| `references/` | sources (Max, Live, Live presets, DSP) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies. Papers aren't kept: a fetch script per set downloads and checks them (`fetch-dsp-sources.sh`) |
 | `architecture/` | this | the partitions and the contracts below |
 
 ## m4l_dev/, module by module
@@ -28,6 +28,8 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `device_build.py` | `build_device`: checks, scripts, lock, devices/, dist/ |
 | `amxd.py` | .amxd bytes: unfrozen and frozen |
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler) |
+| `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
+| `gen_ladder.py`, `gen_saturator.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, band-limited edges, tape echo (dsp-blocks.md) |
 | `es5.py` | Duktape through ctypes |
 | `themes.py` | the 2sl colour tokens and `themeFromLive` |
 
@@ -46,6 +48,9 @@ from m4l_dev.device_build import build_device            # build_device(reposito
 from m4l_dev.seeded_random import SeededRandom           # SeededRandom(patch, brain, brain_control_inlet)
 from m4l_dev.chord_block import ChordBlock               # ChordBlock(patch, seeded_random, brain, control inlet,
                                                          #   display outlet, display box, most_notes_per_chord)
+from m4l_dev.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
+from m4l_dev.gen_ladder import LadderFilter              # and AntiderivativeTanhSaturator, BandLimitedEdges,
+                                                         #   TapeEcho (gen_saturator, gen_edges, gen_echo)
 ```
 
 The builder's helpers: `box`, `wire`, `find`, `gen_box(code, ins, outs, rect, box_text, outlet_type)`, `dial`, `menu`,
@@ -74,6 +79,13 @@ A block is a piece of a device that is the same in every device that has it, and
 
 The blocks: the transport clock (templates/transport-clock.template.js), the seeded random (seeded-random.md), the
 chord block (chord-block.md).
+
+## DSP blocks: kit gen~ code a device includes
+
+The same idea for the gen~ code (dsp-blocks.md): `m4l_dev/gen_<block>.py` makes an instance with a name and its
+inputs as GenExpr expressions; the device's gen~ template has `/*GEN_BLOCK_FUNCTIONS*/`, `/*GEN_BLOCK_DECLARATIONS*/`
+and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. The ladder, the saturator, band-limited edges, the
+tape echo. Tests: tests/test_dsp_blocks.py.
 
 ## Layout: widths from text
 

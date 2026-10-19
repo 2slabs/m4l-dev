@@ -28,6 +28,13 @@ class RejectionTests(unittest.TestCase):
     def test_missing_semicolon(self):
         self.assert_rejected("a = 1;\nb = 2\nout1 = a;", "missing ';'", expected_line=2)
 
+    def test_a_delay_read_at_more_places_than_its_taps(self):
+        code = "Delay d(100);\na = d.read(3);\nb = d.read(5);\nd.write(in1);\nout1 = a + b;"
+        self.assert_rejected(code, "declare Delay d(size, 2)", expected_line=3)
+        check("Delay d(100, 2);\na = d.read(3);\nb = d.read(5, interp=\"spline\");\nd.write(in1);\nout1 = a + b;",
+              num_inputs=1, num_outputs=1)
+        self.assert_rejected("Delay d(100, 0);", "taps must be a positive integer")
+
     def test_compound_assignment(self):
         self.assert_rejected("a = 1;\na += 2;", "compound assignment", expected_line=2)
 
@@ -149,14 +156,14 @@ class SemanticsTests(unittest.TestCase):
         output = render_single_output(code, count, [[float(i + 1) for i in range(count)]])
         for index in range(count):
             self.assertEqual(output[index], float(index + 1 - 5) if index >= 5 else 0.0)
-        code_after_write = "Delay d(100);\nd.write(in1);\nout1 = d.read(5, interp=\"none\") + d.read(0);"
+        code_after_write = "Delay d(100, 2);\nd.write(in1);\nout1 = d.read(5, interp=\"none\") + d.read(0);"
         output = render_single_output(code_after_write, count, [[float(i + 1) for i in range(count)]])
         self.assertEqual(output[10], 6.0 + 11.0)
 
     def test_delay_fractional_and_cubic_on_a_ramp(self):
         count = 40
         ramp = [[float(i) for i in range(count)]]
-        for mode in ("linear", "cubic"):
+        for mode in ("linear", "cubic", "spline"):
             code = f'Delay d(64);\nd.write(in1);\nout1 = d.read(2.5, interp="{mode}");'
             output = render_single_output(code, count, ramp)
             self.assertAlmostEqual(output[20], 17.5, delta=1e-9)

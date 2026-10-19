@@ -28,14 +28,16 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
 
 ## What's here
 
-- `m4l_dev/`: the library ([architecture/overview.md](architecture/overview.md) lists each module).
+- `m4l_dev/`: the library ([architecture/overview.md](architecture/overview.md) lists each module), with the gen~ DSP
+  blocks a device's audio code includes: ladder, saturator, band-limited edges, tape echo
+  ([architecture/dsp-blocks.md](architecture/dsp-blocks.md)).
 - `templates/`: the UI and views scripts every device gets, the blocks a device includes (the transport clock, the
-  seeded random, the chord block and its display), and the Cozette glyphs
+  seeded random, the chord block and its display, the ladder's response for a filter display), and the Cozette glyphs
   (Cozette, MIT: `templates/LICENSE-Cozette.txt`).
 - `tools/`: `amxd.py` (pack / freeze / unpack / list .amxd files), `es5check.py`, `compare_device_builds.py` (compare
   two builds of a device; exit 0 when what Live sees is the same), `bdf2js.py` (Cozette's BDF to glyphs),
   `max_sandbox.js` (Max's [js] globals for node tests).
-- `references/`: the sources the kit follows (Max, Live, Live's preset format).
+- `references/`: the sources the kit follows (Max, Live, Live's preset format, the DSP blocks' papers: `dsp.md`).
 - `architecture/`: how the kit is partitioned and the contracts a device repository keeps.
 
 ## Tests

@@ -12,7 +12,10 @@ Subset
 * Function definitions first: name(a, b) { ... }  (only arguments, own locals,
   builtins and constants; `return expr;` allowed; falling off the end returns 0).
 * Then declarations: Param name(default[, min=X][, max=Y]); History a(0), b(1);
-  Delay d(size);  (d.read(t[, interp="none"|"linear"|"cubic"]), d.write(x);)
+  Delay d(size[, taps]);  (d.read(t[, interp="none"|"linear"|"cubic"|"spline"]), d.write(x);)
+  A Delay is read at most `taps` times in the code (default 1): Max's delay operator has one read tap per
+  "tap inlet/outlet pair" (its second argument), and code that reads one Delay at two places declares 2
+  (references/dsp.md, "gen~ delay taps").
 * Then statements: x = expr; if (...) {...} else if (...) {...} else {...};
   d.write(expr); outN = expr; (braces required, plain `=` only).
 * Expressions: numbers, identifiers, calls, parentheses, unary - and !,
@@ -26,6 +29,9 @@ Subset
 Design decisions where the task text left room
 ----------------------------------------------
 * A Param default outside its own [min, max] is an error (not clamped).
+* interp="spline" is Catmull-Rom (Max's delay reference: "spline" performs four-point Catmull-Rom spline
+  interpolation). interp="cubic" is rendered as the same Catmull-Rom here, but Max documents it only as
+  "four-point cubic interpolation" without its formula: the kit's blocks use "spline".
 * Delay size must be a positive integer literal; interp="none" truncates the
   delay time (floor); out-of-range delay time is clamped to [0, size-1];
   a NaN delay time yields NaN.
@@ -80,7 +86,7 @@ RESERVED_WORDS = DECLARATION_KEYWORDS | STATEMENT_KEYWORDS
 INPUT_NAME_PATTERN = re.compile(r"^in(\d+)$")
 OUTPUT_NAME_PATTERN = re.compile(r"^out(\d+)$")
 
-DELAY_INTERPOLATION_MODES = ("none", "linear", "cubic")
+DELAY_INTERPOLATION_MODES = ("none", "linear", "cubic", "spline")
 
 # Operators we recognise only to refuse them with a helpful message.
 UNSUPPORTED_OPERATORS = ("+=", "-=", "*=", "/=", "%=", "<<", ">>", "**", "&", "|", "^", "~")
@@ -298,6 +304,7 @@ class HistoryDecl(Node):
 class DelayDecl(Node):
     name: str
     size: int
+    taps: int = 1
 
 
 @dataclass
@@ -496,11 +503,18 @@ class Parser:
         size = self.parse_signed_number("as the Delay size")
         if size < 1 or size != int(size):
             self.fail_at(size_token, f"Delay {name.text}: size must be a positive integer literal, got {size}")
+        taps = 1
+        if self.at_op(","):
+            self.advance()
+            taps_token = self.peek()
+            taps = self.parse_signed_number("as the Delay's number of taps")
+            if taps < 1 or taps != int(taps):
+                self.fail_at(taps_token, f"Delay {name.text}: taps must be a positive integer literal, got {taps}")
         self.expect_op(")", "to close the Delay")
         if self.at_op(","):
             self.fail_at(self.peek(), "declare one Delay per statement")
         self.expect_semicolon("after the Delay declaration")
-        return DelayDecl(name.line, name.col, name.text, int(size))
+        return DelayDecl(name.line, name.col, name.text, int(size), int(taps))
 
     # -- statements --
     def parse_block(self):
@@ -699,6 +713,7 @@ class Analyzer:
         self.params = {}
         self.histories = {}
         self.delays = {}
+        self.delay_read_sites = {}      # Delay name -> how many places the code reads it (each needs a tap)
         self.functions = {}
         self.used_inputs = set()
         self.used_outputs = set()
@@ -936,6 +951,13 @@ class Analyzer:
         if self.function_being_checked is not None:
             self.error(node, "Delay methods cannot be used inside a function")
         self.require_delay(node)
+        if node.method == "read":
+            self.delay_read_sites[node.object_name] = self.delay_read_sites.get(node.object_name, 0) + 1
+            declared = self.delays[node.object_name]
+            if self.delay_read_sites[node.object_name] > declared.taps:
+                self.error(node, f"Delay {node.object_name} is read at {self.delay_read_sites[node.object_name]} places "
+                                 f"but has {declared.taps} tap(s): declare Delay {node.object_name}(size, "
+                                 f"{self.delay_read_sites[node.object_name]})")
         if node.method == "write":
             self.error(node, f"'{node.object_name}.write(x)' is a statement, not an expression")
         if node.method != "read":
@@ -1314,6 +1336,9 @@ def _delay_read_cubic(buffer, position, size, time_in_samples):
     return ((c3 * fraction + c2) * fraction + c1) * fraction + y_start
 
 
+_delay_read_spline = _delay_read_cubic
+
+
 def _make_namespace():
     return {
         "_sign": _sign, "_floor": _floor, "_ceil": _ceil, "_trunc": _trunc, "_fract": _fract,
@@ -1322,7 +1347,7 @@ def _make_namespace():
         "_cos": _cos, "_tan": _tan, "_tanh": math.tanh, "_atan": math.atan, "_atan2": math.atan2,
         "_modulo": _modulo, "_dbtoa": _dbtoa, "_atodb": _atodb,
         "_delay_read_none": _delay_read_none, "_delay_read_linear": _delay_read_linear,
-        "_delay_read_cubic": _delay_read_cubic,
+        "_delay_read_cubic": _delay_read_cubic, "_delay_read_spline": _delay_read_spline,
     }
 
 
