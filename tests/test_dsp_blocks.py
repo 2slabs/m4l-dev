@@ -1,4 +1,4 @@
-"""The kit's DSP blocks (m4l_dev/gen_ladder.py, gen_saturator.py, gen_edges.py, gen_echo.py): each block's claims,
+"""The kit's DSP blocks (m4l_dev/gen_ladder.py, gen_saturator.py, gen_edges.py, gen_echo.py, gen_state_variable.py): each block's claims,
 rendered through our GenExpr renderer (m4l_dev/genexpr.py: ours, not Max's compiler), and the gen block pattern's
 build rules (m4l_dev/gen_blocks.py). Each claim runs on a small harness program around one block, at the lowest
 sample rate that still tests it, so the whole file takes seconds. Standard library only."""
@@ -16,6 +16,7 @@ from m4l_dev.gen_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.gen_ladder import LadderFilter, response_script_code, small_signal_magnitude  # noqa: E402
 from m4l_dev.gen_soft_clip import OutputSoftClip  # noqa: E402
 from m4l_dev.gen_saturator import AntiderivativeTanhSaturator  # noqa: E402
+from m4l_dev.gen_state_variable import StateVariableFilter, ring_time_constant_seconds, small_signal_response  # noqa: E402
 from m4l_dev.genexpr import GenProgram, check  # noqa: E402
 
 
@@ -322,6 +323,71 @@ class EchoTests(unittest.TestCase):
         left, right, _, _, rounds = program.run(4000, [[0.0] * 4000])
         self.assertLess(max(abs(v) for v in left[40:] + right[40:]), 1e-12)
         self.assertEqual(rounds[-1], 0.0)
+
+
+
+class StateVariableFilterTests(unittest.TestCase):
+    SAMPLERATE = 22050.0
+    OUTPUTS = ["svf_lowpass", "svf_bandpass", "svf_highpass", "svf_bandpass_normalised"]
+
+    def svf(self, cutoff, q):
+        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
+                          {"cutoff": cutoff, "q": q}, self.OUTPUTS, samplerate=self.SAMPLERATE)
+        return program
+
+    def sine_response(self, cutoff, q, frequency, samples=4410):
+        """The four outputs' amplitudes for a unit sine at `frequency`, after the filter settles."""
+        program = self.svf(cutoff, q)
+        sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(samples)]
+        outputs = program.run(samples, [sine])
+        half = samples // 2
+        return [amplitude_at(output[half:], frequency, self.SAMPLERATE) for output in outputs]
+
+    def test_small_signals_are_the_prewarped_analog_svf(self):
+        # the circuit uses: an 8.5 kHz low-pass Q 1.94 at 44.1 k is 4.25 kHz at 22.05 k (same fc / sr)
+        for cutoff, q in ((4250.0, 1.94), (963.0, 2.13), (229.0, 1.58)):
+            for frequency in (cutoff / 3, cutoff, cutoff * 2.2):
+                if frequency >= 0.45 * self.SAMPLERATE:
+                    continue
+                expected = small_signal_response(frequency, cutoff, q, self.SAMPLERATE)
+                measured = self.sine_response(cutoff, q, frequency)
+                for name, amplitude in zip(("lowpass", "bandpass", "highpass"), measured):
+                    with self.subTest(cutoff=cutoff, q=q, frequency=frequency, output=name):
+                        self.assertAlmostEqual(20 * math.log10(amplitude), 20 * math.log10(abs(expected[name])),
+                                               delta=0.05)
+
+    def test_the_normalised_band_pass_has_unit_gain_at_the_cutoff(self):
+        for cutoff in (300.0, 3000.0, 8000.0):
+            with self.subTest(cutoff=cutoff):
+                self.assertAlmostEqual(20 * math.log10(self.sine_response(cutoff, 7.3, cutoff, 8820)[3]), 0.0, delta=0.05)
+
+    def test_the_outputs_split_the_input(self):
+        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
+                          {"cutoff": 1234.0, "q": 3.0}, ["svf_lowpass + svf_bandpass_normalised + svf_highpass"],
+                          samplerate=self.SAMPLERATE)
+        signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
+        rebuilt = program.run(2000, [signal])[0]
+        self.assertLess(max(abs(a - b) for a, b in zip(rebuilt, signal)), 1e-12)
+
+    def test_an_impulse_rings_at_q_over_pi_fc(self):
+        # the 909 rim shot's 495 Hz bridged-T: Q 7.3, tau 4.7 ms (2sl drums references/voices.md)
+        cutoff, q = 495.0, 7.3
+        program = self.svf(cutoff, q)
+        ring = program.run(2205, [[1.0] + [0.0] * 2204])[1]
+        def envelope_at(start):
+            return max(abs(sample) for sample in ring[start:start + 45])
+        early, late = 220, 1323                    # 10 ms and 60 ms
+        measured_tau = (late - early) / self.SAMPLERATE / math.log(envelope_at(early) / envelope_at(late))
+        self.assertAlmostEqual(measured_tau / ring_time_constant_seconds(cutoff, q), 1.0, delta=0.03)
+        self.assertAlmostEqual(frequency_by_zero_crossings(ring[:1500], self.SAMPLERATE), cutoff, delta=cutoff * 0.01)
+
+    def test_stable_under_fast_modulation(self):
+        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="20 + 9000 * (0.5 + 0.5 * sin(in1 * 300))",
+                                               q="0.05 + 30 * (0.5 + 0.5 * cos(in1 * 170))")],
+                          {}, self.OUTPUTS, samplerate=self.SAMPLERATE)
+        noise = [math.sin(n * n * 0.001) for n in range(8000)]
+        outputs = program.run(8000, [noise])
+        self.assertTrue(all(math.isfinite(value) and abs(value) < 1e3 for output in outputs for value in output))
 
 
 class SoftClipTests(unittest.TestCase):

@@ -33,6 +33,24 @@ predictor) tracks its own model as well but its self-oscillation sinks 4 to 32 c
 analog model does the same), so it isn't kept. Huovilainen (DAFx-04) uses five tanh and 2x oversampling for that
 model; not needed here.
 
+## State-variable filter (m4l_dev/gen_state_variable.py)
+
+**Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2 (2020)** (`zavalishin-va-filter-design-2.1.2.pdf`).
+- §4.1, p. 95 [107], eq. (4.1): "yHP = x − 2RyBP − yLP, ẏBP = ωc · yHP, ẏLP = ωc · yBP"; p. 96 [108]:
+  "HLP(s) = ωc² / (s² + 2Rωc s + ωc²)", HBP = ωc s / (…), HHP = s² / (…).
+- §4.1, p. 97 [109], eq. (4.4): "yLP(t) + 2RyBP(t) + yHP(t) = x(t), that is, the input signal is split into lowpass,
+  bandpass and highpass components."
+- §4.4, p. 110 [122], eq. (4.14): "yHP = (x − (2R + g)s1 − s2) / (1 + 2Rg + g²)"; "as long as g > 0 and R > −1, the
+  denominator of (4.14) is always positive ... the filter in not becoming instantaneously unstable"; "sn are the
+  states of the z⁻¹ elements in the respective integrators and g = ωcT/2 (prewarped)"; the tick:
+  "HP := (x-g1*s1-s2)*d; // g1=2R+g, d=1/(1+2Rg+g^2) / v1 := g*HP; BP := v1+s1; s1 := BP+v1; / v2 := g*BP; LP := v2+s2; s2 := LP+v2;"
+- §4.5, p. 111 [123], eq. (4.15): "By multiplying the bandpass filter's output by 2R ... we obtain a bandpass filter
+  which has a unit gain (and zero phase response) at the cutoff".
+
+The block is that tick, with 2R = 1 / Q (the circuit literature's Q, e.g. a unity-gain Sallen-Key's
+Q = ½ √(C1/C2)) and the prewarped g = tan(π fc / sr). Not the switched-capacitor block's LDI (Chamberlin) form,
+which is a clocked chip's own recursion and is kept for that.
+
 ## Saturator (m4l_dev/gen_saturator.py)
 
 **Bilbao, Esqueda, Parker & Välimäki, "Antiderivative Antialiasing for Memoryless Nonlinearities", IEEE SPL 24(7),
