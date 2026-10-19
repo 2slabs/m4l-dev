@@ -4,6 +4,8 @@ A device is DEVICE_HEIGHT px high, as wide as it needs, on a GRID px grid. A hea
 section has three bands aligned across the device: a display (VIEW_Y, VIEW_H), a row of chips, menus and tabs
 (ROW_Y, ROW_H high) and dials (DIAL_Y). Text is Cozette, COZETTE_ADVANCE px a character.
 """
+import math
+
 from m4l_dev.build_error import BuildError
 
 DEVICE_HEIGHT = 169
@@ -20,6 +22,14 @@ CHIP_PADDING = 4                # px of chip either side of its text (the link c
 # from what 2sl stab ships and has been seen in Live: Sub Mode's "-2 pls" in a 37 px button is the tightest
 # (37 = 6 x 6 + 1); a tighter button has not been seen.
 LIVE_TAB_BUTTON_SLACK = 1
+# Live draws a live.dial's short name, a live.menu's item and a live.text's text in its own font, inside the box (not
+# Cozette). No source gives that font's metrics (the Max reference lists live.dial's fontname / fontsize with no
+# default). Calibrated from what 2sl gate played in Live: v0.5's 8-character dial names ("Pressure", "Symmetry",
+# "Velocity", "Feedback") in 44 px dials: 5.5 px a character (SHORTCUTS.md).
+LIVE_TEXT_PIXELS_PER_CHARACTER = 5.5
+LIVE_MENU_ARROW_PIXELS = 12           # a live.menu's arrow, beside its item
+LIVE_MENU_MINIMUM_WIDTH = 40
+LIVE_TOGGLE_PADDING_PIXELS = 8        # a live.text's text needs this much more than its characters
 # the header's page tabs are drawn at least this wide each, and wide enough for the longest page name + 12
 PAGE_TAB_MINIMUM_WIDTH = 48
 
@@ -27,6 +37,43 @@ PAGE_TAB_MINIMUM_WIDTH = 48
 def check_on_grid(what, value):
     if value % GRID:
         raise BuildError(f"{what} {value} is off the {GRID} px grid")
+
+
+def on_grid(pixels):
+    """`pixels` rounded up to the GRID."""
+    return int(math.ceil(pixels / GRID) * GRID)
+
+
+def live_dial_width(short_name):
+    """The narrowest live.dial that holds its short name: at least DIAL_WIDTH, on the grid."""
+    return max(DIAL_WIDTH, on_grid(LIVE_TEXT_PIXELS_PER_CHARACTER * len(short_name)))
+
+
+def live_menu_width(items):
+    """The narrowest live.menu that holds its longest item and its arrow, on the grid."""
+    return max(LIVE_MENU_MINIMUM_WIDTH,
+               on_grid(LIVE_TEXT_PIXELS_PER_CHARACTER * max(len(item) for item in items) + LIVE_MENU_ARROW_PIXELS))
+
+
+def live_toggle_width(text):
+    """The narrowest live.text that holds `text`, on the grid."""
+    return on_grid(LIVE_TEXT_PIXELS_PER_CHARACTER * len(text) + LIVE_TOGGLE_PADDING_PIXELS)
+
+
+def live_tabs_width(items, rows=1):
+    """The narrowest live.tab the button rule (live_tab_button_problem) allows, on the grid."""
+    per_row = -(-len(items) // rows)
+    return on_grid(per_row * (COZETTE_ADVANCE * max(len(item) for item in items) + LIVE_TAB_BUTTON_SLACK))
+
+
+def live_text_problem(maxclass, short_name, items, text, width):
+    """None when a live.dial (its short name), live.menu (its longest item) or live.text (its text) `width` px wide
+    holds its text; else why not. Other classes: None (live.tab has its own rule)."""
+    needed = {"live.dial": lambda: live_dial_width(short_name), "live.menu": lambda: live_menu_width(items),
+              "live.text": lambda: live_toggle_width(text)}.get(maxclass)
+    if needed is not None and width < needed():
+        return f"{width:g} px wide, its text needs {needed()}"
+    return None
 
 
 def live_tab_button_problem(items, width, rows):

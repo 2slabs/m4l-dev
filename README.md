@@ -29,7 +29,8 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
 ## What's here
 
 - `m4l_dev/`: the library ([architecture/overview.md](architecture/overview.md) lists each module).
-- `templates/`: the UI, views and transport-clock scripts every device gets, and the Cozette glyphs
+- `templates/`: the UI and views scripts every device gets, the blocks a device includes (the transport clock, the
+  seeded random, the chord block and its display), and the Cozette glyphs
   (Cozette, MIT: `templates/LICENSE-Cozette.txt`).
 - `tools/`: `amxd.py` (pack / freeze / unpack / list .amxd files), `es5check.py`, `compare_device_builds.py` (compare
   two builds of a device; exit 0 when what Live sees is the same), `bdf2js.py` (Cozette's BDF to glyphs),

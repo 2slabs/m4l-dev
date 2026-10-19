@@ -14,6 +14,7 @@ if (!DEVICE_FOLDER) throw new Error("usage: node tests/kit-scripts.test.js <devi
 const SCRIPT_NAME = path.basename(DEVICE_FOLDER);
 const UI_SOURCE = fs.readFileSync(path.join(DEVICE_FOLDER, SCRIPT_NAME + "-ui.js"), "utf8");
 const VIEWS_SOURCE = fs.readFileSync(path.join(DEVICE_FOLDER, SCRIPT_NAME + "-view.js"), "utf8");
+const BRAIN_SOURCE = fs.readFileSync(path.join(DEVICE_FOLDER, SCRIPT_NAME + ".js"), "utf8");
 const PATCH = JSON.parse(fs.readFileSync(path.join(DEVICE_FOLDER, SCRIPT_NAME + ".maxpat"), "utf8"));
 const VIEW_MODES = PATCH.patcher.boxes.map((b) => b.box).filter((b) => b.maxclass === "jsui").map((b) => b.jsarguments[0]);
 
@@ -107,6 +108,182 @@ test("a display keeps a control's value, takes the device's messages and refuses
   deliverMessage(context, 0, "nonsense", [1]);
   context.msg_int(3);
   assert.strictEqual(record.errors.length, 2, record.errors.join(" / "));
+});
+
+// ---- the seeded random (templates/seeded-random.template.js) --------------------------------------------------------
+
+function draws(context, count) { const out = []; for (let i = 0; i < count; i++) out.push(context.randomNext()); return out; }
+
+test("the seeded random: the same seed gives the same sequence, another seed another, a new Seed restarts it", () => {
+  const first = load(BRAIN_SOURCE), second = load(BRAIN_SOURCE);
+  const a = draws(first.context, 50), b = draws(second.context, 50);
+  assert.deepStrictEqual(a, b, "two devices on the Init Seed draw the same numbers");
+  assert.ok(a.every((x) => x >= 0 && x < 1));
+  deliverMessage(second.context, 1, "random_seed", [7]);
+  const seven = draws(second.context, 50);
+  assert.notDeepStrictEqual(seven, a, "Seed 7 isn't Seed 0");
+  deliverMessage(second.context, 1, "random_seed", [7]);
+  assert.deepStrictEqual(draws(second.context, 50), seven, "setting Seed starts its sequence over");
+  deliverMessage(second.context, 1, "random_seed", [5000]);
+  assert.ok(second.record.errors.some((e) => /Seed got 5000, outside 0..999/.test(e)), "a Seed out of range is loud");
+  assert.deepStrictEqual(first.record.errors, []);
+});
+
+test("the seeded random is mulberry32: its first numbers for seed 0 and 1 are the reference ones", () => {
+  // from the reference C, transcribed to Python with explicit 32-bit masks (uint32_t z = (x += 0x6D2B79F5); z = (z ^ z >> 15) * (z | 1);
+  // z ^= z + (z ^ z >> 7) * (z | 61); return z ^ z >> 14;), divided by 2^32
+  const { context } = load(BRAIN_SOURCE);
+  const expected = [1144304738, 1416247, 958946056].map((z) => z / 4294967296);
+  assert.deepStrictEqual(draws(context, 3), expected);
+});
+
+test("the seeded random is about uniform", () => {
+  const { context } = load(BRAIN_SOURCE);
+  const bins = new Array(10).fill(0);
+  for (const x of draws(context, 20000)) bins[Math.floor(x * 10)]++;
+  for (const count of bins) assert.ok(Math.abs(count - 2000) < 200, "each tenth gets about 2000 of 20000: " + bins);
+});
+
+test("Loop starts the sequence over at each Loop boundary while Live plays, and at transport start", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "random_loop", [1]);                   // 1 bar = 16 16ths = 1920 ticks
+  deliverMessage(context, 1, "playing", [1]);
+  const fromTheTop = [];
+  for (let sixteenth = 0; sixteenth < 48; sixteenth++) {
+    deliverMessage(context, 1, "tick", [sixteenth * 120]);
+    fromTheTop.push(context.randomNext());
+  }
+  assert.deepStrictEqual(fromTheTop.slice(16, 32), fromTheTop.slice(0, 16), "bar 2 repeats bar 1");
+  assert.deepStrictEqual(fromTheTop.slice(32, 48), fromTheTop.slice(0, 16), "and bar 3");
+  // jumping in: Live stopped and started again at bar 3: the transport start restarts it
+  deliverMessage(context, 1, "playing", [0]);
+  draws(context, 5);
+  deliverMessage(context, 1, "playing", [1]);
+  const fromBarThree = [];
+  for (let sixteenth = 32; sixteenth < 40; sixteenth++) {
+    deliverMessage(context, 1, "tick", [sixteenth * 120]);
+    fromBarThree.push(context.randomNext());
+  }
+  assert.deepStrictEqual(fromBarThree, fromTheTop.slice(32, 40), "playing from a Loop boundary sounds as playing through");
+  assert.deepStrictEqual(record.errors, []);
+});
+
+test("Loop off never restarts while Live plays; a new Loop length doesn't restart it either", () => {
+  const { context } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "random_loop", [0]);
+  deliverMessage(context, 1, "playing", [1]);
+  const played = [];
+  for (let sixteenth = 0; sixteenth < 40; sixteenth++) {
+    deliverMessage(context, 1, "tick", [sixteenth * 120]);
+    played.push(context.randomNext());
+  }
+  const reference = load(BRAIN_SOURCE).context;
+  assert.deepStrictEqual(played, draws(reference, 40), "one unbroken sequence");
+  deliverMessage(context, 1, "random_loop", [1]);
+  const next = context.randomNext();
+  deliverMessage(context, 1, "tick", [40 * 120]);
+  assert.strictEqual(context.randomNext(), draws(reference, 2)[1], "the length change and the next 16th keep going");
+  assert.ok(next >= 0);
+});
+
+test("with Live stopped the sequence keeps stepping: no restart", () => {
+  const { context } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "random_loop", [1]);
+  const stopped = [];
+  for (let sixteenth = 0; sixteenth < 40; sixteenth++) {
+    deliverMessage(context, 1, "tick", [sixteenth * 120]);    // ticks while stopped mean nothing to it
+    stopped.push(context.randomNext());
+  }
+  assert.deepStrictEqual(stopped, draws(load(BRAIN_SOURCE).context, 40));
+});
+
+// ---- the chord block (templates/chord-block.template.js, chord-display.template.js) ---------------------------------
+
+function chordsShown(record) { return record.outlets.filter((o) => o[0] === 1 && o[1] === "chord"); }
+
+test("the chord block: a key plays the Init shape (minor), held notes play the key, a double hold needs two note-offs", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 0, "list", [57, 100]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Am", 57, 60, 64]);
+  deliverMessage(context, 0, "list", [57, 100]);                    // held again (a second clip)
+  deliverMessage(context, 0, "list", [57, 0]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Am", 57, 60, 64], "still held");
+  deliverMessage(context, 0, "list", [57, 0]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord"], "released: nothing");
+  deliverMessage(context, 1, "chord_shape", [0]);
+  deliverMessage(context, 0, "list", [60, 100]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "C3", 60], "one note: its name and octave");
+  deliverMessage(context, 1, "chord_shape", [9]);
+  assert.ok(record.errors.some((e) => /Chord got 9, outside 0..7/.test(e)));
+});
+
+test("the chord block fits m11 to the fixture's 4 notes: the fifth and the ninth go", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "chord_shape", [4]);
+  deliverMessage(context, 0, "list", [57, 100]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Am11", 57, 60, 67, 74]);
+});
+
+test("In key stacks Live's scale; under 5 notes it falls back to the fixed shapes, loudly", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "scale_root", [0]);
+  deliverMessage(context, 1, "scale_intervals", [0, 2, 4, 5, 7, 9, 11]);   // C major
+  deliverMessage(context, 0, "list", [62, 100]);                          // D, minor shape: scale steps 0 2 4
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Dm", 62, 65, 69]);
+  deliverMessage(context, 0, "list", [62, 0]);
+  deliverMessage(context, 0, "list", [64, 100]);                          // E: Em in C major
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Em", 64, 67, 71]);
+  deliverMessage(context, 0, "list", [64, 0]);
+  deliverMessage(context, 1, "scale_intervals", [0, 3, 7]);
+  assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice", "scale <5 notes: fixed shapes"]);
+  assert.ok(record.posts.some((p) => /under 5: chords use the fixed shapes/.test(p)));
+  deliverMessage(context, 0, "list", [64, 100]);
+  assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Em", 64, 67, 71], "E minor from the fixed shape");
+  deliverMessage(context, 1, "chord_in_key", [0]);
+  assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice"], "In key off: no notice");
+  deliverMessage(context, 1, "chord_in_key", [1]);
+  context.setChordShapesInUse(false);
+  assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice"], "shapes not in use: none");
+  assert.deepStrictEqual(record.errors, []);
+});
+
+test("chord names", () => {
+  const { context } = load(BRAIN_SOURCE);
+  const named = (pitches) => context.chordName(pitches);
+  assert.strictEqual(named([57, 60, 64, 67]), "Am7");
+  assert.strictEqual(named([57, 60, 67, 74]), "Am11", "a minor 7th with an 11th and no 9th is m11");
+  assert.strictEqual(named([57, 60, 67, 71]), "Am9");
+  assert.strictEqual(named([57, 64, 69]), "A5");
+  assert.strictEqual(named([60, 72]), "C", "octaves of one note");
+  assert.strictEqual(named([64, 69, 72]), "Am/E");
+  assert.strictEqual(named([60, 64, 67, 71, 74]), "Cmaj9");
+  assert.strictEqual(named([]), "");
+});
+
+test("Drift's voicings come from the seeded random: the same Seed varies the same way", () => {
+  const voicings = (seed) => {
+    const { context } = load(BRAIN_SOURCE);
+    deliverMessage(context, 1, "random_seed", [seed]);
+    const out = [];
+    for (let i = 0; i < 20; i++) out.push(context.chordDrifted([57, 60, 64, 67], 0.5).join(" "));
+    return out;
+  };
+  assert.deepStrictEqual(voicings(3), voicings(3));
+  assert.notDeepStrictEqual(voicings(3), voicings(4));
+  assert.ok(new Set(voicings(3)).size > 1, "Drift 50% varies some of them");
+});
+
+test("the chord display draws a chord and a notice, and is loud about a bad chord", () => {
+  const { context, record } = load(VIEWS_SOURCE, "chord");
+  deliverMessage(context, 0, "chord", ["Am7", 57, 60, 64, 67]);
+  context.paint();
+  deliverMessage(context, 0, "notice", ["scale", "<5", "notes:", "fixed", "shapes"]);
+  context.paint();
+  deliverMessage(context, 0, "chord", []);
+  context.paint();
+  assert.deepStrictEqual(record.errors, []);
+  deliverMessage(context, 0, "chord", ["Am", 57, 600]);
+  assert.ok(record.errors.some((e) => /not all MIDI pitches/.test(e)));
 });
 
 let failed = 0;

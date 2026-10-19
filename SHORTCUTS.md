@@ -15,3 +15,8 @@ Things done the quick way, to come back to. Each with when it was taken.
   references/ableton/ and teach the writer their form.
 - 2026-10-16: a device without a Preset menu still gets the UI script's Preset-menu code (`PRESETS = []`, msg_int, which
   then only errors). Proper, if it matters: leave the code out when there is no menu.
+- 2026-10-18: how wide a live.dial / live.menu / live.text must be for its text (`m4l_dev/layout_rules.py`:
+  `LIVE_TEXT_PIXELS_PER_CHARACTER` = 5.5) is calibrated from one observation (2sl gate v0.5's 8-character dial names
+  in 44 px dials, played in Live), not from Live's font metrics, which no source gives (references/README.md, "Live's
+  control font"). Moved here from 2sl gate. Proper: measure Live's dial / menu / toggle text in Live (a screenshot of
+  known strings at known widths), or find the font and its metrics.

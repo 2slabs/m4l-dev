@@ -124,3 +124,22 @@ these by section; the examples are 2sl stab's, where each rule was first found.
 - **Not yet seen in a saved file** (a preset saved from the current build would show them): whether Live 12 loads a
   preset with type 1 and no `Path`; whether a size / CRC mismatch matters (above); `LastModDate` (the build writes 0, so the
   files are the same every build); that Hidden (parameter_invisible 2) leaves "Page" out of the file.
+
+## Randomness (templates/seeded-sequence.template.js)
+
+- **mulberry32** (Tommy Ettinger, 2017, public domain):
+  https://gist.github.com/tommyettinger/46a874533244883189143505d203312c
+  The reference C: `uint32_t z = (x += 0x6D2B79F5UL); z = (z ^ (z >> 15)) * (z | 1UL); z ^= z + (z ^ (z >> 7)) *
+  (z | 61UL); return z ^ (z >> 14);` A 32-bit state stepped by a Weyl constant, then mixed. In JavaScript the
+  products are `Math.imul` (the low 32 bits of the product, exact) and `>>> 0` keeps values unsigned, so Max's [js]
+  and node give the same numbers; tests/kit-scripts.test.js checks the first numbers of seed 0 against a Python
+  transcription of the C. The gist's notes: it "passes gjrand's 13 tests with no failures" on 4 GB and on its whole
+  period (2^32 states); a later comment by the author: it "isn't equidistributed" and "can't produce about 1/3 of all
+  possible uint32_t numbers". Plenty for musical chances; not cryptographic.
+
+## Live's control font
+
+- **live.dial** (Max reference): https://docs.cycling74.com/reference/live.dial lists `fontname`, `fontsize`
+  ("possible values from 8 to 72") and `fontface` with no default (checked 2026-10-18). No source here gives the
+  font Live draws a dial's name, a menu's item or a live.text's text in, or its metrics, so the kit's 5.5 px a
+  character (m4l_dev/layout_rules.py) stays a calibration (SHORTCUTS.md).

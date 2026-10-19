@@ -7,6 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev import layout_rules  # noqa: E402
+from m4l_dev import live_parameter_identity as identity  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
 from m4l_dev.preset_book import PresetBook  # noqa: E402
@@ -32,7 +33,7 @@ def builder(width=400, book=None, preset_menu=None, info_keys=None):
                                device_type="instrument", device_width=width, page_names=["one", "two"], info=info,
                                preset_book=book or preset_book())
     patch.target = patch.gen_box(GEN_CODE, 1, 1, rect=(0, 0, 80, 22))
-    patch.header(volume_target=patch.target, preset_menu=preset_menu)
+    patch.header(output_level_target=patch.target, output_level_name="Volume", preset_menu=preset_menu)
     return patch
 
 
@@ -106,6 +107,44 @@ class LayoutTests(unittest.TestCase):
     def test_the_page_switch_is_hidden(self):
         patch = builder()
         self.assertEqual(saved_values(patch, patch.header_boxes["page_tabs"])["parameter_invisible"], 2)
+
+    def test_tabs_can_be_hidden_and_then_stay_out_of_presets(self):
+        patch = builder(book=preset_book(init={"A": 0, "B": 0, "C": 0, "Volume": 0}))
+        with self.assertRaisesRegex(BuildError, "initial_outside_presets"):
+            patch.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", visibility=identity.VISIBILITY_HIDDEN)
+        tool = patch.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", initial_outside_presets=0,
+                          visibility=identity.VISIBILITY_HIDDEN)
+        self.assertEqual(saved_values(patch, tool)["parameter_invisible"], identity.VISIBILITY_HIDDEN)
+        self.assertNotIn("Tool", patch.saved_controls)
+        pick = patch.tabs("Pick", "Pick", ["a", "b"], 12, 60, 40, "one", initial_outside_presets=0)
+        self.assertNotIn("parameter_invisible", saved_values(patch, pick), "visible by default, as Max saves it")
+        with self.assertRaisesRegex(BuildError, "neither"):
+            patch.tabs("C", "C", ["a", "b"], 12, 80, 40, "one", visibility=identity.VISIBILITY_STORED_ONLY)
+
+    def test_the_device_names_its_output_level(self):
+        patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
+                                   device_type="instrument", device_width=400, page_names=["one"],
+                                   info={name: (name, "text") for name in ("Output", "Page", "Stop", "Link view")},
+                                   preset_book=PresetBook({"init": {"Output": -6}, "presets": [
+                                       {"name": "init", "group": "init", "idea": "init", "values": {}}]}, "book"))
+        target = patch.gen_box("Param volume(-6);\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
+        made = patch.header(output_level_target=target, output_level_name="Output")
+        values = saved_values(patch, made["output_level"])
+        self.assertEqual((values["parameter_longname"], values["parameter_shortname"]), ("Output", "Output"))
+        self.assertEqual(patch.find(made["output_level"])["varname"], "output")
+        self.assertEqual(patch.messages_for({"Output": -3}, target), {"volume": -3})
+        patch.check()
+
+    def test_controls_must_hold_their_text(self):
+        patch = builder(book=preset_book(init={"A": 0, "B": "x", "Volume": 0}), info_keys=("A", "B"))
+        patch.dial("A", "Velocity Amount", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        patch.menu("B", "B", ["x", "a long item"], 12, 98, 40, "one")
+        with self.assertRaises(BuildError) as failure:
+            patch.check()
+        self.assertIn("A (live.dial) is 44 px wide, its text needs 84", str(failure.exception))
+        self.assertIn("B (live.menu) is 40 px wide, its text needs 76", str(failure.exception))
+        self.assertEqual(layout_rules.live_toggle_width("in key"), 44)
+        self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 76)
 
 
 class InitialValueAndPresetTests(unittest.TestCase):

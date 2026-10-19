@@ -288,18 +288,28 @@ class DevicePatchBuilder:
         self.controls_by_kind["menu"].append(varname)
         return self.on_page(page, box_id, varname, group)
 
-    def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None, rows=1):
+    def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None, rows=1,
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
         """Selector buttons (a live.tab): one enum parameter, a button per item, in `rows` lines of ROW_H. live.tab
-        splits each line's width equally; every button must hold its longest name (layout_rules)."""
+        splits each line's width equally; every button must hold its longest name (layout_rules).
+
+        visibility: Live's Parameter Visibility. VISIBILITY_HIDDEN (not saved with the set or in presets, not
+        automated, not in Live's undo history: a page or tab switch) needs `initial_outside_presets`, since presets
+        can't set what Live doesn't store."""
         problem = layout_rules.live_tab_button_problem(items, w, rows)
         if problem:
             self.fail(f"tabs {name!r}: {problem}")
+        if visibility not in (identity.VISIBILITY_AUTOMATED_AND_STORED, identity.VISIBILITY_HIDDEN):
+            self.fail(f"tabs {name!r}: visibility {visibility!r} is neither Automated and Stored nor Hidden")
+        if visibility == identity.VISIBILITY_HIDDEN and initial_outside_presets is None:
+            self.fail(f"tabs {name!r} is Hidden, so presets can't set it: give it initial_outside_presets")
         initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
         height = layout_rules.ROW_H * rows
+        hidden = {"parameter_invisible": visibility} if visibility == identity.VISIBILITY_HIDDEN else {}
         box_id = self.live_parameter("live.tab", name, short, (1500 + x, 600 + y, w, height),
                                      identity.PARAMETER_TYPE_ENUM, (x, y, w, height), parameter_enum=list(items),
                                      parameter_mmax=len(items) - 1, parameter_initial_enable=1,
-                                     parameter_initial=[initial])
+                                     parameter_initial=[initial], **hidden)
         varname = varname_for(name)
         self.find(box_id).update(num_lines_patching=rows, num_lines_presentation=rows)
         self.controls_by_kind["tab"].append(varname)
@@ -408,13 +418,16 @@ class DevicePatchBuilder:
             self.fail("build the header (header()) before what wires into it")
         return self.header_boxes
 
-    def header(self, volume_target, preset_menu=None):
+    def header(self, output_level_target, output_level_name, preset_menu=None):
         """The device background, the UI script, the 2sl link chip, page tabs, the Preset menu (preset_menu=(x, w):
-        the preset book's presets as a live.menu; None: no menu), Volume (told to volume_target as `volume dB`) and
-        Stop. Built once.
+        the preset book's presets as a live.menu; None: no menu), the output level and Stop. Built once.
+
+        The output level is a live.numbox, -36 to +12 dB, told to output_level_target as `volume dB`; the device names
+        it (`output_level_name`: its long and short name, its Init value's and Info text's key; 2sl stab "Volume",
+        2sl gate "Output"). The chrome labels it "out".
 
         Returns the boxes a device wires further: chrome, ui, thisdevice, ready, page_tabs, preset (or None),
-        volume, stop."""
+        output_level, stop."""
         if self.header_boxes is not None:
             self.fail("the header is built twice")
         made = {}
@@ -439,18 +452,11 @@ class DevicePatchBuilder:
         gap, header_y = layout_rules.HEADER_GAP, layout_rules.HEADER_Y
         link_width = layout_rules.link_chip_width(self.link_chip_text)
         self.view("link", gap, header_y, link_width, 15, None, info="Link view")
-        # The page switch is Hidden (Parameter Visibility): not saved with the set or in presets, not in Live's undo
-        # history, not automatable, so only a click turns the page. The device always opens on the first page.
-        tab_width = layout_rules.page_tabs_width(self.page_names)
+        # The page switch is Hidden: only a click turns the page, and the device always opens on the first page.
         self.page_tabs_x = gap + link_width + gap
-        made["page_tabs"] = self.live_parameter("live.tab", "Page", "Page", (1500, 560, tab_width, 15),
-                                                identity.PARAMETER_TYPE_ENUM,
-                                                (float(self.page_tabs_x), float(header_y), float(tab_width), 15.0),
-                                                parameter_enum=self.page_names, parameter_mmax=len(self.page_names) - 1,
-                                                parameter_initial_enable=1, parameter_initial=[0],
-                                                parameter_invisible=identity.VISIBILITY_HIDDEN)
-        self.find(made["page_tabs"]).update(num_lines_patching=1, num_lines_presentation=1, varname="page")
-        self.controls_by_kind["tab"].append("page")
+        made["page_tabs"] = self.tabs("Page", "Page", self.page_names, self.page_tabs_x, header_y,
+                                      layout_rules.page_tabs_width(self.page_names), None, initial_outside_presets=0,
+                                      visibility=identity.VISIBILITY_HIDDEN)
         self.tell(made["page_tabs"], "page", made["ui"])
         self.tell(made["page_tabs"], "page", made["chrome"])
         self.preset_menu_x = None
@@ -460,17 +466,20 @@ class DevicePatchBuilder:
             made["preset"] = self.menu("Preset", "Preset", ["-"], self.preset_menu_x, header_y, preset_menu_width, None,
                                        initial_outside_presets=0)  # items: the preset book's, set by check()
             self.wire(made["preset"], made["ui"])
-        # the right end of the header: out (Volume) and Stop, 12 px from the device's edge
-        self.volume_x = self.device_width - 136
-        volume_initial = self.initial("Volume", minimum=-36.0, maximum=12.0)
-        made["volume"] = self.live_parameter("live.numbox", "Volume", "Volume", (1500, 520, 64, 15),
-                                             identity.PARAMETER_TYPE_FLOAT,
-                                             (float(self.volume_x), float(header_y), 64.0, 15.0), parameter_mmin=-36.0,
-                                             parameter_mmax=12.0, parameter_initial_enable=1,
-                                             parameter_initial=[float(volume_initial)], parameter_unitstyle=4)
-        self.find(made["volume"]).update(varname="volume")
-        self.controls_by_kind["numbox"].append("volume")
-        self.tell(made["volume"], "volume", volume_target)
+        # the right end of the header: out (the output level) and Stop, 12 px from the device's edge
+        self.output_level_x = self.device_width - 136
+        output_level_initial = self.initial(output_level_name, minimum=-36.0, maximum=12.0)
+        made["output_level"] = self.live_parameter("live.numbox", output_level_name, output_level_name,
+                                                   (1500, 520, 64, 15), identity.PARAMETER_TYPE_FLOAT,
+                                                   (float(self.output_level_x), float(header_y), 64.0, 15.0),
+                                                   parameter_mmin=-36.0, parameter_mmax=12.0,
+                                                   parameter_initial_enable=1,
+                                                   parameter_initial=[float(output_level_initial)],
+                                                   parameter_unitstyle=4)
+        output_level_varname = varname_for(output_level_name)
+        self.find(made["output_level"]).update(varname=output_level_varname)
+        self.controls_by_kind["numbox"].append(output_level_varname)
+        self.tell(made["output_level"], "volume", output_level_target)
         made["stop"] = self.live_parameter("live.text", "Stop", "Stop", (1500, 540, 48, 15),
                                            identity.PARAMETER_TYPE_ENUM,
                                            (float(self.device_width - 60), float(header_y), 48.0, 15.0), _mode=0)
@@ -480,11 +489,11 @@ class DevicePatchBuilder:
 
     def header_labels(self):
         """The header's labels, drawn by the chrome on every page: "preset" before the Preset menu, "out" before
-        Volume (text, x, baseline, kind)."""
+        the output level (text, x, baseline, kind)."""
         labels = []
         if self.preset_menu_x is not None:
             labels.append(["preset", self.preset_menu_x - 40, 15, "label"])
-        labels.append(["out", self.volume_x - 24, 15, "label"])
+        labels.append(["out", self.output_level_x - 24, 15, "label"])
         return labels
 
     def live_set_observer(self, property_name):
@@ -581,11 +590,31 @@ class DevicePatchBuilder:
             self.page_names, self.pages, self.groups, self.device_width)
         if problems:
             self.fail("the layout overlaps:\n  " + "\n  ".join(problems))
+        self.check_controls_hold_their_text()
         if set(self.info) - self.info_used:
             self.fail(f"the info has text for no parameter or view: {sorted(set(self.info) - self.info_used)}")
         self.check_script_lookups()
         self.check_wires()
         return presets
+
+    def check_controls_hold_their_text(self):
+        """Every shown live.dial holds its short name, live.menu its longest item, live.text its text
+        (layout_rules.live_text_problem). A box taller than a dial (a pad) has room to spare and isn't checked."""
+        problems = []
+        for entry in self.boxes:
+            box = entry["box"]
+            values = box.get("saved_attribute_attributes", {}).get("valueof")
+            if not (box.get("parameter_enable") and values and box.get("presentation") == 1):
+                continue
+            width, height = box["presentation_rect"][2], box["presentation_rect"][3]
+            if height > layout_rules.DIAL_HEIGHT:
+                continue
+            problem = layout_rules.live_text_problem(box["maxclass"], values["parameter_shortname"],
+                                                     values.get("parameter_enum", []), box.get("text", ""), width)
+            if problem:
+                problems.append(f"{values['parameter_longname']} ({box['maxclass']}) is {problem}")
+        if problems:
+            self.fail("controls too narrow for their text:\n  " + "\n  ".join(problems))
 
     def check_gen_param_defaults(self):
         """The gen~ Param defaults must be what the Init values send them (the sound before Live recalls the
