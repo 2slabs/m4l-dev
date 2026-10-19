@@ -8,7 +8,7 @@ var SWITCHED_CAPACITOR_DAMPING_MARGIN = /*SWITCHED_CAPACITOR_DAMPING_MARGIN*/;
 
 /** The section's pins at frequencyHz, for a cutoff (Hz), a damping (q = 1/Q) and the clock ratio (50 or 100):
  * {lpRe, lpIm, bpRe, bpIm, hpRe, hpIm}. Per tick: hp = x - z^-1 (lp + q bp), bp = F/(1 - z^-1) hp,
- * lp = F/(1 - z^-1) bp; the HP pin between ticks is x - lp - q bp. */
+ * lp = F/(1 - z^-1) bp; the HP pin between ticks is x z^(1/2) - lp - q bp (gen_switched_capacitor.py). */
 function switchedCapacitorResponse(frequencyHz, cutoffHz, damping, clockRatio) {
   var F = 2 * Math.sin(Math.PI / clockRatio);
   var clock = clockRatio * Math.min(Math.max(cutoffHz, SWITCHED_CAPACITOR_LOWEST_CUTOFF_HZ),
@@ -27,6 +27,7 @@ function switchedCapacitorResponse(frequencyHz, cutoffHz, damping, clockRatio) {
   var hRe = lRe / ll, hIm = -lIm / ll;                               // the tick's hp
   var bpRe = iRe * hRe - iIm * hIm, bpIm = iRe * hIm + iIm * hRe;
   var lpRe = iRe * bpRe - iIm * bpIm, lpIm = iRe * bpIm + iIm * bpRe;
+  // the HP pin: the live input, on average half a tick after the tick, against the held states
   return {lpRe: lpRe, lpIm: lpIm, bpRe: bpRe, bpIm: bpIm,
-    hpRe: 1 - lpRe - q * bpRe, hpIm: -lpIm - q * bpIm};
+    hpRe: Math.cos(w / 2) - lpRe - q * bpRe, hpIm: Math.sin(w / 2) - lpIm - q * bpIm};
 }

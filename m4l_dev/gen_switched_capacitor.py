@@ -224,7 +224,7 @@ ${p}_half_jump = -2 * ${p}_feedthrough_level;
 ${p}_naive = ${lowpass_gain} * ${p}_out_lp + ${bandpass_gain} * ${p}_out_bp + ${highpass_gain} * ${p}_out_hp + ${p}_feedthrough_level * (${p}_phase < 0.5 ? 1 : -1);
 ${p}_previous_tick_input = ${p}_tick_input;
 """, F=repr(F), wrap=TICK_COUNT_WRAP, enhancement=Q_ENHANCEMENT_PER_HZ, lowest_damping=LOWEST_DAMPING,
-            highest_damping=2 - F - DAMPING_MARGIN, gone=RESIDUAL_GONE_AT,
+            highest_damping=highest_damping(self.clock_ratio), gone=RESIDUAL_GONE_AT,
             fade=RESIDUAL_GONE_AT - RESIDUAL_FULL_BELOW, feedthrough_amplitude=FEEDTHROUGH_AMPLITUDE,
             top=self.clock_ratio * HIGHEST_CUTOFF_HZ)
         return clocked + self.edges.statements() + self.substituted("\n${p}_out = ${p}_edges_out;")
@@ -240,16 +240,18 @@ def small_signal_response(frequency_hz, cutoff_hz, damping, clock_ratio=100):
     """(LP, BP, HP) at the section's pins for small signals: the tick sequence's z-domain response at the clock, z =
     exp(j 2 pi f / f_clock), with no Q enhancement and no images. What a display draws. Per tick n:
     hp[n] = x - lp[n-1] - q bp[n-1], bp[n] = bp[n-1] + F hp[n], lp[n] = lp[n-1] + F bp[n]; the HP pin between ticks
-    is x - lp - q bp."""
+    is x - lp - q bp with the live input, on average half a tick after the tick (z^(1/2)). So LP + HP (the notch) is
+    about -30 dB deep at 100:1, not infinitely: the sampled data's own mismatch."""
     F = 2 * math.sin(math.pi / clock_ratio)
     clock = clock_ratio * min(max(cutoff_hz, LOWEST_CUTOFF_HZ), HIGHEST_CUTOFF_HZ)
     z_inverse = complex(math.cos(2 * math.pi * frequency_hz / clock), -math.sin(2 * math.pi * frequency_hz / clock))
-    q = min(max(damping, LOWEST_DAMPING), 2 - F - DAMPING_MARGIN)
+    q = min(max(damping, LOWEST_DAMPING), highest_damping(clock_ratio))
     integrator = F / (1 - z_inverse)
     tick_hp = 1 / (1 + z_inverse * (integrator * integrator + q * integrator))
     bp = integrator * tick_hp
     lp = integrator * bp
-    return lp, bp, 1 - lp - q * bp
+    half_tick_lead = complex(math.cos(math.pi * frequency_hz / clock), math.sin(math.pi * frequency_hz / clock))
+    return lp, bp, half_tick_lead - lp - q * bp
 
 
 def response_script_code():
@@ -261,3 +263,8 @@ def response_script_code():
         "SWITCHED_CAPACITOR_HIGHEST_CUTOFF_HZ": repr(HIGHEST_CUTOFF_HZ),
         "SWITCHED_CAPACITOR_LOWEST_DAMPING": repr(LOWEST_DAMPING),
         "SWITCHED_CAPACITOR_DAMPING_MARGIN": repr(DAMPING_MARGIN)}, "switched-capacitor-response.template.js")
+
+
+def highest_damping(clock_ratio=100):
+    """The most damping the section takes (q = 1/Q): past it, the tick matrix's eigenvalues would turn real."""
+    return 2 - 2 * math.sin(math.pi / clock_ratio) - DAMPING_MARGIN
