@@ -14,6 +14,7 @@ from m4l_dev.gen_blocks import GenBlock, gen_code_with_blocks  # noqa: E402
 from m4l_dev.gen_echo import TapeEcho  # noqa: E402
 from m4l_dev.gen_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.gen_ladder import LadderFilter, response_script_code, small_signal_magnitude  # noqa: E402
+from m4l_dev.gen_soft_clip import OutputSoftClip  # noqa: E402
 from m4l_dev.gen_saturator import AntiderivativeTanhSaturator  # noqa: E402
 from m4l_dev.genexpr import GenProgram, check  # noqa: E402
 
@@ -321,6 +322,46 @@ class EchoTests(unittest.TestCase):
         left, right, _, _, rounds = program.run(4000, [[0.0] * 4000])
         self.assertLess(max(abs(v) for v in left[40:] + right[40:]), 1e-12)
         self.assertEqual(rounds[-1], 0.0)
+
+
+class SoftClipTests(unittest.TestCase):
+    KNEES = (0.8, 0.95)
+
+    def clip(self, signal, knee):
+        program = harness([OutputSoftClip("clip", input="in1", knee=knee)], {}, ["clip_out"])
+        return program.run(len(signal), [signal])[0]
+
+    def test_it_is_unity_up_to_the_knee(self):
+        for knee in self.KNEES:
+            signal = [knee * (2.0 * i / 200 - 1.0) for i in range(201)]
+            self.assertEqual(self.clip(signal, knee), signal, knee)
+
+    def test_value_and_slope_are_continuous_at_the_knee(self):
+        step = 1e-6
+        for knee in self.KNEES:
+            for side in (1.0, -1.0):
+                below, at, above = self.clip([side * (knee - step), side * knee, side * (knee + step)], knee)
+                self.assertAlmostEqual(at, side * knee, delta=1e-12)
+                self.assertAlmostEqual((at - below) / (side * step), 1.0, delta=1e-6, msg=(knee, side, "slope below"))
+                self.assertAlmostEqual((above - at) / (side * step), 1.0, delta=1e-5, msg=(knee, side, "slope above"))
+
+    def test_the_output_is_bounded_by_one_odd_and_rising(self):
+        for knee in self.KNEES:
+            signal = [0.01 * i for i in range(0, 5000)] + [1e3, 1e9]
+            out = self.clip(signal, knee)
+            self.assertTrue(all(b >= a for a, b in zip(out, out[1:])), "rising")
+            self.assertLessEqual(max(out), 1.0)
+            self.assertGreater(out[-1], 1.0 - 1e-12, "reaches 1 for a huge input")
+            self.assertEqual(self.clip([-x for x in signal], knee), [-x for x in out], "odd")
+
+    def test_the_knee_must_be_a_number_between_0_and_1(self):
+        for knee in (0.0, 1.0, -0.5, 1.5, "0.8", None, True):
+            with self.assertRaises(BuildError, msg=repr(knee)):
+                OutputSoftClip("clip", input="in1", knee=knee)
+
+    def test_its_headroom_is_one_minus_the_knee_as_written(self):
+        self.assertIn("soft_clip_above_knee((in1), 0.8, 0.2)", OutputSoftClip("c", input="in1", knee=0.8).statements())
+        self.assertIn("0.95, 0.05)", OutputSoftClip("c", input="in1", knee=0.95).statements())
 
 
 class GenBlockPatternTests(unittest.TestCase):

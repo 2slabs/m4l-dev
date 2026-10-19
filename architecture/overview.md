@@ -30,7 +30,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
 | `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
-| `gen_ladder.py`, `gen_saturator.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, band-limited edges, tape echo (dsp-blocks.md) |
+| `gen_ladder.py`, `gen_saturator.py`, `gen_soft_clip.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, output soft clip, band-limited edges, tape echo (dsp-blocks.md) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
 | `preset_loudness.py` | the phrase every preset is measured on, its loudest moment and peak, the oscillators' start phases, each preset's controls through the device's own patch (`messages_for`), the comparison against Init: what a device's tests level its presets by (presets.md) |
 | `es5.py` | Duktape through ctypes |
@@ -53,7 +53,7 @@ from m4l_dev.chord_block import ChordBlock               # ChordBlock(patch, see
                                                          #   display outlet, display box, most_notes_per_chord)
 from m4l_dev.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
 from m4l_dev.gen_ladder import LadderFilter              # and AntiderivativeTanhSaturator, BandLimitedEdges,
-                                                         #   TapeEcho (gen_saturator, gen_edges, gen_echo)
+                                                         #   OutputSoftClip, TapeEcho (gen_saturator, gen_soft_clip, gen_edges, gen_echo)
 ```
 
 The builder's helpers: `box`, `wire`, `find`, `gen_box(code, ins, outs, rect, box_text, outlet_type)`, `dial`, `menu`,
@@ -88,8 +88,8 @@ chord block (chord-block.md).
 
 The same idea for the gen~ code (dsp-blocks.md): `m4l_dev/gen_<block>.py` makes an instance with a name and its
 inputs as GenExpr expressions; the device's gen~ template has `/*GEN_BLOCK_FUNCTIONS*/`, `/*GEN_BLOCK_DECLARATIONS*/`
-and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. The ladder, the saturator, band-limited edges, the
-tape echo. Tests: tests/test_dsp_blocks.py.
+and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. The ladder, the saturator, the output soft clip,
+band-limited edges, the tape echo. Tests: tests/test_dsp_blocks.py.
 
 ## Layout: widths from text
 
