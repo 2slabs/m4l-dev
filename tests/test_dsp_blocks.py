@@ -150,6 +150,29 @@ class SaturatorTests(unittest.TestCase):
             self.assertAlmostEqual(out[i], math.tanh(signal[i - 1]), delta=1e-9)
         self.assertAlmostEqual(out[-1], -1.0, delta=1e-9)
 
+    def biased(self, signal, bias):
+        program = harness([AntiderivativeTanhSaturator("drive", input="in1", bias="bias")], {"bias": bias},
+                          ["drive_out"])
+        return program.run(len(signal), [signal])[0]
+
+    def test_with_a_bias_it_is_the_slid_curve(self):
+        # tanh(x + b) - tanh(b), half a sample late: exact for a slow signal, 0 at 0
+        signal = [1.5 * math.sin(2 * math.pi * i / 400) for i in range(800)]
+        out = self.biased(signal, 0.3)
+        for i in range(100, 800):
+            middle = 0.5 * (signal[i - 1] + signal[i])
+            self.assertAlmostEqual(out[i], math.tanh(middle + 0.3) - math.tanh(0.3), delta=2e-4)
+        self.assertEqual(self.biased([0.0] * 10, 0.3)[-1], 0.0)
+
+    def test_with_a_bias_it_makes_even_harmonics_and_cuts_their_aliases(self):
+        sine = [2.7 * math.sin(2 * math.pi * 8000.0 * i / self.SAMPLERATE) for i in range(4096)]
+        out = self.biased(sine, 0.3)
+        self.assertGreater(amplitude_at(out[512:], 16000.0, self.SAMPLERATE), 0.01, "a second harmonic")
+        naive = GenProgram("out1 = tanh(in1 + 0.3) - tanh(0.3);", 1, 1).run(len(sine), [sine])[0]
+        self.assertGreater(worst_alias_db(naive, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -30.0)
+        # measured 2026-10-19: -49.9 dB (the even harmonics fold too)
+        self.assertLess(worst_alias_db(out, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -48.0)
+
 
 class EdgeTests(unittest.TestCase):
     SAMPLERATE = 44100.0

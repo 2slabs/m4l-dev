@@ -39,20 +39,38 @@ tanh_residual_antialiased(x, previous_x) {{
 
 
 class AntiderivativeTanhSaturator(GenBlock):
-    """`<name>_out` = tanh of `input`, half a sample late, antialiased. State: the last input and the allpass's."""
+    """`<name>_out` = tanh of `input`, half a sample late, antialiased. State: the last input and the allpass's.
+
+    With `bias` (a GenExpr expression), `<name>_out` = tanh(input + bias) - tanh(bias): the curve slid along itself,
+    asymmetric (even harmonics: a tube-ish clip), still 0 at 0 and slope sech^2(bias) there. The residual is
+    antialiased at input + bias; the linear part is the input's, through the same allpass."""
 
     LATENCY_SAMPLES = 0.5
 
-    def __init__(self, instance_name, input):
-        super().__init__(instance_name, input=input)
+    def __init__(self, instance_name, input, bias=None):
+        inputs = dict(input=input) if bias is None else dict(input=input, bias=bias)
+        super().__init__(instance_name, **inputs)
+        self.biased = bias is not None
 
     def functions(self):
         return dict(FUNCTIONS)
 
     def declarations(self):
+        if self.biased:
+            return self.substituted("History ${p}_previous_input(0), ${p}_previous_linear(0), ${p}_previous_shifted(0);")
         return self.substituted("History ${p}_previous_input(0), ${p}_previous_linear(0);")
 
     def statements(self):
+        if self.biased:
+            return self.substituted("""// ${p}: tanh(x + bias) - tanh(bias), antialiased (kit saturator block)
+${p}_input = ${input};
+${p}_bias = ${bias};
+${p}_shifted = ${p}_input + ${p}_bias;
+${p}_linear = ${a} * ${p}_input + ${p}_previous_input - ${a} * ${p}_previous_linear;
+${p}_out = ${p}_linear + tanh_residual_antialiased(${p}_shifted, ${p}_previous_shifted) + ${p}_bias - tanh(${p}_bias);
+${p}_previous_input = ${p}_input;
+${p}_previous_linear = ${p}_linear;
+${p}_previous_shifted = ${p}_shifted;""", a=HALF_SAMPLE_ALLPASS_COEFFICIENT)
         return self.substituted("""// ${p}: tanh, antialiased (kit saturator block)
 ${p}_input = ${input};
 ${p}_linear = ${a} * ${p}_input + ${p}_previous_input - ${a} * ${p}_previous_linear;
@@ -62,4 +80,6 @@ ${p}_previous_linear = ${p}_linear;""", a=HALF_SAMPLE_ALLPASS_COEFFICIENT)
 
     def reset_statements(self):
         """Statements that forget the state (for a loop being emptied)."""
+        if self.biased:
+            return self.substituted("${p}_previous_input = 0;\n${p}_previous_linear = 0;\n${p}_previous_shifted = 0;")
         return self.substituted("${p}_previous_input = 0;\n${p}_previous_linear = 0;")
