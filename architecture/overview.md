@@ -28,6 +28,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `device_build.py` | `build_device`: checks, scripts, lock, devices/, dist/ |
 | `amxd.py` | .amxd bytes: unfrozen and frozen |
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
+| `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
 | `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `gen_ladder.py`, `gen_saturator.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, band-limited edges, tape echo (dsp-blocks.md) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
