@@ -35,7 +35,7 @@ ideal) and keeps its claims as tests. Sources: references/dsp.md.
 |---|---|---|---|
 | ladder | `gen_ladder.py` | 4-pole TPT ladder, the loop solved with no unit delay (Zavalishin eq. 5.8), tanh at the loop's input; Resonance 0..1 → k 0..4.35 | sings at fc ±3 cents at 300 Hz / 3 kHz / 12 kHz from Resonance 0.92; rings out below; bounded driven hard at 0.45 sr; small signals = the display's response |
 | saturator | `gen_saturator.py` | tanh = x + (tanh x − x): the residual antialiased (first-order ADAA, Bilbao 2017), x through a half-sample Thiran allpass; half a sample late | 8 kHz hot sine: aliases −24 → < −50 dB below 10 kHz; flat (±0.05 dB) to 15 kHz; exact for near-equal samples |
-| edges | `gen_edges.py` | 4-point polyBLEP jumps and polyBLAMP corners into a two-sample look-ahead ring; one per voice for every oscillator | saw < −70 dB, triangle < −85 dB alias below 10 kHz at C7 / C8 |
+| edges | `gen_edges.py` | 4-point polyBLEP jumps and polyBLAMP corners into a two-sample look-ahead ring; one per voice for every oscillator | saw < −70 dB, triangle < −85 dB alias below 10 kHz at C7 / C8; after a restart (`restart_statements`) nothing from before it comes out |
 | echo | `gen_echo.py` | stereo tape loop: one time, re-read D early (the loop's own delay); LP / HP / diffusion / saturator in the loop; glide limited to 0.5 ms per ms; wow and flutter as pitch; Stop; rounds for a display | repeats ±1 ms of n T; read speed in [0.5, 1.5]; over unity it howls, held under 1 / saturation; under, it dies; wow / flutter RMS cents as set, the same at every Time; Stop empties it |
 
 What each was chosen over, with numbers, is in its module docstring.

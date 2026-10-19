@@ -73,6 +73,20 @@ class BandLimitedEdges(GenBlock):
     def add_corner(self, happened, fraction, slope_change):
         self.edges.append(("polyblamp4", happened, fraction, slope_change))
 
+    def restart_statements(self, next_naive_values):
+        """Statements for a trivial wave whose phase restarts (a hard reset, as at a note): the LOOK_AHEAD_SAMPLES
+        samples the ring holds but has not given out are replaced by `next_naive_values` (GenExpr expressions: the
+        restarted wave at the next outputs, the first one first) and every correction pending in the ring is dropped,
+        so nothing from before the restart comes out after it. The restart's own jump is not band-limited. Run them
+        before this sample's `statements()`."""
+        if len(next_naive_values) != LOOK_AHEAD_SAMPLES:
+            raise BuildError(f"BandLimitedEdges {self.instance_name}: a restart takes the next {LOOK_AHEAD_SAMPLES} "
+                             f"values of the restarted wave, got {len(next_naive_values)}")
+        p = self.instance_name
+        lines = [f"{p}_naive_2 = {next_naive_values[0]};", f"{p}_naive_1 = {next_naive_values[1]};"]
+        lines += [f"{p}_correction_{tap} = 0;" for tap in TAP_NAMES]
+        return "\n".join(lines)
+
     def functions(self):
         return dict(FUNCTIONS)
 

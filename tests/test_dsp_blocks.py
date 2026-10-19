@@ -182,6 +182,25 @@ class EdgeTests(unittest.TestCase):
             self.assertLess(worst_alias_db(self.oscillator(fundamental, "triangle"), fundamental, range(3, 60, 2),
                                            self.SAMPLERATE, 10000.0), -85.0, fundamental)
 
+    def test_a_restart_gives_out_nothing_from_before_it(self):
+        # a saw run two samples ahead (as a device feeds a wave it needs on time), its phase reset to 0 at sample 300:
+        # after the restart the block gives out the restarted saw itself, with no old sample or pending correction
+        edges = BandLimitedEdges("edges", naive="2 * wrap(phase + 2 * step, 0, 1) - 1")
+        edges.add_jump("wrapped", "wrap(phase + 2 * step, 0, 1) / step", "-2")
+        restart = edges.restart_statements(["2 * step - 1", "4 * step - 1"])
+        step = 1000.0 / self.SAMPLERATE
+        code = gen_code_with_blocks(
+            f"/*GEN_BLOCK_FUNCTIONS*/\nHistory phase(0), count(0), lead(0);\n/*GEN_BLOCK_DECLARATIONS*/\n"
+            f"step = {step!r};\ncount = count + 1;\nif (count == 300) {{\n\tphase = 0;\n\tlead = 2 * step;\n"
+            f"\t{restart.replace(chr(10), chr(10) + chr(9))}\n}}\nphase = wrap(phase + step, 0, 1);\n"
+            f"last_lead = lead;\nlead = wrap(phase + 2 * step, 0, 1);\nwrapped = lead < last_lead;\n"
+            f"/*EDGES*/\nout1 = edges_out;\nout2 = 2 * phase - 1;\n", [edges], "restart harness")
+        out, saw_now = GenProgram(code, 0, 2, samplerate=self.SAMPLERATE).run(320)
+        for i in range(299, 305):         # the restart's sample (count 300 is index 299) and the next ones
+            self.assertAlmostEqual(out[i], saw_now[i], delta=1e-12, msg=i)
+        with self.assertRaises(BuildError):
+            edges.restart_statements(["0"])
+
     def test_the_mix_is_two_samples_late_and_keeps_its_level(self):
         out = self.oscillator(100.0, "saw")
         self.assertAlmostEqual(sum(out[:441 * 9]) / (441 * 9), 0.0, delta=1e-3)
