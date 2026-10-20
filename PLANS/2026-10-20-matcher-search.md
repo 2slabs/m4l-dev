@@ -101,3 +101,24 @@ CMA-ES (default population, step = r) started at the truth moved by RMS r per co
 3000 renders, the current score; targets 0-3. Prediction: back to <= truth + 0.25 from r 0.02 in >= 3 / 4, from
 r 0.05 in 2 / 4, from r 0.1 in <= 1 / 4, from r 0.2 in 0 / 4. If even r 0.02 fails, the score is a needle at the
 local scale and no global search can be the fix; the score (or the parameter axes) must change.
+
+### H6 result: even r 0.02 fails; the local landscape is the problem
+
+Drums voice pinned to kit aa62cc6 + 2sl-drums 68b58af (the voice changed under the earlier runs). 2000 renders a run.
+Current score: 0 / 4 from r 0.02, 0 / 4 from r 0.05; the search ends further from the truth than it started (0.03-0.07
+from 0.02). PITCH_WEIGHT 0: 0 / 8. Spectral term alone: 0 / 8. So no score term alone is the cause: the drums voice's
+spectral landscape is itself not a funnel at the 0.02 scale.
+
+Binary search by group (only one group moved by r 0.02, the rest exact, all 31 searched, no pitch term): the switches +
+pattern moved: 2 / 4 (target 3: metal, 1.55 -> 1.33); the tone group (pitch, sweep, pitch mod, harmonics, fold): 1 / 4
+(starts 4.3-6.1); the rest (noise filter, envelopes, click, strip): 0 / 4, and two of those runs never improved on
+their start in 2000 renders (1.43, 2.06): with every candidate's pattern and switches moved at step 0.02, no candidate
+beat the start.
+
+## H7. The unordered discrete parameters inside CMA-ES's continuous vector block it
+
+noise_pattern (255 unordered colours) and the four switches are axes of CMA-ES's continuous vector: any step moves the
+pattern to an unrelated colour and a switch near its edge to another branch, so most candidates of a generation are
+bad for a reason unrelated to the continuous parameters, and selection learns nothing. Test: the same local runs
+(r 0.02, all 31 moved; no pitch term) with the five discrete parameters held at the truth and out of the vector.
+Prediction: >= 3 / 4 recovered (from 0 / 4).
