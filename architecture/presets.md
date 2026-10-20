@@ -55,7 +55,7 @@ on one input is the loudest moment out minus the loudest moment in (the same max
 preset has it); the median is over the kit's effect inputs (`effect_inputs`): drums, bass, a pad, a full mix of the
 three, and the chord phrase as saws every bar with a kick on every beat, EFFECT_INPUT_SECONDS (four bars at 120 BPM,
 Live stopped) each at −18 LUFS integrated, generated from seeds (no samples), at EFFECT_SAMPLE_RATE (44.1 kHz: an
-effect's peaks depend on the input's top octave, so no fast rate). A device's suite
+effect's peaks depend on the input's top octave, so no fast rate). `effect_inputs` and `effect_measures_by_preset` take `seconds` and `names` (defaults: all five, EFFECT_INPUT_SECONDS) so a device's quick test asks for fewer, shorter inputs. A device's suite
 holds every preset's median within `EFFECT_LOUDNESS_TOLERANCE_LU` (±1.5) of 0 dB (`presets_off_bypass`) and every
 peak under its clip (`presets_over_the_clip`, at the same rate, so no allowance). Each preset's **worst miss** (its
 largest distance from the median over the inputs) is reported, not tested: an effect whose gain depends on the input

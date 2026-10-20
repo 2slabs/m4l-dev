@@ -17,7 +17,7 @@ then the tail, PHRASE_SECONDS in all. Short, because a suite renders it for ever
 
 An audio effect is levelled to bypass instead (architecture/presets.md, "An audio effect: as loud as bypass"): its
 loudness change on music. The kit generates the music (effect_inputs: drums, bass, pad, a full mix, chords and a
-kick; EFFECT_INPUT_SECONDS each at EFFECT_INPUT_LOUDNESS_LUFS, from seeds, no samples, at EFFECT_SAMPLE_RATE), plays
+kick; EFFECT_INPUT_SECONDS each (or the `seconds` and `names` a test asks for) at EFFECT_INPUT_LOUDNESS_LUFS, from seeds, no samples, at EFFECT_SAMPLE_RATE), plays
 every preset on all of it in worker processes (effect_measures_by_preset, with the device's own render), and reads each preset's gain on
 each input (the loudest moment out minus the loudest moment in), their median (what the preset's output level sets
 to 0 dB) and the worst miss from that median (information: an effect whose gain depends on its input, a
@@ -203,12 +203,12 @@ def _beat_seconds():
     return 60.0 / BEATS_PER_MINUTE
 
 
-def _drums(rate, draws):
+def _drums(rate, draws, seconds):
     """A kick on every beat, a snare on 2 and 4, closed hats on the 16ths with an open hat on the off-beat."""
-    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    out = [0.0] * int(seconds * rate)
     beat = _beat_seconds()
     kick = _kick(rate)
-    for number in range(int(EFFECT_INPUT_SECONDS / beat)):
+    for number in range(int(seconds / beat)):
         _add_at(out, kick, int(number * beat * rate))
         if number % 2 == 1:
             _add_at(out, _noise_burst(rate, 0.2, 0.06, 0.35, draws, 800, tone_hz=190), int(number * beat * rate))
@@ -221,13 +221,13 @@ def _drums(rate, draws):
     return out
 
 
-def _bass(rate, draws):
+def _bass(rate, draws, seconds):
     """A 16th-note saw bassline on C1..Bb1, plucked (150 ms decay), the bar repeated."""
-    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    out = [0.0] * int(seconds * rate)
     pattern = [24, None, 24, 36, None, 24, 27, None, 24, None, 31, 24, None, 34, 24, None]
     step = _beat_seconds() / 4
     length = int(step * 0.9 * rate)
-    for bar in range(int(EFFECT_INPUT_SECONDS / (16 * step))):
+    for bar in range(int(seconds / (16 * step))):
         for index, pitch in enumerate(pattern):
             if pitch is None:
                 continue
@@ -239,11 +239,11 @@ def _bass(rate, draws):
     return out
 
 
-def _pad(rate, draws):
+def _pad(rate, draws, seconds):
     """Detuned saw chords (Cm7, Abmaj7, Bb7, Gm7), a bar each, a slow attack and release, softened above 2.5 kHz."""
-    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    out = [0.0] * int(seconds * rate)
     chords = [[48, 51, 55, 58], [44, 48, 51, 55], [46, 50, 53, 56], [43, 46, 50, 53]]
-    seconds_each = EFFECT_INPUT_SECONDS / len(chords)
+    seconds_each = seconds / len(chords)
     length = int(seconds_each * rate)
     for number, pitches in enumerate(chords):
         for pitch in pitches:
@@ -261,20 +261,20 @@ def _pad(rate, draws):
     return out
 
 
-def _chords_and_kick(rate):
+def _chords_and_kick(rate, seconds):
     """The kit's chord phrase (m7 on C3, Ab2, Bb2) as saws at the seeded start phases, every bar, a kick every beat."""
-    out = [0.0] * int(EFFECT_INPUT_SECONDS * rate)
+    out = [0.0] * int(seconds * rate)
     bar = 4 * _beat_seconds()
     start_phases = oscillator_start_phases()
     events = chord_phrase("m7", 4)
-    for bar_number in range(int(EFFECT_INPUT_SECONDS / bar)):
+    for bar_number in range(int(seconds / bar)):
         for (seconds, pitches), (end_seconds, _) in zip(events[0::2], events[1::2]):
             length = int(round((end_seconds - seconds) * rate))
             for pitch in pitches:
                 note = _polyblep_saw(440.0 * 2 ** ((pitch - 69) / 12), length, rate, next(start_phases), 0.08)
                 _add_at(out, note, int(round((bar_number * bar + seconds) * rate)))
     kick = _kick(rate)
-    for number in range(int(EFFECT_INPUT_SECONDS / _beat_seconds())):
+    for number in range(int(seconds / _beat_seconds())):
         _add_at(out, kick, int(number * _beat_seconds() * rate))
     return out
 
@@ -284,23 +284,32 @@ def _at_loudness(signal, rate, loudness_lufs):
     return [value * gain for value in signal]
 
 
-@functools.lru_cache(maxsize=4)
-def effect_inputs(rate=EFFECT_SAMPLE_RATE):
-    """{name: mono samples (a tuple)}, EFFECT_INPUT_NAMES in order, each EFFECT_INPUT_SECONDS at
-    EFFECT_INPUT_LOUDNESS_LUFS integrated (the input on both channels, as the effect gets it): the same on every run."""
+@functools.lru_cache(maxsize=8)
+def effect_inputs(rate=EFFECT_SAMPLE_RATE, seconds=EFFECT_INPUT_SECONDS, names=EFFECT_INPUT_NAMES):
+    """{name: mono samples (a tuple)}, `names` in order (any of EFFECT_INPUT_NAMES; the default is all of them), each
+    `seconds` long at EFFECT_INPUT_LOUDNESS_LUFS integrated (the input on both channels, as the effect gets it): the
+    same on every run. A device's test asks for fewer names and a shorter `seconds` to be quick; the full default set
+    is what the levelling tool and the presets' tolerance use. Drums, bass and pad are always drawn in one order from
+    one seed, so an input is the same whichever names are asked for. `names` must be a tuple (the result is cached)."""
+    unknown_names = [name for name in names if name not in EFFECT_INPUT_NAMES]
+    if unknown_names or not names:
+        raise BuildError(f"preset_loudness: effect input names {list(names)} must be a non-empty choice from "
+                         f"{list(EFFECT_INPUT_NAMES)} (unknown: {unknown_names})")
+    if not seconds > 0:
+        raise BuildError(f"preset_loudness: effect inputs must be longer than 0 seconds, got {seconds}")
     draws = random.Random(EFFECT_INPUT_SEED)
-    drums, bass, pad = _drums(rate, draws), _bass(rate, draws), _pad(rate, draws)
+    drums, bass, pad = _drums(rate, draws, seconds), _bass(rate, draws, seconds), _pad(rate, draws, seconds)
     parts = [_at_loudness(part, rate, EFFECT_FULL_MIX_PART_LUFS) for part in (drums, bass, pad)]
     unlevelled = {"drums": drums, "bass": bass, "pad": pad, "full mix": [sum(values) for values in zip(*parts)],
-                  "chords and kick": _chords_and_kick(rate)}
-    return {name: tuple(_at_loudness(unlevelled[name], rate, EFFECT_INPUT_LOUDNESS_LUFS)) for name in EFFECT_INPUT_NAMES}
+                  "chords and kick": _chords_and_kick(rate, seconds)}
+    return {name: tuple(_at_loudness(unlevelled[name], rate, EFFECT_INPUT_LOUDNESS_LUFS)) for name in names}
 
 
-@functools.lru_cache(maxsize=4)
-def _effect_input_loudest_moments(rate):
+@functools.lru_cache(maxsize=8)
+def _effect_input_loudest_moments(rate, seconds, names):
     """{name: the effect input's max momentary loudness}, the input on both channels."""
     return {name: bs1770.max_momentary_loudness([list(mono), list(mono)], rate)
-            for name, mono in effect_inputs(rate).items()}
+            for name, mono in effect_inputs(rate, seconds, names).items()}
 
 
 class EffectMeasures:
@@ -319,15 +328,15 @@ class EffectMeasures:
                 f"peak {self.peak_db:+.2f} dBFS)")
 
 
-def effect_measures(render, messages, rate=EFFECT_SAMPLE_RATE):
+def effect_measures(render, messages, rate=EFFECT_SAMPLE_RATE, seconds=EFFECT_INPUT_SECONDS, names=EFFECT_INPUT_NAMES):
     """EffectMeasures of one preset: render(messages, mono input, rate) -> (left, right) plays the preset (its
-    messages, as the device's DSP gets them) on each effect input."""
+    messages, as the device's DSP gets them) on each effect input (`seconds` and `names` as in `effect_inputs`)."""
     gains, peak = {}, -math.inf
-    for name, mono in effect_inputs(rate).items():
+    for name, mono in effect_inputs(rate, seconds, names).items():
         channels = [list(channel) for channel in render(messages, list(mono), rate)]
         if len(channels) != 2 or any(len(channel) != len(mono) for channel in channels):
             raise BuildError(f"preset_loudness: the render of {name!r} isn't two channels of {len(mono)} samples")
-        gains[name] = bs1770.max_momentary_loudness(channels, rate) - _effect_input_loudest_moments(rate)[name]
+        gains[name] = bs1770.max_momentary_loudness(channels, rate) - _effect_input_loudest_moments(rate, seconds, names)[name]
         peak = max(peak, bs1770.sample_peak_db(channels))
     return EffectMeasures(gains, peak)
 
@@ -336,18 +345,20 @@ def _worker_starts(search_path):
     sys.path[:] = search_path
 
 
-def _measures_of_one(render, rate, name_and_messages):
+def _measures_of_one(render, rate, seconds, names, name_and_messages):
     name, messages = name_and_messages
-    return name, effect_measures(render, messages, rate)
+    return name, effect_measures(render, messages, rate, seconds, names)
 
 
-def effect_measures_by_preset(render, messages_by_preset, rate=EFFECT_SAMPLE_RATE):
+def effect_measures_by_preset(render, messages_by_preset, rate=EFFECT_SAMPLE_RATE, seconds=EFFECT_INPUT_SECONDS,
+                              names=EFFECT_INPUT_NAMES):
     """{preset: EffectMeasures} of every preset ({name: messages}), in worker processes, one per CPU. `render` is a
-    module-level function (it is sent to the workers by name, and they get this process's sys.path)."""
-    _effect_input_loudest_moments(rate)    # made once here: workers forked from this process inherit them
+    module-level function (it is sent to the workers by name, and they get this process's sys.path).
+    `seconds` and `names` as in `effect_inputs`."""
+    _effect_input_loudest_moments(rate, seconds, names)    # made once here: workers forked from this process inherit them
     with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count(), initializer=_worker_starts,
                                                 initargs=(list(sys.path),)) as pool:
-        return dict(pool.map(functools.partial(_measures_of_one, render, rate), messages_by_preset.items()))
+        return dict(pool.map(functools.partial(_measures_of_one, render, rate, seconds, names), messages_by_preset.items()))
 
 
 def presets_off_bypass(measures_by_preset, tolerance_lu=EFFECT_LOUDNESS_TOLERANCE_LU):

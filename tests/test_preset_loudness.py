@@ -77,6 +77,34 @@ class EffectTests(unittest.TestCase):
         preset_loudness.effect_inputs.cache_clear()
         self.assertEqual(preset_loudness.effect_inputs(rate), inputs)
 
+    def test_the_effect_inputs_can_be_shorter_and_fewer_without_changing_the_rest(self):
+        full = preset_loudness.effect_inputs(self.rate)
+        short = preset_loudness.effect_inputs(self.rate, 2.0, ("full mix", "chords and kick"))
+        self.assertEqual(tuple(short), ("full mix", "chords and kick"))
+        for name, mono in short.items():
+            with self.subTest(input=name):
+                self.assertEqual(len(mono), int(2.0 * self.rate))
+                self.assertAlmostEqual(bs1770.integrated_loudness([list(mono)] * 2, self.rate), -18.0, places=6)
+        self.assertEqual(preset_loudness.effect_inputs(self.rate, 8.0, ("pad", "drums")),
+                         {name: full[name] for name in ("pad", "drums")})
+
+    def test_a_bad_input_choice_fails(self):
+        with self.assertRaisesRegex(BuildError, "unknown: \\['kazoo'\\]"):
+            preset_loudness.effect_inputs(self.rate, 2.0, ("kazoo",))
+        with self.assertRaisesRegex(BuildError, "non-empty"):
+            preset_loudness.effect_inputs(self.rate, 2.0, ())
+        with self.assertRaisesRegex(BuildError, "longer than 0"):
+            preset_loudness.effect_inputs(self.rate, 0.0, ("pad",))
+
+    def test_measures_follow_the_asked_inputs(self):
+        names = ("full mix", "chords and kick")
+        single = preset_loudness.effect_measures(identity_render, {"gain": 0.5}, self.rate, 2.0, names)
+        self.assertEqual(tuple(single.gain_db_by_input), names)
+        by_preset = preset_loudness.effect_measures_by_preset(identity_render, {"half": {"gain": 0.5}}, self.rate,
+                                                              2.0, names)
+        self.assertEqual(tuple(by_preset["half"].gain_db_by_input), names)
+        self.assertAlmostEqual(by_preset["half"].median_gain_db, 20 * math.log10(0.5), places=6)
+
     def test_an_effect_is_measured_by_its_median_gain_against_bypass(self):
         bypass = preset_loudness.effect_measures(identity_render, {"gain": 1.0}, self.rate)
         self.assertAlmostEqual(bypass.median_gain_db, 0.0, places=9)
