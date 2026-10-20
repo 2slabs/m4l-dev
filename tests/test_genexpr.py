@@ -11,7 +11,8 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.genexpr import GenExprBuildError, GenExprError, GenProgram, check  # noqa: E402
+from m4l_dev.c_library_cache import CLibraryBuildError  # noqa: E402
+from m4l_dev.genexpr import GenExprError, GenProgram, check  # noqa: E402
 
 
 def render_single_output(code, num_samples, inputs=None, num_inputs=1):
@@ -275,7 +276,7 @@ class PythonArithmeticTests(unittest.TestCase):
 
     def test_no_c_compiler_fails_loudly(self):
         with mock.patch.dict(os.environ, {"CC": "no-such-c-compiler"}):
-            with self.assertRaises(GenExprBuildError) as caught:
+            with self.assertRaises(CLibraryBuildError) as caught:
                 GenProgram("out1 = in1 * 0.5;", 1, 1)
         self.assertIn("no-such-c-compiler", str(caught.exception))
         self.assertIn("C compiler", str(caught.exception))

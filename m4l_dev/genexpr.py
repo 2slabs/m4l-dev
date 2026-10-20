@@ -45,7 +45,7 @@ Rendering
 GenProgram translates the program to C once, builds it with the system C compiler ($CC, default `cc`) into a cache
 directory ($M4L_DEV_GENEXPR_CACHE, default ~/.cache/m4l-dev/genexpr; one shared library per program text, compiler and
 flags) and runs it through ctypes: about 25x the speed of rendering in Python (2sl gate's core: 3.5 s -> 0.14 s per
-second of audio at 44.1 kHz). No compiler: GenExprBuildError, saying so. Checking (check, analyze) needs no compiler.
+second of audio at 44.1 kHz). No compiler: CLibraryBuildError, saying so. Checking (check, analyze) needs no compiler.
 The C reproduces CPython's arithmetic: every non-NaN value is the bits Python's float and math module give for the
 same expressions (and noise() is random.Random(seed).random()'s sequence); a NaN comes out where Python's would, with
 its sign and payload left open, as IEEE 754 leaves them.
@@ -64,12 +64,14 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-# GenExprBuildError: the name the renderer's callers and tests know the missing / refusing C compiler by
-from m4l_dev.c_library_cache import CLibraryBuildError as GenExprBuildError, load_c_library  # noqa: F401
+from m4l_dev.build_error import BuildError
+from m4l_dev.c_library_cache import load_c_library
 
 
-class GenExprError(Exception):
-    """A syntax or semantic error with a 1-based line and column."""
+class GenExprError(BuildError):
+    """A syntax or semantic error with a 1-based line and column. A subclass of BuildError because its callers need
+    the position (`line`, `col`, `message`): gen_box wraps it with the box, the command-line checker prints it as
+    path:line:col."""
 
     def __init__(self, message, line, col):
         super().__init__(message)

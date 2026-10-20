@@ -33,10 +33,6 @@ LIBDUKTAPE_CANDIDATES = (
 _loaded_duktape = None
 
 
-class EvaluationError(Exception):
-    """The ES5 code threw (or didn't compile): the message is Duktape's."""
-
-
 def _candidate_library_paths():
     """The places libduktape may be, the cheap ones first (`brew --prefix` runs brew, so it is asked last)."""
     found_by_ctypes = ctypes.util.find_library("duktape")
@@ -96,7 +92,7 @@ def syntax_problem(source):
 
 
 def evaluate(source):
-    """Run ES5 `source` in a fresh heap; its last expression's value, as a string. Raises EvaluationError with
+    """Run ES5 `source` in a fresh heap; its last expression's value, as a string. Raises BuildError with
     Duktape's message when the code throws or isn't ES5."""
     def evaluate_in_heap(duktape, heap, source_bytes):
         result = duktape.duk_eval_raw(heap, ctypes.c_char_p(source_bytes), ctypes.c_size_t(len(source_bytes)),
@@ -104,6 +100,6 @@ def evaluate(source):
                                                     | DUK_COMPILE_NOFILENAME))
         value = _top_of_stack_as_text(duktape, heap)
         if result != 0:
-            raise EvaluationError(value)
+            raise BuildError(f"ES5 code threw or did not compile: {value}")
         return value
     return _run_in_fresh_heap(source.encode("utf-8"), evaluate_in_heap)

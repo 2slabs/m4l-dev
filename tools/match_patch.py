@@ -25,7 +25,7 @@ from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import SearchSettings, match_patch  # noqa: E402
 from m4l_dev.patch_match_voice import MatchedVoice  # noqa: E402
-from m4l_dev.wave_files import WaveFileError, read_wave_file, write_wave_file  # noqa: E402
+from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
 
 def load_voice(reference):
@@ -96,7 +96,7 @@ def main(argv):
         with open(arguments.out, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
             handle.write("\n")
-    except (BuildError, WaveFileError, OSError, ImportError) as problem:
+    except (BuildError, OSError, ImportError) as problem:
         print(f"match_patch: {problem}", file=sys.stderr)
         return 1
     print(f"score {result.best_score:.3f} ({result.best_components['spectral_db']:.2f} dB spectral, "

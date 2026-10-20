@@ -39,7 +39,7 @@ class Es5Tests(unittest.TestCase):
 
     def test_evaluate_returns_the_last_value_and_raises_on_a_throw(self):
         self.assertEqual(es5.evaluate("var a = 2; JSON.stringify({b: a * 21})"), '{"b":42}')
-        with self.assertRaisesRegex(es5.EvaluationError, "boom"):
+        with self.assertRaisesRegex(BuildError, "boom"):
             es5.evaluate("throw new Error('boom');")
 
     def test_many_heaps_in_a_row(self):

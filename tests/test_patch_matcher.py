@@ -24,7 +24,7 @@ from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
                                         match_patch, symmetric_eigendecomposition)
 from m4l_dev.patch_match_voice import MatchedParameter  # noqa: E402
-from m4l_dev.wave_files import WaveFileError, read_wave_file, write_wave_file  # noqa: E402
+from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
 RATE = 48000
 
@@ -205,9 +205,9 @@ class WaveFileTests(unittest.TestCase):
             path = os.path.join(directory, "not.wav")
             with open(path, "wb") as handle:
                 handle.write(b"RIFF\x00\x00\x00\x00WAVEjunk")
-            with self.assertRaisesRegex(WaveFileError, "fmt"):
+            with self.assertRaisesRegex(BuildError, "fmt"):
                 read_wave_file(path)
-            with self.assertRaisesRegex(WaveFileError, "NaN"):
+            with self.assertRaisesRegex(BuildError, "NaN"):
                 write_wave_file(os.path.join(directory, "nan.wav"), [[float("nan")]], 48000)
 
 

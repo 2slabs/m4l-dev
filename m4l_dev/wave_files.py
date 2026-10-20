@@ -4,13 +4,11 @@ else (compressed formats, a truncated or malformed file) fails loudly, naming th
 """
 import struct
 
+from m4l_dev.build_error import BuildError
+
 FORMAT_PCM = 0x0001
 FORMAT_IEEE_FLOAT = 0x0003
 FORMAT_EXTENSIBLE = 0xFFFE
-
-
-class WaveFileError(ValueError):
-    """A WAV file the kit cannot read or write: says which file and why."""
 
 
 def read_wave_file(path):
@@ -19,9 +17,9 @@ def read_wave_file(path):
         with open(path, "rb") as handle:
             data = handle.read()
     except OSError as problem:
-        raise WaveFileError(f"{path}: cannot read: {problem}") from problem
+        raise BuildError(f"{path}: cannot read: {problem}") from problem
     if len(data) < 12 or data[0:4] != b"RIFF" or data[8:12] != b"WAVE":
-        raise WaveFileError(f"{path}: not a RIFF WAVE file")
+        raise BuildError(f"{path}: not a RIFF WAVE file")
     position = 12
     format_chunk = None
     sample_bytes = None
@@ -31,34 +29,34 @@ def read_wave_file(path):
         body = data[position + 8:position + 8 + chunk_size]
         if len(body) < chunk_size:
             if chunk_id == b"data":
-                raise WaveFileError(f"{path}: the data chunk is truncated ({len(body)} of {chunk_size} bytes)")
-            raise WaveFileError(f"{path}: the '{chunk_id.decode('latin-1')}' chunk is truncated")
+                raise BuildError(f"{path}: the data chunk is truncated ({len(body)} of {chunk_size} bytes)")
+            raise BuildError(f"{path}: the '{chunk_id.decode('latin-1')}' chunk is truncated")
         if chunk_id == b"fmt ":
             format_chunk = body
         elif chunk_id == b"data":
             sample_bytes = body
         position += 8 + chunk_size + (chunk_size & 1)
     if format_chunk is None or len(format_chunk) < 16:
-        raise WaveFileError(f"{path}: no (complete) fmt chunk")
+        raise BuildError(f"{path}: no (complete) fmt chunk")
     if sample_bytes is None:
-        raise WaveFileError(f"{path}: no data chunk")
+        raise BuildError(f"{path}: no data chunk")
     format_tag, channel_count, rate, _, block_align, bits = struct.unpack_from("<HHIIHH", format_chunk, 0)
     if format_tag == FORMAT_EXTENSIBLE:
         if len(format_chunk) < 40:
-            raise WaveFileError(f"{path}: WAVE_FORMAT_EXTENSIBLE without its 22-byte extension")
+            raise BuildError(f"{path}: WAVE_FORMAT_EXTENSIBLE without its 22-byte extension")
         (format_tag,) = struct.unpack_from("<H", format_chunk, 24)   # the sub-format GUID's first two bytes
     if channel_count < 1 or rate < 1:
-        raise WaveFileError(f"{path}: {channel_count} channels at {rate} Hz")
+        raise BuildError(f"{path}: {channel_count} channels at {rate} Hz")
     if format_tag == FORMAT_PCM and bits in (8, 16, 24, 32):
         pass
     elif format_tag == FORMAT_IEEE_FLOAT and bits in (32, 64):
         pass
     else:
-        raise WaveFileError(f"{path}: format {format_tag:#06x} at {bits} bits is not read here (PCM 8/16/24/32 or "
+        raise BuildError(f"{path}: format {format_tag:#06x} at {bits} bits is not read here (PCM 8/16/24/32 or "
                             "float 32/64 only): export the target as one of those")
     bytes_per_sample = bits // 8
     if block_align != bytes_per_sample * channel_count:
-        raise WaveFileError(f"{path}: block align {block_align} is not {bytes_per_sample} x {channel_count} channels")
+        raise BuildError(f"{path}: block align {block_align} is not {bytes_per_sample} x {channel_count} channels")
     frame_count = len(sample_bytes) // block_align
     sample_count = frame_count * channel_count
     if format_tag == FORMAT_IEEE_FLOAT:
@@ -79,11 +77,11 @@ def read_wave_file(path):
 def write_wave_file(path, channels, rate):
     """`channels` (lists of floats, equal lengths) as a 32-bit float WAV at `rate`. A NaN or infinity fails."""
     if not channels or any(len(channel) != len(channels[0]) for channel in channels):
-        raise WaveFileError(f"{path}: channels must be non-empty and of equal length")
+        raise BuildError(f"{path}: channels must be non-empty and of equal length")
     frame_count = len(channels[0])
     interleaved = [channel[index] for index in range(frame_count) for channel in channels]
     if any(value != value or value in (float("inf"), float("-inf")) for value in interleaved):
-        raise WaveFileError(f"{path}: the samples hold a NaN or infinity")
+        raise BuildError(f"{path}: the samples hold a NaN or infinity")
     channel_count = len(channels)
     sample_bytes = struct.pack(f"<{len(interleaved)}f", *interleaved)
     format_chunk = struct.pack("<HHIIHHH", FORMAT_IEEE_FLOAT, channel_count, int(rate), int(rate) * 4 * channel_count,
@@ -96,4 +94,4 @@ def write_wave_file(path, channels, rate):
         with open(path, "wb") as handle:
             handle.write(b"RIFF" + struct.pack("<I", len(body)) + body)
     except OSError as problem:
-        raise WaveFileError(f"{path}: cannot write: {problem}") from problem
+        raise BuildError(f"{path}: cannot write: {problem}") from problem
