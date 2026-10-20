@@ -30,6 +30,7 @@ from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: 
 
 from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
 from m4l_dev.techniques.tape_style_echo import TapeStyleEcho  # noqa: E402
+from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets  # noqa: E402
 from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
                                                            SecondOrderAllpassStage, ZeroDelayAllpassCascade)
 from m4l_dev.techniques.zero_delay_allpass_cascade import \
@@ -490,13 +491,43 @@ class BandLimitedEdgesTests(unittest.TestCase):
         self.assertAlmostEqual(max(out), 1.0, delta=0.02)
 
 
+class HistoriesStartAtTheirTargetsTests(unittest.TestCase):
+    TARGETS = {"smoothed": "target", "ring": "target * 2"}
+
+    def program(self, target):
+        start = HistoriesStartAtTheirTargets("start", targets=self.TARGETS)
+        code = gen_code_with_blocks(
+            "/*GEN_BLOCK_FUNCTIONS*/\nParam target(%r, min=-1e9, max=1e9);\nHistory smoothed(0), ring(0);\n"
+            "/*GEN_BLOCK_DECLARATIONS*/\n/*START*/\nsmoothed = smoothed + (target - smoothed) * 0.5;\n"
+            "out1 = smoothed;\nout2 = ring;\nring = target * 2;\n" % target, [start], "start harness")
+        return GenProgram(code, 0, 2, samplerate=1000.0)
+
+    def test_a_smoother_starts_at_its_target_bit_for_bit(self):
+        for target in (0.0, 0.8, 375.0, -3.25):
+            smoothed, ring = self.program(target).run(20)
+            self.assertEqual(set(smoothed), {target}, "a step from the target to itself is the target, exactly")
+            self.assertEqual(set(ring), {target * 2}, "a ring read before its first write holds the first value")
+
+    def test_only_the_first_sample(self):
+        program = self.program(0.8)
+        program.run(5)
+        program.set_param("target", 0.0)
+        smoothed = program.run(3)[0]
+        self.assertEqual(smoothed, [0.4, 0.2, 0.1], "after the first sample it glides as written")
+
+    def test_bad_names_and_no_targets_fail_the_build(self):
+        with self.assertRaises(BuildError):
+            HistoriesStartAtTheirTargets("start", targets={})
+        with self.assertRaises(BuildError):
+            HistoriesStartAtTheirTargets("start", targets={"Not History": "x"})
+
+
 class TapeStyleEchoTests(unittest.TestCase):
     def echo(self, samplerate, diffusion=True, **params):
         block = TapeStyleEcho("echo", left_input="in1", right_input="in1", time_ms="time", feedback="feedback",
                          loop_lowpass_hz="lowpass", loop_highpass_hz="highpass", saturation_gain="saturation",
                          wow_cents="wow", flutter_cents="flutter", stop_pressed="stop > 0",
-                         diffusion="diffusion" if diffusion else None, initial_time_ms=375.0,
-                         longest_time_ms=6000.0, right_lag_ms=10.0, rounds_kept=3)
+                         diffusion="diffusion" if diffusion else None, longest_time_ms=6000.0, right_lag_ms=10.0, rounds_kept=3)
         defaults = {"time": 375.0, "feedback": 0.9, "lowpass": 1400.0, "highpass": 250.0, "saturation": 2.0,
                     "wow": 0.0, "flutter": 0.0, "stop": 0.0, "diffusion": 0.65}
         defaults.update(params)
@@ -511,8 +542,6 @@ class TapeStyleEchoTests(unittest.TestCase):
 
     def repeats_late_ms(self, samplerate, time_ms, repeats, **params):
         program = self.echo(samplerate, time=time_ms, **params)
-        settle = 2 + 2 * abs(time_ms - 375.0) / 1000           # the time glides there first (<= 0.5 ms a ms)
-        program.run(int(samplerate * settle), [[0.0] * int(samplerate * settle)])
         loop = time_ms / 1000 * samplerate
         impulse = [0.0] * (int(loop * (repeats + 1)) + 100)
         impulse[10] = 1.0
@@ -529,6 +558,13 @@ class TapeStyleEchoTests(unittest.TestCase):
                 self.assertLess(max(abs(late) for late in side), 1.0, (filters, side))
         for side in self.repeats_late_ms(8000.0, 1500.0, 5):
             self.assertLess(max(abs(late) for late in side), 1.0, side)
+
+    def test_the_time_starts_at_its_target(self):
+        # no glide on load: the loop is the Param's time from the first sample, whatever the time
+        samplerate = 2000.0
+        for time_ms in (20.0, 375.0, 6000.0):
+            loop = self.echo(samplerate, time=time_ms).run(50, [[0.0] * 50])[2]
+            self.assertEqual(set(loop), {time_ms * samplerate / 1000}, time_ms)
 
     def test_a_time_change_never_reads_backwards(self):
         samplerate = 2000.0

@@ -247,6 +247,15 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
 tape as hysteresis plus playback-head loss filters. Not modelled; the echo's tape is a saturating loop, which is why it is a technique and not a circuit
 module of a tape machine.
 
+## Histories start at their targets (m4l_dev/techniques/histories_start_at_their_targets.py)
+
+No outside source: our construction, stated whole in the module docstring. gen~ gives a History a constant initial
+value; a smoother of a control would need that constant to repeat the control's Init value (a second copy:
+architecture/presets.md makes Init the one source). Instead each named History is set to its target on the first
+sample, before it is read: a one-pole step from the target to itself is the target exactly (x + (x - x) c = x), so a
+History whose constant already equalled the target renders the same bits. Its `if` and History writes are the GenExpr
+the tape-style echo's Stop already uses.
+
 ## Knee soft clip (m4l_dev/techniques/knee_soft_clip.py)
 
 No outside source: our construction, stated whole in the module docstring. Unity up to the knee, then
