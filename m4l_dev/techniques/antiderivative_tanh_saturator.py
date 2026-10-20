@@ -14,14 +14,22 @@ step late; after it, ADAA's equaliser for first order at the rate it runs at (th
   in 44 of 49 cases, up to +6.2 dB, and lowered it in 1, tests/test_techniques.py). Half a sample late; the 2-tap
   mean's roll-off kept: -2.4 dB at 10 kHz, -6.4 dB at 15 kHz, -10.9 dB at 18 kHz at 44.1 kHz (-2.0, -5.1, -8.3 dB at
   48 kHz). For a per-voice or in-loop saturator where the CPU counts.
-- 2: the input through the kit's `HalfbandUpsampler`, the mean and its 2x equaliser (5 taps, the product with
-  cos(w / 2) within +-0.01 dB up to 5/24 of the 2x rate: 18.4 kHz at 44.1 kHz, 20 kHz at 48 kHz) on each of the two
-  steps, the `HalfbandDownsampler` after: within 0.01 dB to 20 kHz at 48 kHz (0.05 dB at 44.1 kHz), what the 2x mean
-  leaves above the half-band's stop band (0.29 of the 2x rate) removed. 1.25 samples late inside (2.5 steps) plus
-  the half-band pair's 3.07, not linear phase (the pair's group delay rises toward its corner). For a whole-track
-  drive. About 2.2-2.7x the 1x CPU (references/dsp.md).
+- 2: the input through the kit's `HalfbandUpsampler` (elliptic), the mean and its 2x equaliser (5 taps, the product
+  with cos(w / 2) within +-0.01 dB up to 5/24 of the 2x rate: 18.4 kHz at 44.1 kHz, 20 kHz at 48 kHz) on each of the
+  two steps, the kit's `HalfbandLinearPhaseDownsampler` after (Kaiser, 83 taps, 100 dB from 0.29 of the 2x rate):
+  within 0.01 dB to 20 kHz at 48 kHz, to 18 kHz at 44.1 kHz (-0.27 dB at 20 kHz, the FIR's pass band ending at
+  18.5 kHz there). 1.25 samples late inside (2.5 steps), the upsampler's 1.78 and the downsampler's 20: 23.03 in all
+  at 100 Hz, not linear phase (the upsampler's group delay rises toward its corner). For a whole-track drive. About
+  3.7x the 1x CPU (references/dsp.md).
 
-`latency_samples` is the instance's delay at low frequencies. Measured (tests/test_techniques.py keeps the claims).
+  Why the downsampler is linear phase: a mean of tanh never leaves (-1, 1), but band-limiting a clipped broadband wave
+  overshoots (hot white noise through tanh at 16x, low-passed at 20 kHz: 1.78), and the elliptic downsampler's phase
+  near its corner rang it to 2.85 (2sl drums' snare at +36 dB: 2.11; PLANS/2026-10-20-tanh-saturator-peaks.md). With
+  the FIR: 1.91 and 1.50. `output_bound_per_unit_mean` is the bound for any input: the sum of |taps| of the chain
+  after the mean (2.19 at 2x, 1 at 1x) times the mean's own bound (1, or 1 + |tanh(bias)| with a bias).
+
+`latency_samples` is the instance's delay at low frequencies (its small-signal response's phase delay at 100 Hz).
+Measured (tests/test_techniques.py keeps the claims).
 
 Not the split it once was (tanh x = x through a half-sample allpass + ADAA of tanh x - x): at a hot drive the residual
 is mostly -x, filtered by the 2-tap mean while the x path is not, so the two no longer cancel (48 kHz, 10 kHz, drive
@@ -33,8 +41,12 @@ import math
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
-from m4l_dev.techniques.halfband_oversampler import (HALFBAND_ROUND_TRIP_LATENCY_SAMPLES, HalfbandDownsampler,
-                                                     HalfbandUpsampler, halfband_coefficients, halfband_response)
+from m4l_dev.techniques.halfband_oversampler import (HalfbandLinearPhaseDownsampler, HalfbandUpsampler,
+                                                     halfband_coefficients, halfband_response)
+
+# The frequency the latency is the phase delay at (low enough that the elliptic upsampler's delay is flat there)
+LATENCY_FREQUENCY_HZ = 100.0
+LATENCY_SAMPLE_RATE = 44100.0
 
 # Below this input step the quotient loses digits (F1's rounding over the step, about |x| 2e-16 / step); above it the
 # midpoint is off by about tanh''' * step^2 / 24. 1e-5 keeps both near 1e-9 for |x| < 50.
@@ -59,7 +71,8 @@ tanh_antialiased(x, previous_x) {{
 
 class AntiderivativeTanhSaturator(Technique):
     """`<name>_out` = tanh of `input`, antialiased, at `oversampling` (1 or 2, required) x the host rate,
-    `latency_samples` late. State: the last input, the equaliser's last means, at 2x the half-band pair's.
+    `latency_samples` late, never above `output_bound_per_unit_mean` (x 1 + |tanh(bias)| with a bias). State: the last
+    input, the equaliser's last means, at 2x the upsampler's and the downsampler's.
 
     With `bias` (a GenExpr expression), `<name>_out` = tanh(input + bias) - tanh(bias): the curve slid along itself,
     asymmetric (even harmonics: a tube-ish clip), still 0 at 0 and slope sech^2(bias) there. The mean is taken
@@ -79,21 +92,37 @@ class AntiderivativeTanhSaturator(Technique):
         self.upsampler = self.downsampler = None
         if oversampling == 2:
             self.upsampler = HalfbandUpsampler(f"{instance_name}_up", input=f"{instance_name}_input")
-            self.downsampler = HalfbandDownsampler(f"{instance_name}_down", first=f"{instance_name}_step_1_out",
-                                                   second=f"{instance_name}_step_2_out")
-        # at low frequencies: the mean and the equaliser in steps, plus the half-band pair's phase delay at 2x
-        self.latency_samples = self.equaliser.latency_steps / oversampling + (
-            HALFBAND_ROUND_TRIP_LATENCY_SAMPLES if oversampling == 2 else 0)
+            self.downsampler = HalfbandLinearPhaseDownsampler(f"{instance_name}_down",
+                                                              first=f"{instance_name}_step_1_out",
+                                                              second=f"{instance_name}_step_2_out")
+        self.output_bound_per_unit_mean = self._output_bound_per_unit_mean()
+        # the phase delay of its own small-signal response at 100 Hz: at 1x the mean's half step, at 2x the mean and
+        # the equaliser in steps, the elliptic upsampler's delay and the linear-phase downsampler's K - 1
+        w = 2 * math.pi * LATENCY_FREQUENCY_HZ / LATENCY_SAMPLE_RATE
+        self.latency_samples = -cmath.phase(self.small_signal_response(LATENCY_FREQUENCY_HZ, LATENCY_SAMPLE_RATE)) / w
+
+    def _output_bound_per_unit_mean(self):
+        """The sum of |taps| of the linear chain after the mean (the equaliser, at 2x convolved with the downsampler's
+        FIR): no output is larger than this times the largest |mean|. A mean of tanh is under 1, of the slid curve
+        under 1 + |tanh(bias)|."""
+        chain = list(self.equaliser.taps)
+        if self.oversampling == 2:
+            fir = self.downsampler.taps
+            chain = [sum(chain[i] * fir[n - i] for i in range(len(chain)) if 0 <= n - i < len(fir))
+                     for n in range(len(chain) + len(fir) - 1)]
+        return sum(abs(tap) for tap in chain)
 
     def small_signal_response(self, frequency_hz, sample_rate):
         """The instance's complex response to a quiet signal (tanh's slope 1, no bias), input to output: the 2-tap
-        mean and the equaliser at the rate it runs at, `equaliser.latency_steps` late; at 2x between the half-band
-        pair, which measures as the half-band squared one doubled-rate step early (MoogTransistorLadder's twin)."""
+        mean and the equaliser at the rate it runs at, `equaliser.latency_steps` late; at 2x after the elliptic
+        upsampler (the half-band's response, re the first sample's time) and before the linear-phase downsampler."""
         w = 2 * math.pi * frequency_hz / (sample_rate * self.oversampling)
         late = cmath.exp(-1j * w * self.equaliser.latency_steps)
         response = self.equaliser.small_signal_response(w) * late
         if self.oversampling == 2:
-            response *= halfband_response(frequency_hz / (2 * sample_rate), halfband_coefficients()) ** 2 * cmath.exp(1j * w)
+            frequency_over_doubled_rate = frequency_hz / (2 * sample_rate)
+            response *= halfband_response(frequency_over_doubled_rate, halfband_coefficients()) \
+                * self.downsampler.response(frequency_over_doubled_rate)
         return response
 
     def functions(self):
@@ -151,18 +180,16 @@ class AntiderivativeTanhSaturator(Technique):
 
 
 class AntiderivativeTanhSaturatorLinearTwin(AntiderivativeTanhSaturator):
-    """`<name>_out` = `input` through the saturator's linear path at `oversampling`: the same half-band pair, mean
-    and equaliser, with the straight line x in place of tanh (whose first-order ADAA is the 2-tap mean, exactly). Its
-    response is the saturator's `small_signal_response` at every frequency (the saturator's slope at 0 taken out), so
-    it lines up what an instrument mixes against a saturated signal: a dry path at a dry / wet mix.
+    """`<name>_out` = `input` through the saturator's linear path at `oversampling`: the same upsampler, mean,
+    equaliser and downsampler, with the straight line x in place of tanh (whose first-order ADAA is the 2-tap mean,
+    exactly). Its response is the saturator's `small_signal_response` at every frequency (the saturator's slope at 0
+    taken out), so it lines up what an instrument mixes against a saturated signal: a dry path at a dry / wet mix.
 
-    Why not a delay: at 2x the half-band pair is not linear phase (its phase delay 4.32 samples at 100 Hz, 4.64 at
-    10 kHz, 6.71 at 20 kHz at 44.1 kHz), so no integer-plus-fractional delay follows it. Measured 2026-10-20 (the
-    saturator at 2x against the dry at a 50 % mix, 44.1 kHz): 4 samples and a first-order Thiran all-pass for 0.32
-    (Smith, "Thiran Allpass Interpolators") leaves -0.44 dB at 10 kHz and -2.3 dB at 20 kHz; the Thiran chosen for the
-    least worst comb over 20 Hz - 20 kHz at 44.1 and 48 kHz notches 20 kHz at 48 kHz (-23 dB); the half-band pair and
-    a Thiran for the remaining 1.25 samples leaves -0.50 dB at 20 kHz; the twin leaves none (tests/test_techniques.py).
-    At 1x it is the 2-tap mean, half a sample late."""
+    Why not a delay: at 2x the elliptic upsampler is not linear phase, so no integer-plus-fractional delay follows it.
+    Measured 2026-10-20 (the saturator at 2x against the dry at a 50 % mix, 44.1 kHz): 22 samples and a first-order
+    Thiran all-pass for the remaining 1.03 (Smith, "Thiran Allpass Interpolators") leaves -0.07 dB at 10 kHz and
+    -15.1 dB at 20 kHz; the twin leaves none (tests/test_techniques.py). At 1x it is the 2-tap mean, half a sample
+    late."""
 
     def __init__(self, instance_name, *, input, oversampling):
         super().__init__(instance_name, input=input, oversampling=oversampling)

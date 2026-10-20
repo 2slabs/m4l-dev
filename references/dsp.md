@@ -160,8 +160,8 @@ particularly simple form" from ([22] there). Higher orders need tanh's second an
 used.
 
 The mean is the 2-tap mean on small signals; after it the kit's ADAA equaliser for first order at the rate it runs at
-(above): at 1× none, at 2× the 5-tap design between the kit's half-band pair (below, "Halfband oversampler"; Bilbao
-et al. evaluate "at a 2× oversampled rate"). Being linear and after the mean, it is the same filter on everything that
+(above): at 1× none, at 2× the 5-tap design between the kit's elliptic half-band upsampler and its linear-phase
+half-band downsampler (below, "Halfband oversampler"; Bilbao et al. evaluate "at a 2× oversampled rate"). Being linear and after the mean, it is the same filter on everything that
 goes through, at any drive. A bias is taken as held over a step (the mean of tanh along x + b, less tanh b, before the
 equaliser and the downsampler, so silence is 0 from the first sample).
 
@@ -169,32 +169,43 @@ Measured 2026-10-20 (tests/test_techniques.py keeps each):
 
 | | 1× | 2× |
 |---|---|---|
-| small signals, 44.1 kHz | cos(w/2): −0.56 dB at 5 kHz, −2.42 at 10 kHz, −6.35 at 15 kHz, −10.9 at 18 kHz, −16.7 at 20 kHz | within 0.05 dB to 20 kHz (−0.050 at 20 kHz) |
+| small signals, 44.1 kHz | cos(w/2): −0.56 dB at 5 kHz, −2.42 at 10 kHz, −6.35 at 15 kHz, −10.9 at 18 kHz, −16.7 at 20 kHz | within 0.01 dB to 18 kHz, −0.03 at 19 kHz, −0.27 at 20 kHz (the elliptic downsampler: −0.050 at 20 kHz) |
 | small signals, 48 kHz | −0.47, −2.01, −5.11, −8.34, −11.7 dB | within 0.01 dB to 20 kHz |
-| latency at 100 Hz | 0.5 samples, linear phase | 4.32 samples (1.25 + the half-band pair's 3.07), not linear phase |
-| worst alias under 20 kHz, 48 kHz (coherent): 1.37 kHz drive 4 / 3.1 kHz drive 4 / 5 kHz drive 4 / 8 kHz drive 12 / 12 kHz drive 4 / 8 kHz drive 2.7 bias 0.3 | −78.6 / −48.9 / −36.7 / −31.7 / −27.9 / −34.9 dB | −157.6 / −97.7 / −78.4 / −46.5 / −48.0 / −64.9 dB |
-| 8 kHz drive 2.7 at 44.1 kHz, worst alias under 10 kHz (naive −23.3; biased: naive −24.6) | −53.2 dB (biased −47.0) | −78.6 dB (biased −77.7) |
+| latency at 100 Hz | 0.5 samples, linear phase | 23.03 samples (1.25 + the elliptic upsampler's 1.78 + the linear-phase downsampler's 20), not linear phase |
+| worst alias under 20 kHz, 48 kHz (coherent): 1.37 kHz drive 4 / 3.1 kHz drive 4 / 5 kHz drive 4 / 8 kHz drive 12 / 12 kHz drive 4 / 8 kHz drive 2.7 bias 0.3 | −78.6 / −48.9 / −36.7 / −31.7 / −27.9 / −34.9 dB | −157.0 / −97.7 / −78.4 / −46.5 / −48.0 / −64.9 dB |
+| 8 kHz drive 2.7 at 44.1 kHz, worst alias under 10 kHz (naive −23.3; biased: naive −24.6) | −53.2 dB (biased −47.0) | −78.6 dB (biased −76.5) |
 | hot sines (drive 3 and 20, 5–15 kHz, 44.1–96 kHz): the fundamental off tanh's (Fourier series) through the block's linear response | ≤ 0.34 (of 1.27) | ≤ 0.13 |
-| peaks | never above 1 (a mean of tanh) | < 1.74 (the half-band's ringing on a square-ish wave) |
-| CPU a host sample (below): plain / biased | 55–63 / 75–86 ns | 150–171 / 183–209 ns |
+| peaks, hot sines | never above 1 (a mean of tanh; the quotient's rounding, ~1e-9) | 1.51 |
+| peaks, hot broadband (48 kHz, +30 / +36 dB): white noise / a snare-like burst; the ideal (tanh at 16×, low-passed at 20 kHz) 1.74 / 1.78, 1.66 / 1.71 | never above 1 | 1.87 / 1.91, 1.71 / 1.71 (the elliptic downsampler: 2.79 / 2.85, 2.58 / 2.57) |
+| bound for any input (`output_bound_per_unit_mean`: the sum of the chain's \|taps\| after the mean, × the mean's bound 1, or 1 + \|tanh b\| biased) | 1 | 2.19 |
+| CPU a host sample (below): plain / biased | 55–63 / 75–86 ns | 150–171 / 183–209 ns with the elliptic downsampler; the linear-phase one +45 / +59 ns (re-measured 2026-10-20, best of 5 interleaved runs: 106 → 151, 132 → 191 ns) |
 
 CPU (ours, 2026-10-20): the kit renderer's C (`m4l_dev/genexpr.py`'s translation, CPython's libm calls) built at −O2
 instead of the test suite's −O0, 2^20 samples of a hot sweeping sine through preallocated buffers, best of 31, three
 runs (ranges) on an i7-8700 under load (load average ~70 on 12 threads): not Max's gen~ compiler, so a ratio, not a
-budget. A naive tanh(x) is 25–35 ns; the half-band pair alone 17–23 ns; the 259 folder's second-order shaper 50–54 ns
+budget. A naive tanh(x) is 25–35 ns; the elliptic half-band pair alone 17–23 ns; the 259 folder's second-order shaper 50–54 ns
 at 1× (one step), 110–132 ns at 2× (two steps, the 2× equaliser, the downsampler). The 2× saturator is 2.4–2.8× the
-1×.
+1× with the elliptic downsampler, about 3.7× with the linear-phase one.
 
-**The linear twin** (`AntiderivativeTanhSaturatorLinearTwin`, ours, 2026-10-20): the same pair, mean and equaliser
+**Peaks (ours, 2026-10-20; PLANS/2026-10-20-tanh-saturator-peaks.md).** 2sl drums' strip (this block at 2×, bias 0)
+peaked at 2.1 on a snare at +36 dB. Stage by stage (a numpy model of the block, equal to the kit's renderer to 1e-14):
+the mean never leaves 1; the equaliser after it reaches 1.8 at the 2× rate (its taps' sum of |taps| 2.09, its gain at
+the 2× Nyquist); the elliptic downsampler takes that to 2.85 on hot white noise (2.42 with no equaliser). A
+linear-phase half-band of the same edges and depth takes it to 1.91 (1.57 with no equaliser), against the ideal's 1.78:
+the elliptic's phase near its corner was most of the excess, the equaliser the rest, and band-limiting itself most of
+the peak (a clipped broadband wave is no square wave: its overshoot is not Gibbs' 9 %). 2sl drums' demo kit at +30 /
++36 dB, bias 0, EQ flat, Compress 0, 48 kHz, before → after: kick 1.10 / 1.14 → 1.04 / 1.01, snare 2.06 / 2.11 →
+1.45 / 1.50, clap 1.62 / 1.79 → 1.33 / 1.41, closed hat 1.71 / 1.81 → 1.37 / 1.37, open hat 2.04 / 2.16 → 1.41 / 1.53,
+rim 1.65 / 1.71 → 1.36 / 1.40, metal 1.82 / 1.88 → 1.37 / 1.42, tom 1.14 / 1.29 → 1.03 / 1.06.
+
+**The linear twin** (`AntiderivativeTanhSaturatorLinearTwin`, ours, 2026-10-20): the same up- and downsampler, mean and equaliser
 with x in place of tanh (x's first-order ADAA is exactly the 2-tap mean), so its response is the saturator's small-signal
-response at every frequency: what an instrument puts on a dry path it mixes against the saturator. At 2× the half-band
-pair is not linear phase (the saturator's phase delay at 44.1 kHz: 4.32 samples at 100 Hz, 4.39 at 5 kHz, 4.64 at
-10 kHz, 5.86 at 18 kHz, 6.71 at 20 kHz), so a delay can't follow it. At a 50 % mix against the 2× saturator, 44.1 kHz
-(48 kHz in brackets), the comb left at 1 / 5 / 10 / 20 kHz: 4 samples and a first-order Thiran (above's source) for
-0.32: −0.0002 / −0.010 / −0.44 / −2.28 dB (−0.0002 / −0.007 / −0.26 / −1.69); the Thiran with the least worst comb
-over 20 Hz–20 kHz at both rates (4.53 samples) notches 20 kHz at 48 kHz (−23 dB); the half-band pair and a Thiran for
-the remaining 1.25: −0.0002 / −0.004 / −0.023 / −0.50 dB; the twin: none (rounding, −134 dB under a 1e-4 signal).
-The twin costs the half-band pair and the equaliser, no tanh (about the pair's 17–23 ns, above).
+response at every frequency: what an instrument puts on a dry path it mixes against the saturator. At 2× the elliptic
+upsampler is not linear phase, so a delay can't follow it. Before the linear-phase downsampler (the elliptic pair,
+4.32 samples at 100 Hz, 6.71 at 20 kHz), 4 samples and a first-order Thiran (above's source) for 0.32 left a comb of
+−0.44 / −2.28 dB at 10 / 20 kHz at a 50 % mix, 44.1 kHz; now 22 samples and a Thiran for the remaining 1.03 leave
+−0.07 / −15.1 dB; the twin: none (rounding, −134 dB under a 1e-4 signal).
+The twin costs the up- and downsampler and the equaliser, no tanh.
 
 Replaced (2026-10-20): the split tanh x = x + (tanh x − x), x through a first-order Thiran allpass of half a sample
 (**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"**, `jos-thiran-allpass.html`: a1 =
@@ -422,6 +433,13 @@ The kit's default: 8 coefficients, transition 0.04, 99.3 dB (compute_atten); mea
 folds to 14.1 kHz at −113.5 dB (naive decimation: 0 dB); an FM pair (9 kHz carrier, 1.3 kHz modulator, index 10) run
 at 2× aliases at −84.1 dB re the carrier below 20 kHz, at 1× at −11.8 dB; up then down is flat to 15 kHz (±0.001 dB)
 and 3.07 samples late at 100 Hz.
+
+The linear-phase downsampler (`HalfbandLinearPhaseDownsampler`, ours, 2026-10-20: for after a saturator; above,
+"Peaks"): the ideal half-band 0.5 sinc(k/2) under **Kaiser's window**, its β and length from Kaiser's formulas as
+**Oppenheim & Schafer, *Discrete-Time Signal Processing*, 3rd ed., §7.6.1, eqs. (7.62)–(7.63)** give them (β =
+0.1102 (A − 8.7) for A > 50; M = (A − 8) / (2.285 Δω)); not mirrored (a textbook), the formulas held by the test (stop
+band ≤ −100 dB from 0.29, pass band within 1e-4 dB to 0.21). A = 100 dB and the elliptic's edges: 83 taps, 20 samples
+late, a 30 kHz tone at 88.2 kHz folds at −120.4 dB; −0.22 dB at 20 kHz at 44.1 kHz (the elliptic flat there).
 
 ## gen~ (what Max accepts)
 

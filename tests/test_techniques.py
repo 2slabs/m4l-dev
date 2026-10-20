@@ -46,8 +46,10 @@ from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
 from m4l_dev.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
 from m4l_dev.techniques.halfband_oversampler import (HALFBAND_ROUND_TRIP_LATENCY_SAMPLES,  # noqa: E402
-                                                     HalfbandDownsampler, HalfbandUpsampler,
-                                                     halfband_attenuation_db, halfband_coefficients, halfband_response)
+                                                     HalfbandDownsampler, HalfbandLinearPhaseDownsampler,
+                                                     HalfbandUpsampler, halfband_attenuation_db, halfband_coefficients,
+                                                     halfband_response, linear_phase_halfband_response,
+                                                     linear_phase_halfband_taps)
 from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetallicNoise, lfsr_cycle  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
@@ -254,14 +256,18 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
 
     def test_small_signals_are_its_linear_response(self):
         # 1x: the 2-tap mean cos(w / 2), half a sample late (-2.4 dB at 10 kHz, -6.4 dB at 15 kHz at 44.1 kHz);
-        # 2x: the mean and its equaliser at the 2x rate between the half-band pair: within 0.05 dB to 20 kHz at
-        # 44.1 kHz, 0.01 dB at 48 kHz (measured 2026-10-20)
+        # 2x: the mean and its equaliser at the 2x rate between the elliptic upsampler and the linear-phase
+        # downsampler: within 0.01 dB to 18 kHz at 44.1 kHz (-0.03 at 19 kHz, -0.27 at 20 kHz), to 20 kHz at 48 kHz
+        # (measured 2026-10-20)
         count = 8192
         for rate in (44100.0, 48000.0):
             for oversampling in (1, 2):
                 block = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
                 for frequency in (100.0, 1000.0, 5000.0, 10000.0, 15000.0, 18000.0, 20000.0):
-                    quiet = [0.001 * math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
+                    # at 100 Hz the Hann bin over 8192 samples leaks its negative frequency by ~6e-6 at 23 samples
+                    # late: four times the length there
+                    length = 4 * count if frequency < 500.0 else count
+                    quiet = [0.001 * math.sin(2 * math.pi * frequency * i / rate) for i in range(length)]
                     gain = complex_amplitude_at(self.saturate(quiet, oversampling, rate)[1000:], frequency, rate) / \
                         complex_amplitude_at(quiet[1000:], frequency, rate)
                     twin = block.small_signal_response(frequency, rate)
@@ -269,14 +275,17 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
                     if oversampling == 1:
                         self.assertAlmostEqual(abs(twin), math.cos(math.pi * frequency / rate), places=12)
                     else:
-                        self.assertLess(abs(20 * math.log10(abs(twin))), 0.05 if rate == 44100.0 else 0.0101,
-                                        msg=(rate, frequency))
+                        # the linear-phase downsampler's pass band ends at 0.21 of the 2x rate (18.5 kHz at
+                        # 44.1 kHz): -0.27 dB at 20 kHz there
+                        bound = 0.0101 if rate == 48000.0 or frequency <= 18000.0 else 0.28
+                        self.assertLess(abs(20 * math.log10(abs(twin))), bound, msg=(rate, frequency))
         self.assertAlmostEqual(20 * math.log10(math.cos(math.pi * 10000.0 / 44100.0)), -2.42, places=2)
 
     def test_its_latency_is_the_measured_delay_at_100_hz(self):
-        for oversampling, expected in ((1, 0.5), (2, 4.32)):
+        # 2x: the mean and its equaliser 1.25, the elliptic upsampler 1.78, the linear-phase downsampler 20
+        for oversampling, expected in ((1, 0.5), (2, 23.03)):
             block = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
-            self.assertAlmostEqual(block.latency_samples, expected, places=12)
+            self.assertAlmostEqual(block.latency_samples, expected, delta=0.005)
             sine = [0.001 * math.sin(2 * math.pi * 100.0 * i / self.SAMPLERATE) for i in range(8820)]
             delay = -phase_degrees(self.saturate(sine, oversampling)[4410:], sine[4410:], 100.0, self.SAMPLERATE) / 360 \
                 * self.SAMPLERATE / 100.0
@@ -305,6 +314,30 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
                         case = f"{oversampling}x, {samplerate} Hz rate, {frequency} Hz, drive {drive}"
                         self.assertLess(error, error_bound, msg=case)
                         self.assertLess(max(map(abs, out)), peak_bound, msg=case)
+
+    def test_hot_broadband_input_peaks_under_its_derived_bound(self):
+        # a clipped broadband wave band-limited overshoots: tanh at 16x low-passed at 20 kHz (numpy, 2026-10-20) peaks
+        # 1.74 / 1.78 on this white noise at +30 / +36 dB, 1.66 / 1.71 on the snare-like burst. Measured 2026-10-20 at
+        # 2x: the elliptic downsampler 2.79 / 2.85 and 2.58 / 2.57, the linear-phase one 1.87 / 1.91 and 1.71 / 1.71;
+        # never above the chain's sum of |taps| (2.19) times the mean's bound 1. At 1x no chain: never above 1. Both
+        # but for the quotient's rounding (ILL_CONDITIONED_STEP: about 1e-9 at |x| 50; 1e-14 seen here).
+        rate = 48000.0
+        noise_source = random.Random(20261020)
+        noise = [0.3 * noise_source.uniform(-1, 1) for _ in range(12000)]
+        snare = [math.exp(-i / (0.08 * rate)) * (0.5 * math.sin(2 * math.pi * 190.0 * i / rate)
+                                                  + 0.5 * noise_source.uniform(-1, 1)) for i in range(12000)]
+        self.assertAlmostEqual(AntiderivativeTanhSaturator("d", input="in1", oversampling=2).output_bound_per_unit_mean,
+                               2.19, delta=0.005)
+        self.assertEqual(AntiderivativeTanhSaturator("d", input="in1", oversampling=1).output_bound_per_unit_mean, 1.0)
+        for name, source, measured_bound in (("white noise", noise, 1.95), ("snare-like burst", snare, 1.76)):
+            for drive_db in (30.0, 36.0):
+                driven = [value * 10 ** (drive_db / 20) for value in source]
+                for oversampling, bound in ((1, 1.0), (2, measured_bound)):
+                    block = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
+                    peak = max(map(abs, self.saturate(driven, oversampling, rate)))
+                    case = (name, drive_db, oversampling)
+                    self.assertLessEqual(peak, block.output_bound_per_unit_mean + 1e-9, msg=case)
+                    self.assertLess(peak, bound + 1e-9, msg=case)
 
     def test_near_equal_samples_are_exact(self):
         signal = [0.5 + 1e-12 * i for i in range(200)] + [3.0] * 50 + [-20.0] * 50
@@ -376,16 +409,19 @@ class AntiderivativeTanhSaturatorLinearTwinTests(unittest.TestCase):
 
     def test_a_dry_through_it_has_no_comb_where_a_delay_would(self):
         # 50 % of the saturator's small-signal response and 50 % of the dry, against 1, at 44.1 kHz (measured
-        # 2026-10-20): 4 samples + a Thiran all-pass for 0.32 leaves -0.44 dB at 10 kHz, -2.3 dB at 20 kHz; the twin 0
+        # 2026-10-20): 22 samples + a Thiran all-pass for the remaining 1.03 (the latency 23.03) leaves -0.07 dB at
+        # 10 kHz, -15.1 dB at 20 kHz (the elliptic upsampler's phase); the twin 0
         rate = 44100.0
         saturator = AntiderivativeTanhSaturator("drive", input="in1", oversampling=2)
-        thiran_coefficient = (1 - 1.32) / (1 + 1.32)          # Smith, "Thiran Allpass Interpolators": (1 - D) / (1 + D)
+        whole_samples = math.floor(saturator.latency_samples) - 1
+        thiran_delay = saturator.latency_samples - whole_samples
+        thiran_coefficient = (1 - thiran_delay) / (1 + thiran_delay)  # Smith, "Thiran Allpass Interpolators"
 
         def thiran_dry(frequency):
             z = cmath.exp(-2j * math.pi * frequency / rate)
-            return z ** 3 * (thiran_coefficient + z) / (1 + thiran_coefficient * z)
+            return z ** whole_samples * (thiran_coefficient + z) / (1 + thiran_coefficient * z)
 
-        for frequency, delay_comb_db in ((10000.0, -0.44), (20000.0, -2.28)):
+        for frequency, delay_comb_db in ((10000.0, -0.07), (20000.0, -15.07)):
             wet = saturator.small_signal_response(frequency, rate)
             self.assertAlmostEqual(20 * math.log10(abs(0.5 * (wet + thiran_dry(frequency)))), delay_comb_db, delta=0.01)
         twin = AntiderivativeTanhSaturatorLinearTwin("dry", input="in1", oversampling=2)
@@ -1508,9 +1544,9 @@ class HalfbandOversamplerTests(unittest.TestCase):
         worst_stop = max(abs(halfband_response(0.29 + 0.21 * k / 400, coefficients)) for k in range(401))
         self.assertLess(20 * math.log10(worst_stop), -99.0)
 
-    def downsampled(self, two_times_rate_signal):
+    def downsampled(self, two_times_rate_signal, downsampler_type=HalfbandDownsampler):
         """`two_times_rate_signal`: a GenExpr expression of `t` (seconds) at twice the rate."""
-        down = HalfbandDownsampler("down", first="first", second="second")
+        down = downsampler_type("down", first="first", second="second")
         first = two_times_rate_signal.replace("t_", "(count / samplerate)")
         second = two_times_rate_signal.replace("t_", "((count + 0.5) / samplerate)")
         code = gen_code_with_blocks(
@@ -1520,11 +1556,46 @@ class HalfbandOversamplerTests(unittest.TestCase):
         return GenProgram(code, 0, 2, samplerate=self.SAMPLERATE).run(8192 + 2000)
 
     def test_the_downsampler_stops_what_naive_decimation_folds(self):
-        # a 30 kHz tone at 88.2 kHz: dropping every other sample folds it to 14.1 kHz at full level
-        filtered, naive = self.downsampled("sin(twopi * 30000 * t_)")
-        alias = self.SAMPLERATE - 30000.0
-        self.assertGreater(amplitude_at(naive[2000:], alias, self.SAMPLERATE), 0.99)
-        self.assertLess(20 * math.log10(amplitude_at(filtered[2000:], alias, self.SAMPLERATE)), -99.0)  # -113.5
+        # a 30 kHz tone at 88.2 kHz: dropping every other sample folds it to 14.1 kHz at full level; the elliptic
+        # downsampler -113.5 dB, the linear-phase one -120.4 dB (measured 2026-10-20)
+        for downsampler_type in (HalfbandDownsampler, HalfbandLinearPhaseDownsampler):
+            filtered, naive = self.downsampled("sin(twopi * 30000 * t_)", downsampler_type)
+            alias = self.SAMPLERATE - 30000.0
+            self.assertGreater(amplitude_at(naive[2000:], alias, self.SAMPLERATE), 0.99)
+            self.assertLess(20 * math.log10(amplitude_at(filtered[2000:], alias, self.SAMPLERATE)), -99.0,
+                            msg=downsampler_type)
+
+    def test_the_linear_phase_design_is_a_kaiser_half_band_as_deep_as_the_elliptic(self):
+        # Kaiser's formulas at 100 dB and the elliptic's band edges (pass to 0.21, stop from 0.29 of the 2x rate):
+        # 83 taps (K 21), every other one 0, the middle 0.5, DC 1; the stop band -100.3 dB, the pass band within 1e-4 dB
+        taps = linear_phase_halfband_taps()
+        self.assertEqual(len(taps), 83)
+        self.assertEqual(taps[41], 0.5)
+        self.assertTrue(all(taps[n] == 0.0 for n in range(1, 83, 2) if n != 41))
+        self.assertEqual(taps, tuple(reversed(taps)))
+        self.assertAlmostEqual(sum(taps), 1.0, places=15)
+        worst_stop = max(abs(linear_phase_halfband_response(0.29 + 0.21 * k / 400, taps)) for k in range(401))
+        self.assertLess(20 * math.log10(worst_stop), -100.0)
+        for f in (0.0, 0.05, 0.1, 0.15, 0.2, 0.21):
+            self.assertLess(abs(20 * math.log10(abs(linear_phase_halfband_response(f, taps)))), 1e-4, f)
+        for bad in (40.0, 250.0):
+            with self.assertRaises(BuildError):
+                linear_phase_halfband_taps(bad)
+        with self.assertRaises(BuildError):
+            HalfbandLinearPhaseDownsampler("down", first="in1", second="in1", taps=(0.0, 0.25, 0.0, 0.5, 0.0, 0.25, 0.0))
+
+    def test_the_linear_phase_downsampler_is_its_response_and_k_minus_1_late(self):
+        down = HalfbandLinearPhaseDownsampler("down", first="first", second="second")
+        self.assertEqual(down.latency_samples, 20)
+        for frequency in (100.0, 5000.0, 18000.0):
+            filtered, _ = self.downsampled(f"sin(twopi * {frequency!r} * t_)", HalfbandLinearPhaseDownsampler)
+            reference = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(len(filtered))]
+            gain = complex_amplitude_at(filtered[2000:], frequency, self.SAMPLERATE) / complex_amplitude_at(
+                reference[2000:], frequency, self.SAMPLERATE)
+            # (the Hann bin over 8192 samples leaks 1.6e-6 at 100 Hz)
+            self.assertLess(abs(gain - down.response(frequency / (2 * self.SAMPLERATE))), 3e-6, msg=frequency)
+            late = cmath.exp(-2j * math.pi * frequency / self.SAMPLERATE * down.latency_samples)
+            self.assertLess(abs(down.response(frequency / (2 * self.SAMPLERATE)) / late - 1), 2e-5, msg=frequency)
 
     def test_an_fm_pair_at_2x_aliases_far_less_than_at_1x(self):
         # carrier 9 kHz, modulator 1.3 kHz, index 10: its sidebands (9000 + k 1300) run past Nyquist. Kept ones sit at

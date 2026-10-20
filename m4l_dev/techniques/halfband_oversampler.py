@@ -20,6 +20,13 @@ frequencies, measured in tests/test_techniques.py (HALFBAND_ROUND_TRIP_LATENCY_S
 the phase delay at 100 Hz); not linear phase (HIIR's
 readme: the delays are "quite flat ... from DC up to about Fs/20" and rise toward the cut-off).
 
+The linear-phase downsampler (`HalfbandLinearPhaseDownsampler`, `linear_phase_halfband_taps`): the same band edges
+and at least the elliptic's depth (100 dB) as a Kaiser-windowed half-band FIR, 83 taps (21 multiplies a base-rate
+sample), 20 samples late at every frequency. For after a saturator: band-limiting a clipped broadband wave overshoots
+(the ideal, tanh at 16x low-passed at 20 kHz, peaks 1.78 on hot white noise), and the elliptic's phase near its corner
+rings it far past that (2.85 through the tanh saturator at 2x; the FIR 1.91). Its pass band is flat to its edge, not
+past it (-0.22 dB at 20 kHz at 44.1 kHz, where the elliptic is still flat to 1e-9 dB).
+
 How a section runs at 2x: its statements run twice a sample (its marker placed twice, or its point code evaluated
 at two points, architecture/dsp-blocks.md "Points"), once on `<name>_first`, once on `<name>_second` of an
 upsampler (or on its own 2x-rate oscillators), and the downsampler takes the two results.
@@ -187,3 +194,111 @@ class HalfbandDownsampler(Technique):
 
 # The default design's up-then-down phase delay at 100 Hz, in base-rate samples (measured, tests/test_techniques.py)
 HALFBAND_ROUND_TRIP_LATENCY_SAMPLES = 3.07
+
+
+# The linear-phase half-band (a windowed-sinc FIR, Kaiser's window): the downsampler after a saturator, where the
+# elliptic half-band's phase near its corner rings a clipped broadband wave far past the band-limited ideal's peak
+# (PLANS/2026-10-20-tanh-saturator-peaks.md: hot white noise through the tanh saturator at 2x, 48 kHz: the elliptic
+# pair 2.85, this one 1.91, tanh at 16x low-passed at 20 kHz 1.78). Its band edges are the elliptic default's
+# (pass to 0.21, stop from 0.29 of the doubled rate) and its stop band at least as deep (100 dB against 99.3 dB).
+LINEAR_PHASE_HALFBAND_ATTENUATION_DB = 100.0
+
+
+def _bessel_i0(x):
+    """The zeroth-order modified Bessel function of the first kind, by its power series (to 1e-17 of the sum)."""
+    total = term = 1.0
+    k = 0
+    while term > 1e-17 * total:
+        k += 1
+        term *= (x / (2 * k)) ** 2
+        total += term
+    return total
+
+
+def linear_phase_halfband_taps(attenuation_db=LINEAR_PHASE_HALFBAND_ATTENUATION_DB, transition=DEFAULT_TRANSITION):
+    """The half-band low-pass FIR at the doubled rate, taps by delay (4 K - 1 of them, symmetric): the ideal
+    half-band 0.5 sinc(k / 2) under Kaiser's window, its length and shape from Kaiser's formulas (Oppenheim & Schafer,
+    Discrete-Time Signal Processing 3rd ed., eqs. 7.62-7.63: beta = 0.1102 (A - 8.7) for A > 50, order
+    M = (A - 8) / (2.285 dw), dw the transition's width 2 x `transition` of the doubled rate in radians), M raised to
+    the next 4 K - 2 so the middle tap sits on a whole odd offset. Every even offset from the middle is exactly 0 (a
+    half-band), the middle exactly 0.5, the odd ones scaled to sum 0.5 (DC exactly 1)."""
+    if not 50 < attenuation_db < 200:
+        raise BuildError(f"linear_phase_halfband_taps: attenuation_db is Kaiser's A > 50 dB (beta's formula there), "
+                         f"under 200, got {attenuation_db!r}")
+    if not 0 < transition < 0.25:
+        raise BuildError(f"linear_phase_halfband_taps: transition must be in (0, 0.25), got {transition!r}")
+    beta = 0.1102 * (attenuation_db - 8.7)
+    order = (attenuation_db - 8) / (2.285 * 2 * math.pi * 2 * transition)
+    pairs = math.ceil((order + 2) / 4)                 # K: order 4 K - 2
+    order = 4 * pairs - 2
+    middle = order // 2
+    raw = []
+    for n in range(order + 1):
+        offset = n - middle
+        window = _bessel_i0(beta * math.sqrt(1 - (offset / middle) ** 2)) / _bessel_i0(beta)
+        raw.append(0.0 if offset % 2 == 0 else math.sin(math.pi * offset / 2) / (math.pi * offset) * window)
+    scale = 0.5 / sum(raw)
+    return tuple(0.5 if n == middle else value * scale for n, value in enumerate(raw))
+
+
+def linear_phase_halfband_response(frequency_over_doubled_rate, taps):
+    """The FIR's complex response at a frequency (a fraction of the doubled rate), its delay included."""
+    w = 2 * math.pi * frequency_over_doubled_rate
+    return sum(tap * complex(math.cos(w * n), -math.sin(w * n)) for n, tap in enumerate(taps))
+
+
+class HalfbandLinearPhaseDownsampler(Technique):
+    """`<name>_out`: the two samples `first`, `second` (a base-rate sample's two at twice the rate, as
+    `HalfbandDownsampler` takes them) through `linear_phase_halfband_taps` and taken at the base rate, polyphase: the
+    second stream through the K tap pairs, the first only through the middle tap 0.5, K - 1 samples back. Linear
+    phase: `latency_samples` (K - 1) late at every frequency re `first`'s time. State: 2 K - 1 past second samples,
+    K - 1 past first samples."""
+
+    def __init__(self, instance_name, first, second, taps=None):
+        super().__init__(instance_name, first=first, second=second)
+        taps = linear_phase_halfband_taps() if taps is None else tuple(taps)
+        length = len(taps)
+        if length < 3 or length % 4 != 3 or taps != tuple(reversed(taps)) or taps[length // 2] != 0.5 \
+                or any(taps[n] != 0.0 for n in range(1, length, 2) if n != length // 2) or abs(sum(taps) - 1) > 1e-15:
+            raise BuildError(f"HalfbandLinearPhaseDownsampler {instance_name}: taps must be a half-band's (4 K - 1, "
+                             f"symmetric, middle 0.5, every other one 0, summing to 1), got {length} taps")
+        self.taps = taps
+        self.pairs = (length + 1) // 4
+        self.latency_samples = self.pairs - 1
+
+    def _second_name(self, age):
+        return f"{self.instance_name}_second" if age == 0 else f"{self.instance_name}_second_before_{age}"
+
+    def _first_name(self, age):
+        return f"{self.instance_name}_first" if age == 0 else f"{self.instance_name}_first_before_{age}"
+
+    def declarations(self):
+        p, k = self.instance_name, self.pairs
+        names = [f"{p}_second_before_{age}(0)" for age in range(1, 2 * k)] + \
+            [f"{p}_first_before_{age}(0)" for age in range(1, k)]
+        return "History " + ", ".join(names) + ";"
+
+    def statements(self):
+        p, k = self.instance_name, self.pairs
+        # the output is taken at the second sample: tap 2 age reads the second stream age samples back (its pair
+        # 2 K - 1 - age by symmetry), the middle tap 2 K - 1 the first stream K - 1 back
+        terms = [f"{self.taps[2 * age]!r} * ({self._second_name(age)} + {self._second_name(2 * k - 1 - age)})"
+                 for age in range(k)]
+        lines = [f"// {p}: 2x half-band downsampler, linear-phase FIR, {len(self.taps)} taps (kit technique: halfband "
+                 f"oversampler)",
+                 f"{p}_first = {self.input_expressions['first']};", f"{p}_second = {self.input_expressions['second']};",
+                 f"{p}_out = 0.5 * {self._first_name(k - 1)} + " + " + ".join(terms) + ";"]
+        lines += [f"{self._second_name(age)} = {self._second_name(age - 1)};" for age in range(2 * k - 1, 0, -1)]
+        lines += [f"{self._first_name(age)} = {self._first_name(age - 1)};" for age in range(k - 1, 0, -1)]
+        return "\n".join(lines)
+
+    def reset_statements(self):
+        p, k = self.instance_name, self.pairs
+        return "\n".join([f"{p}_second_before_{age} = 0;" for age in range(1, 2 * k)]
+                         + [f"{p}_first_before_{age} = 0;" for age in range(1, k)])
+
+    def response(self, frequency_over_doubled_rate):
+        """The base-rate output's response to a signal at the doubled rate, re `first`'s time: the FIR, taken at the
+        second sample (one doubled-rate step early)."""
+        w = 2 * math.pi * frequency_over_doubled_rate
+        return linear_phase_halfband_response(frequency_over_doubled_rate, self.taps) * complex(math.cos(w), math.sin(w))
