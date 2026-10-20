@@ -39,6 +39,26 @@ def amplitude_at(signal, frequency, samplerate):
     return 2 * math.hypot(real, imaginary) / window_sum
 
 
+def complex_amplitude_at(signal, frequency, samplerate):
+    """The complex amplitude (magnitude and phase re a cosine at sample 0) of the sinusoid at `frequency` (Hann
+    window, one DFT bin evaluated directly)."""
+    n = len(signal)
+    total = 0j
+    window_sum = 0.0
+    step = 2 * math.pi * frequency / samplerate
+    for i, value in enumerate(signal):
+        window = 0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1))
+        total += value * window * complex(math.cos(step * i), -math.sin(step * i))
+        window_sum += window
+    return 2 * total / window_sum
+
+
+def phase_degrees(output, reference, frequency, samplerate):
+    """The phase of `output` re `reference` at `frequency`, in degrees, (-180, 180]."""
+    ratio = complex_amplitude_at(output, frequency, samplerate) / complex_amplitude_at(reference, frequency, samplerate)
+    return math.degrees(math.atan2(ratio.imag, ratio.real))
+
+
 def folded(frequency, samplerate):
     frequency = math.fmod(frequency, samplerate)
     return samplerate - frequency if frequency > samplerate / 2 else frequency

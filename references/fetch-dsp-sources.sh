@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetches the sources references/dsp.md was written from into references/dsp-sources/ and checks each is the copy
-# it was read from (sha256, 2026-10-18 / 2026-10-19). Nothing fetched is kept in git (.gitignore).
+# it was read from (sha256, 2026-10-18 / 2026-10-19 / 2026-10-20). Nothing fetched is kept in git (.gitignore).
 # Fails loudly, naming the file, when a download fails or a file changed upstream.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -16,6 +16,9 @@ sources=(
   "downing-terjesen-re201-2016.pdf|https://hajim.rochester.edu/ece/sites/zduan/teaching/ece472/projects/2016/Downing_Terjesen_paper.pdf|c0e25607c04b99d36e0a0489d45df420d4cf86559937ed013540020bc0eceae8"
   "chowdhury-tape-dafx19.pdf|https://dafx.de/paper-archive/2019/DAFx2019_paper_3.pdf|a915d63daee36556a4f267d9a52f07b1000988ecb48013589d926951a10d613c"
   "jos-thiran-allpass.html|https://ccrma.stanford.edu/~jos/pasp/Thiran_Allpass_Interpolators.html|64f53c6e54181a8dbcdaff858df22e18ea045b9f25ed6dd9ab2373f605cd560c"
+  "parker-dangelo-dafx13.pdf|https://www.dafx.de/paper-archive/2013/papers/44.dafx2013_submission_56.pdf|7d0192860e729e6afa0b08b90494c5d849ed0d3a32903f1f5b07941c423f8fcf"
+  "najnudel-et-al-dafx23.pdf|https://www.dafx.de/paper-archive/2023/DAFx23_paper_50.pdf|1a715de02fabb617c00d303d01d6dff91adeca4a429c4573873aaeed2dd36037"
+  "perkinelmer-vt500-catalog.pdf|https://www.amstzone.org/PerkinElmer-VT500.pdf|f932833fc7ce96715803e79edc0c0393ce307704edab08b0457e0f05ae6594fd"
   "data-knot-dk_reverb_library.genexpr|https://raw.githubusercontent.com/rconstanzo/data-knot/e8ebcecadbf0cade540093ab80d0ea726f325f5f/code/dk_reverb_library.genexpr|208e707616dba19ad5c326497c288d8039ba95b30964eafbc546bbdf4fbf36b4"
 )
 failed=0

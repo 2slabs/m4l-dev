@@ -141,6 +141,67 @@ stab: quarter-sine ramp in, `1 + 3 curve` power recovery, 20 ms hand-over betwee
 glide on the gain; 2sl filter: a 3 ms linear ramp in, a squared recovery, a hard switch between the two clocks, no
 glide, plus the gate) with stab's, which is continuous at every join and glides every change.
 
+## Zero-delay one-pole filter (m4l_dev/techniques/zero_delay_one_pole_filter.py)
+
+**Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2** (`zavalishin-va-filter-design-2.1.2.pdf`).
+- §3.10, p. 78 [90], "1-pole allpass": the TPT one-pole's tick, `yAP = yLP − yHP` with
+  `xs := x - s; s := s + xs*2Glp; y := s - xs;`, `Glp = g/(1+g)` (allpass-and-diffusion.md §1 quotes it whole).
+- §3.9 (zero-delay feedback): a loop through such stages is solved by writing each stage's output as an affine function of
+  its input this sample and solving the loop equation for it (the method the ladder uses, eq. 5.8, here for a chain).
+- §3.8, eq. (3.18): the prewarping point, as the state-variable filter's (above).
+
+The technique is the tick's LP and HP (`v = G (x − s)`, `LP = v + s`, `s = LP + v`, `HP = x − LP`) and their affine
+responses `LP = G x + (1 − G) s`, `HP = (1 − G) x − (1 − G) s`, our algebra from the tick. Its LP − HP all-pass is not
+the kit's all-pass section: under fast cutoff modulation it gains energy (below, and tests/test_techniques.py).
+
+## Zero-delay all-pass cascade (m4l_dev/techniques/zero_delay_allpass_cascade.py)
+
+Transfer functions: **Zavalishin rev. 2.1.2** eq. (2.12), p. 29, `H(s) = (1 − s)/(1 + s)`, and §4.7 eq. (4.23), p. 119,
+`HAP(s) = (s² − 2Rs + 1)/(s² + 2Rs + 1)`; "high order allpasses are often created by simply connecting several of 1- and
+2-pole allpasses in series" (p. 30); "The most common VA use for the allpass filters is probably in phasers" (footnote
+23, p. 29). The phaser's notch / peak mathematics (allpass-and-diffusion.md §1 [DERIVED]): n equal first-order stages and
+an equal dry give notches at ω/ωc = tan((n − 2m − 1)π/(2n)); feedback g gives peaks 1/(1 − g) where the phase is a whole
+turn.
+
+Realisation [DERIVED, ours; tested]: the bilinear transform (prewarped, eq. 3.18) of the first-order all-pass is
+`H(z) = (k + z⁻¹)/(1 + k z⁻¹)`, `k = (g − 1)/(g + 1)`; of the second-order one
+`(a2 + a1 z⁻¹ + z⁻²)/(1 + a1 z⁻¹ + a2 z⁻²)`, `D = 1 + 2Rg + g²`, `a2 = (1 − 2Rg + g²)/D`, `a1 = 2(g² − 1)/D`. Each is
+built as a lattice of junctions `[y; f] = [[k, c], [c, −k]]·[x; v]`, `c = √(1 − k²)`, `v` the delayed return of the inner
+all-pass (`A_m = (k_m + z⁻¹A_{m−1})/(1 + k_m z⁻¹A_{m−1})`, the nested form JOS gives, `jos-nested-allpass.html` in
+phaser-diffusion-sources/, with `k2 = a2`, `k1 = a1/(1 + a2) = (g² − 1)/(g² + 1)`); the junction substituted gives
+`y = x (k + z⁻¹A)/(1 + k z⁻¹A)` (our algebra). The matrix is orthogonal, so each sample conserves
+`|y|² + |states|²` whatever k does: lossless under any modulation (the "normalized lattice" of Gray and Markel
+[UNVERIFIED citation: not fetched]). The TPT one-pole's LP − HP is the same map with its state scaled by
+`√((1 − k)/(1 + k))`; when k moves, that scaling moves and energy enters. Measured (tests/test_techniques.py): with
+the cutoff jumping across the band every sample, a TPT all-pass section turns a unit-bounded input into 7.7, six of
+them 470, and a 0.5 feedback loop around six diverges; the lattice conserves energy to 1e-9 and stays bounded in the
+same loop. Zavalishin's footnote 29, p. 42, warns that the continuous-time "cutoff modulation cannot destroy stability"
+argument "will not automatically hold" after discretisation: this is that case.
+
+## LED-driven photocell (m4l_dev/techniques/led_driven_photocell.py)
+
+**Parker & D'Angelo, "A Digital Model of the Buchla Lowpass-Gate", DAFx-13** (`parker-dangelo-dafx13.pdf`).
+- p. 6, eq. (39): `Rf = A / If^1.4 + B`, "where A = 3.464 ΩA1.4 and B = 1136.212 Ω" (the text layer drops the fraction
+  bar; the authors' code reads `Rf = B + A / pow(If,1.4)`, 2sl gate references/vactrol-and-lpg.md §3). A fit to the
+  VTL5C3/2 (56 kΩ at 1 mA, 1.45 kΩ at 40 mA).
+- p. 7: the cell's time constants "approx 12ms in the positive-going direction and 250ms in the negative-going
+  direction" (from the PerkinElmer catalog, their ref. [14]).
+
+**Najnudel, Müller, Hélie & Roze, "Power-Balanced Dynamic Modeling of Vactrols: Application to a VTL5C3/2", DAFx-23**
+(`najnudel-et-al-dafx23.pdf`): p. 6, Fig. 7a, "Photoresistor's turn-off", the measured curve; read from the PDF's vector
+paths in 2sl gate (vactrol-and-lpg.md §4.3), `R(t) = 3.4 kΩ (1 + t/3 ms)^1.35` within ±5 % over 2–185 ms [DERIVED there].
+
+**PerkinElmer, "Photoconductive Cells and Analog Optoisolators (Vactrols)", 2001** (`perkinelmer-vt500-catalog.pdf`):
+PDF p. 50, VTL5C3 turn-on to 63 % 2.5 ms, turn-off 35 ms; p. 46 notes 3 ("The ultimate resistance is many times
+greater than the value at 10 seconds") and 4 (the rise time is longer at reduced drive "while the conductance decay
+time to a specified value is decreased").
+
+The technique is 2sl gate 0.3.2's vactrol (vactrol-and-lpg.md §5, our model on the above): attack a one-pole toward the
+drive; release `dI/dt = −c (I² − Id²)` stepped `I ← (I + c dt Id²)/(1 + c dt I)` (recombination at a rate ∝ n²: a
+reading of the physics, unverified for any cell), which with eq. (39) gives the measured power-law turn-off; the law
+and the times are the caller's. 2sl gate's version floors the drive at the driver's minimum current; this one floors
+the state, so `release_ms` is exactly the undriven time from `release_from_amps` to `release_to_amps`.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):

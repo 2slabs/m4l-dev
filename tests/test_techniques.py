@@ -20,13 +20,23 @@ from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
 from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
 from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: E402
+
+
+from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
 from m4l_dev.techniques.tape_style_echo import TapeStyleEcho  # noqa: E402
+from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
+                                                           SecondOrderAllpassStage, ZeroDelayAllpassCascade)
+from m4l_dev.techniques.zero_delay_allpass_cascade import \
+    small_signal_response as cascade_small_signal_response  # noqa: E402
 from m4l_dev.techniques.zero_delay_ladder_filter import (ZeroDelayLadderFilter, response_script_code,  # noqa: E402
                                                          small_signal_magnitude)
+from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter  # noqa: E402
+from m4l_dev.techniques.zero_delay_one_pole_filter import \
+    small_signal_response as one_pole_small_signal_response  # noqa: E402
 from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
                                                                  ring_time_constant_seconds, small_signal_response)
-from gen_block_harness import (amplitude_at, cents, folded, frequency_by_zero_crossings, harness,  # noqa: E402
-                               worst_alias_db)
+from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, folded,  # noqa: E402
+                               frequency_by_zero_crossings, harness, phase_degrees, worst_alias_db)
 
 
 class ZeroDelayLadderFilterTests(unittest.TestCase):
@@ -571,6 +581,201 @@ class SidechainStylePumpTests(unittest.TestCase):
             value = float(es5.evaluate(script + f"\nsidechainPumpDuck({phase}, {attack_ms}, {division_ms}, {release}, {curve})"))
             self.assertAlmostEqual(value, sidechain_style_pump.pump_duck(phase, attack_ms, division_ms, release, curve),
                                    places=9)
+
+
+def third_difference_rms(signal):
+    """RMS of y[n] - 3y[n-1] + 3y[n-2] - y[n-3]: a steep high-pass that a smooth signal barely passes and a step
+    (a zipper) passes whole."""
+    values = [signal[i] - 3 * signal[i - 1] + 3 * signal[i - 2] - signal[i - 3] for i in range(3, len(signal))]
+    return math.sqrt(sum(v * v for v in values) / len(values))
+
+
+class ZeroDelayOnePoleFilterTests(unittest.TestCase):
+    SAMPLERATE = 22050.0
+
+    def test_small_signals_are_the_prewarped_analog_one_pole(self):
+        for cutoff in (120.0, 1000.0, 7000.0):
+            for frequency in (cutoff / 3, cutoff, min(cutoff * 2.5, 0.4 * self.SAMPLERATE)):
+                program = harness([ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="cutoff")], {"cutoff": cutoff},
+                                  ["pole_lowpass", "pole_highpass"], samplerate=self.SAMPLERATE)
+                sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(8820)]
+                outputs = program.run(8820, [sine])
+                expected = one_pole_small_signal_response(frequency, cutoff, self.SAMPLERATE)
+                for name, output in zip(("lowpass", "highpass"), outputs):
+                    with self.subTest(cutoff=cutoff, frequency=frequency, output=name):
+                        measured = complex_amplitude_at(output[4410:], frequency, self.SAMPLERATE) / \
+                            complex_amplitude_at(sine[4410:], frequency, self.SAMPLERATE)
+                        self.assertLess(abs(measured - expected[name]), 2e-4)
+
+    def test_low_pass_plus_high_pass_is_the_input(self):
+        program = harness([ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="20 + 9000 * (0.5 + 0.5 * sin(in1 * 300))")],
+                          {}, ["pole_lowpass + pole_highpass"], samplerate=self.SAMPLERATE)
+        signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
+        self.assertLess(max(abs(a - b) for a, b in zip(program.run(2000, [signal])[0], signal)), 1e-12)
+
+    def test_it_says_what_it_is_given_wrong(self):
+        for bad in ("0", "-5", "inf", "nan"):
+            with self.subTest(value=bad), self.assertRaises(BuildError):
+                ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz=bad)
+        with self.assertRaises(BuildError):
+            ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="100").response_statements("allpass")
+
+
+class ZeroDelayAllpassCascadeTests(unittest.TestCase):
+    SAMPLERATE = 44100.0
+    # cutoffs jumping across the whole band every sample, each section its own way
+    JUMPING = "20 + 20000 * (0.5 + 0.5 * sin(in2 * {rate}))"
+
+    def cascade(self, stages, params, outputs=("cascade_out",), num_inputs=1, **options):
+        return harness([ZeroDelayAllpassCascade("cascade", input="in1", stages=stages, **options)], params,
+                       list(outputs), num_inputs=num_inputs, samplerate=self.SAMPLERATE)
+
+    def test_the_magnitude_is_exactly_one(self):
+        # six first-order sections spread over the band and two second-order ones: the impulse response's energy is
+        # the mean of |H|^2 over the band (Parseval), exactly 1 for an all-pass; sines pass at unit level; and the
+        # response is the prewarped analog all-passes' (the Python model)
+        cutoffs = (90.0, 300.0, 700.0, 1500.0, 4000.0, 11000.0)
+        stages = [FirstOrderAllpassStage(f"{cutoff!r}") for cutoff in cutoffs]
+        stages += [SecondOrderAllpassStage("800", "6"), SecondOrderAllpassStage("5000", "0.6")]
+        model = [(cutoff,) for cutoff in cutoffs] + [(800.0, 6.0), (5000.0, 0.6)]
+        impulse_response = self.cascade(stages, {}).run(44100, [[1.0] + [0.0] * 44099])[0]
+        self.assertAlmostEqual(sum(v * v for v in impulse_response), 1.0, delta=1e-9)
+        for frequency in (100.0, 800.0, 6000.0):
+            sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(17640)]
+            out = self.cascade(stages, {}).run(17640, [sine])[0]
+            with self.subTest(frequency=frequency):
+                measured = complex_amplitude_at(out[8820:], frequency, self.SAMPLERATE) / \
+                    complex_amplitude_at(sine[8820:], frequency, self.SAMPLERATE)
+                self.assertAlmostEqual(20 * math.log10(abs(measured)), 0.0, delta=0.001)
+                self.assertLess(abs(measured - cascade_small_signal_response(frequency, model, self.SAMPLERATE)), 2e-4)
+
+    def test_the_phase_at_the_corner(self):
+        # a first-order section is -90 degrees at its cutoff, a second-order one -180 (prewarped: exact there)
+        for stage, expected in ((FirstOrderAllpassStage("cutoff"), -90.0), (SecondOrderAllpassStage("cutoff", "0.7"), 180.0),
+                                (SecondOrderAllpassStage("cutoff", "5"), 180.0)):
+            for cutoff in (250.0, 2500.0, 15000.0):
+                sine = [math.sin(2 * math.pi * cutoff * n / self.SAMPLERATE) for n in range(8820)]
+                out = self.cascade([stage], {"cutoff": cutoff}).run(8820, [sine])[0]
+                with self.subTest(stage=stage, cutoff=cutoff):
+                    measured = phase_degrees(out[4410:], sine[4410:], cutoff, self.SAMPLERATE)
+                    self.assertLess(abs((measured - expected + 180) % 360 - 180), 0.05)
+
+    def test_feedback_peaks_where_the_phase_is_a_whole_turn(self):
+        # four first-order sections are -360 degrees at their cutoff: with feedback k, the output there is 1 / (1 - k)
+        stages = [FirstOrderAllpassStage("1000")] * 4
+        sine = [math.sin(2 * math.pi * 1000.0 * n / self.SAMPLERATE) for n in range(17640)]
+        for feedback in (0.8, 0.5, -0.8):
+            out = self.cascade(stages, {"k": feedback}, feedback="k").run(17640, [sine])[0]
+            with self.subTest(feedback=feedback):
+                self.assertAlmostEqual(amplitude_at(out[8820:], 1000.0, self.SAMPLERATE) * (1 - feedback), 1.0,
+                                       delta=0.002)
+
+    def test_lossless_however_the_cutoffs_move(self):
+        # first- and second-order sections whose cutoffs jump across the band every sample: energy in = energy out
+        # + energy left in the states, to rounding (each junction is a rotation)
+        stages = [FirstOrderAllpassStage(self.JUMPING.format(rate=300 + 37 * i)) for i in range(4)]
+        stages += [SecondOrderAllpassStage(self.JUMPING.format(rate=91), "0.5 + 8 * (0.5 + 0.5 * sin(in2 * 53))")]
+        program = self.cascade(stages, {}, num_inputs=2)
+        jumps = [math.sin(n * n * 0.001) for n in range(22050)]
+        signal = [math.sin(n * 0.05) * (1 if n < 11025 else 0) for n in range(22050)]
+        out = program.run(22050, [signal, jumps])[0]
+        states = ["cascade_section_1_d", "cascade_section_2_d", "cascade_section_3_d", "cascade_section_4_d",
+                  "cascade_section_5_d1", "cascade_section_5_d2"]
+        left = sum(program.get_history(name) ** 2 for name in states)
+        self.assertAlmostEqual((sum(v * v for v in out) + left) / sum(v * v for v in signal), 1.0, delta=1e-9)
+
+    def test_the_tpt_all_pass_is_not_lossless_under_the_same_jumps(self):
+        # why the sections are lattices: the TPT one-pole's LP - HP is the same all-pass at fixed cutoff, but with its
+        # cutoff jumping every sample a unit-bounded input comes out 7.7 times as large (one section)
+        jumps = [math.sin(n * n * 0.001) for n in range(22050)]
+        tpt = harness([ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz=self.JUMPING.format(rate=300).replace("in2", "in1"))],
+                      {}, ["pole_lowpass - pole_highpass"], samplerate=self.SAMPLERATE).run(22050, [jumps])[0]
+        lattice = self.cascade([FirstOrderAllpassStage(self.JUMPING.format(rate=300))], {}, num_inputs=2).run(
+            22050, [jumps, jumps])[0]
+        self.assertGreater(max(abs(v) for v in tpt), 7.0)
+        self.assertLess(max(abs(v) for v in lattice), 2.5)
+
+    def test_stable_under_fast_modulation_in_a_loop(self):
+        # twelve sections whose cutoffs jump across the band every sample, at 0.95 feedback with loop filters: bounded
+        # (a lossless chain in a loop under 1); with a loop limit at full feedback the loop's input stays in the limit
+        stages = [FirstOrderAllpassStage(self.JUMPING.format(rate=300 + 37 * i)) for i in range(12)]
+        noise = [math.sin(n * n * 0.001) for n in range(22050)]
+        out = self.cascade(stages, {}, num_inputs=2, feedback="0.95", coupling_highpass_hz="100",
+                           feedback_lowpass_hz="18000").run(22050, [noise, noise])[0]
+        self.assertTrue(all(math.isfinite(v) for v in out))
+        self.assertLess(max(abs(v) for v in out), 1 / (1 - 0.95) * 3)
+        limited = self.cascade(stages, {}, outputs=("cascade_loop_input",), num_inputs=2, feedback="0.999",
+                               loop_limit=2.0).run(22050, [[3 * v for v in noise], noise])[0]
+        self.assertLessEqual(max(abs(v) for v in limited), 2.0)
+
+    def test_no_zipper_when_the_cutoff_glides(self):
+        # a 500 Hz sine through six sections whose cutoff glides 200 Hz -> 5 kHz over half a second, written every
+        # sample: the output's third difference (steps and corners) stays that of a smooth sine (onset left out). The
+        # same glide written every 64 samples (a control-rate update) is caught by the measure
+        samples = 22050
+        sine = [math.sin(2 * math.pi * 500.0 * n / self.SAMPLERATE) for n in range(samples)]
+        glide = [FirstOrderAllpassStage("200 * pow(25, min(in2, 1))")] * 6
+        reference = third_difference_rms(sine[2205:])
+        for step, smooth in ((1, True), (64, False)):
+            time_signal = [(n - n % step) / samples for n in range(samples)]
+            out = self.cascade(glide, {}, num_inputs=2).run(samples, [sine, time_signal])[0]
+            ratio = third_difference_rms(out[2205:]) / reference
+            with self.subTest(step=step):
+                if smooth:
+                    self.assertLess(ratio, 1.1, "a per-sample glide is smooth")
+                else:
+                    self.assertGreater(ratio, 3.0, "a stepped glide zips (the measure sees it)")
+
+    def test_it_says_what_it_is_given_wrong(self):
+        for stages in ([], ["1000"], [FirstOrderAllpassStage("1000"), 5], [FirstOrderAllpassStage(1000.0)],
+                       [SecondOrderAllpassStage("1000", "")]):
+            with self.subTest(stages=stages), self.assertRaises(BuildError):
+                ZeroDelayAllpassCascade("cascade", input="in1", stages=stages)
+        for limit in (0, -1.0, "2", True):
+            with self.subTest(loop_limit=limit), self.assertRaises(BuildError):
+                ZeroDelayAllpassCascade("cascade", input="in1", stages=[FirstOrderAllpassStage("1000")], loop_limit=limit)
+
+
+class LedDrivenPhotocellTests(unittest.TestCase):
+    SAMPLERATE = 22050.0
+    LAW = dict(law_scale_ohms=3.464, law_exponent=1.4, law_floor_ohms=1136.212, darkest_current_amps=10e-6,
+               release_from_amps=10e-3, release_to_amps=10e-6)
+
+    def cell(self, attack_ms=3.0, release_ms=50.0):
+        block = LedDrivenPhotocell("cell", drive_current_amps="in1", attack_ms=repr(attack_ms),
+                                   release_ms=repr(release_ms), **self.LAW)
+        return block, harness([block], {}, ["cell_current", "cell_resistance"], samplerate=self.SAMPLERATE)
+
+    def test_held_it_settles_on_the_law(self):
+        block, program = self.cell()
+        for current in (0.1e-3, 1e-3, 10e-3):
+            resistance = program.run(4410, [[current] * 4410])[1][-1]
+            with self.subTest(current=current):
+                self.assertAlmostEqual(resistance / block.resistance_at(current), 1.0, delta=1e-6)
+
+    def test_it_lights_with_the_attack_time(self):
+        _, program = self.cell(attack_ms=3.0)
+        current = program.run(441, [[10e-3] * 441])[0]
+        at_attack = current[round(3.0e-3 * self.SAMPLERATE) - 1]
+        self.assertAlmostEqual((at_attack - 10e-6) / (10e-3 - 10e-6), 1 - math.exp(-1), delta=0.01)
+
+    def test_it_goes_dark_over_the_release_time_slower_than_it_lit(self):
+        _, program = self.cell(attack_ms=3.0, release_ms=50.0)
+        program.run(2205, [[10e-3] * 2205])
+        current = program.run(2205, [[0.0] * 2205])[0]
+        # undriven, 1/I = 1/I0 + c t with c = (1/I_to - 1/I_from) / release: at the release time it reaches I_to
+        at_release = current[round(50e-3 * self.SAMPLERATE) - 1]
+        self.assertAlmostEqual(at_release / 10e-6, 1.0, delta=0.02)
+        # halfway in time it is far brighter than halfway in current would say: the power-law turn-off
+        halfway = current[round(25e-3 * self.SAMPLERATE) - 1]
+        self.assertAlmostEqual(1 / halfway, 0.5 * (1 / 10e-3 + 1 / 10e-6), delta=0.02 / 10e-6)
+
+    def test_it_says_what_it_is_given_wrong(self):
+        for name, bad in (("law_exponent", 0), ("darkest_current_amps", -1e-6), ("release_to_amps", 0.02),
+                          ("law_floor_ohms", -1.0)):
+            law = dict(self.LAW, **{name: bad})
+            with self.subTest(name=name), self.assertRaises(BuildError):
+                LedDrivenPhotocell("cell", drive_current_amps="in1", attack_ms="3", release_ms="50", **law)
 
 
 if __name__ == "__main__":
