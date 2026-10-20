@@ -16,6 +16,8 @@ from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
+from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
+from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: E402
 from m4l_dev.techniques.tape_style_echo import TapeStyleEcho  # noqa: E402
 from m4l_dev.techniques.zero_delay_ladder_filter import (ZeroDelayLadderFilter, response_script_code,  # noqa: E402
                                                          small_signal_magnitude)
@@ -438,6 +440,84 @@ class KneeSoftClipTests(unittest.TestCase):
     def test_its_headroom_is_one_minus_the_knee_as_written(self):
         self.assertIn("soft_clip_above_knee((in1), 0.8, 0.2)", KneeSoftClip("c", input="in1", knee=0.8).statements())
         self.assertIn("0.95, 0.05)", KneeSoftClip("c", input="in1", knee=0.95).statements())
+
+
+class SidechainStylePumpTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+    BPM = 120.0
+    DIVISION_BEATS = 0.5                    # 250 ms
+    DIVISION_MS = 60000 / BPM * DIVISION_BEATS
+    SETTINGS = {"following_live": 0.0, "bpm": BPM, "division_beats": DIVISION_BEATS, "depth": 1.0, "attack_ms": 6.0,
+                "release_fraction": 0.55, "curve": 0.5, "chop": 0.0}
+
+    def pump(self, **settings):
+        values = dict(self.SETTINGS, **settings)
+        block = SidechainStylePump("pump", live_beat_position="in1", **{name: name for name in values})
+        return harness([block], values, ["pump_gain", "pump_duck"], samplerate=self.SAMPLERATE)
+
+    def model(self, phase, **settings):
+        values = dict(self.SETTINGS, **settings)
+        return sidechain_style_pump.pump_duck(phase, values["attack_ms"], self.DIVISION_MS,
+                                              values["release_fraction"], values["curve"])
+
+    def test_on_its_own_clock_the_duck_is_the_displays_shape(self):
+        samples_per_division = int(self.SAMPLERATE * self.DIVISION_MS / 1000)
+        for settings in ({}, {"attack_ms": 1.0, "curve": 0.0}, {"attack_ms": 40.0, "release_fraction": 0.2, "curve": 1.0}):
+            duck = self.pump(**settings).run(3 * samples_per_division, [[0.0] * (3 * samples_per_division)])[1]
+            for n, value in enumerate(duck):
+                phase = ((n + 1) / samples_per_division) % 1.0
+                self.assertAlmostEqual(value, self.model(phase, **settings), places=9, msg=(settings, n))
+
+    def test_following_live_the_duck_is_the_displays_shape_at_live_s_phase(self):
+        total = int(self.SAMPLERATE * 2)
+        beats = [(n * self.BPM / 60 / self.SAMPLERATE) % 1.0 for n in range(total)]       # a beat ramp 0..1, as plugphasor~
+        duck = self.pump(following_live=1.0).run(total, [beats])[1]
+        for n in range(total // 2, total):          # after the hand-over (20 ms) has finished
+            self.assertAlmostEqual(duck[n], self.model((beats[n] / self.DIVISION_BEATS) % 1.0), places=6, msg=n)
+
+    def test_the_duck_is_0_at_the_start_1_at_the_end_of_the_attack_and_0_from_the_recovery_s_end(self):
+        samples_per_division = int(self.SAMPLERATE * self.DIVISION_MS / 1000)
+        duck = self.pump().run(samples_per_division, [[0.0] * samples_per_division])[1]
+        self.assertLess(duck[0], 0.2)
+        self.assertAlmostEqual(max(duck), 1.0, delta=0.01)
+        self.assertEqual(duck[int(samples_per_division * 0.6):-1], [0.0] * len(duck[int(samples_per_division * 0.6):-1]))
+
+    def test_depth_scales_the_dip_and_depth_0_is_unity(self):
+        samples = int(self.SAMPLERATE)
+        quiet = self.pump(depth=0.0).run(samples, [[0.0] * samples])[0]
+        self.assertEqual(quiet, [1.0] * samples)
+        half = self.pump(depth=0.5).run(samples, [[0.0] * samples])[0]
+        self.assertAlmostEqual(min(half), 0.5, delta=0.02)
+        self.assertGreater(min(half), 0.49)
+
+    def test_the_gate_is_open_on_the_beat_and_shut_to_the_depth_after_the_release(self):
+        samples_per_division = int(self.SAMPLERATE * self.DIVISION_MS / 1000)
+        gain = self.pump(chop=1.0, depth=0.8).run(2 * samples_per_division, [[0.0] * (2 * samples_per_division)])[0]
+        self.assertAlmostEqual(max(gain), 1.0, delta=0.02)
+        late = gain[int(samples_per_division * 0.7):samples_per_division - 5]
+        self.assertAlmostEqual(min(late), 0.2, places=3)
+        self.assertAlmostEqual(max(late), 0.2, places=3)
+
+    def test_no_step_reaches_the_gain_when_live_starts_or_stops(self):
+        program = self.pump()
+        total = int(self.SAMPLERATE * 2)
+        beats = [(0.37 + n * self.BPM / 60 / self.SAMPLERATE) % 1.0 for n in range(total)]     # Live elsewhere in the beat
+        gains = []
+        for follow in (0.0, 1.0, 0.0):
+            program.set_param("following_live", follow)
+            gains += program.run(total // 4, [beats[:total // 4]])[0]
+        steepest_step = max(abs(b - a) for a, b in zip(gains, gains[1:]))
+        # the quarter-sine ramp in over 6 ms is 0.2 a sample at 8 kHz at its steepest; the hand-over adds no jump
+        self.assertLess(steepest_step, 0.16)
+
+    def test_the_display_script_is_the_same_shape(self):
+        script = sidechain_style_pump.response_script_code()
+        for phase, attack_ms, division_ms, release, curve in ((0.0, 6, 250, 0.55, 0.5), (0.01, 6, 250, 0.55, 0.5),
+                                                                (0.3, 6, 250, 0.55, 0.5), (0.9, 6, 250, 0.55, 0.5),
+                                                                (0.1, 40, 62.5, 0.2, 1.0), (0.5, 1, 1000, 0.95, 0.0)):
+            value = float(es5.evaluate(script + f"\nsidechainPumpDuck({phase}, {attack_ms}, {division_ms}, {release}, {curve})"))
+            self.assertAlmostEqual(value, sidechain_style_pump.pump_duck(phase, attack_ms, division_ms, release, curve),
+                                   places=9)
 
 
 if __name__ == "__main__":

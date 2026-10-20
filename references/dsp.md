@@ -121,6 +121,15 @@ No outside source: our construction, stated whole in the module docstring. Unity
 knee + (1 - knee) tanh((|x| - knee) / (1 - knee)): the line's value and slope (tanh'(0) = 1) at the knee, so the join is
 C1, and bounded by 1. It replaced three devices' identical copies bit for bit (2sl gate, stab, filter).
 
+## Sidechain-style pump (m4l_dev/techniques/sidechain_style_pump.py)
+
+No outside source: our construction, stated whole in the module docstring (a quarter-sine ramp in, a power-law recovery,
+a gain 1 - depth x duck, or the gate 1 - depth x (1 - duck)). The sound it imitates is a compressor ducked by a kick
+(sidechain pumping); it models no compressor, it draws the dip from the beat. It replaced two devices' own copies (2sl
+stab: quarter-sine ramp in, `1 + 3 curve` power recovery, 20 ms hand-over between Live's clock and its own, a 0.442 ms
+glide on the gain; 2sl filter: a 3 ms linear ramp in, a squared recovery, a hard switch between the two clocks, no
+glide, plus the gate) with stab's, which is continuous at every join and glides every change.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):
