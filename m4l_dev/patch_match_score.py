@@ -26,12 +26,11 @@ m4l_dev/genexpr.py builds the renderer).
 """
 import array
 import ctypes
-import hashlib
 import os
 from dataclasses import dataclass
 
 from m4l_dev import bs1770
-from m4l_dev.genexpr import GenExprBuildError, build_cache_directory, c_compiler_command, c_compiler_identity
+from m4l_dev.c_library_cache import load_c_library
 
 ONSET_THRESHOLD_DB = -40.0
 PREROLL_SECONDS = 0.002
@@ -64,23 +63,7 @@ def features_library():
         return _features_library
     with open(FEATURES_SOURCE_PATH, encoding="utf-8") as handle:
         c_source = handle.read()
-    command = c_compiler_command()
-    digest = hashlib.sha256("\n".join((c_compiler_identity(command), " ".join(FEATURES_COMPILER_FLAGS), c_source))
-                            .encode("utf-8")).hexdigest()
-    library_path = os.path.join(build_cache_directory(), f"patch-match-features-{digest}.so")
-    if not os.path.exists(library_path):
-        import fcntl   # POSIX only: parallel processes wait for one build
-        import subprocess
-        with open(f"{library_path}.lock", "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            if not os.path.exists(library_path):
-                building_path = f"{library_path}.{os.getpid()}.building"
-                completed = subprocess.run([command, *FEATURES_COMPILER_FLAGS, "-o", building_path,
-                                            FEATURES_SOURCE_PATH, "-lm"], capture_output=True, text=True)
-                if completed.returncode != 0:
-                    raise GenExprBuildError(f"the C compiler refused {FEATURES_SOURCE_PATH}:\n{completed.stderr}")
-                os.replace(building_path, library_path)
-    library = ctypes.CDLL(library_path)
+    library = load_c_library(c_source, FEATURES_COMPILER_FLAGS, file_name_prefix="patch-match-features-")
     double_pointer = ctypes.c_void_p
     library.match_feature_size.restype = ctypes.c_long
     library.match_feature_size.argtypes = [ctypes.c_long, ctypes.c_double]

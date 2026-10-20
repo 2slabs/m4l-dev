@@ -57,15 +57,15 @@ Usage
 
 import array
 import ctypes
-import hashlib
 import math
 import os
 import random
 import re
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass, field
+
+# GenExprBuildError: the name the renderer's callers and tests know the missing / refusing C compiler by
+from m4l_dev.c_library_cache import CLibraryBuildError as GenExprBuildError, load_c_library  # noqa: F401
 
 
 class GenExprError(Exception):
@@ -1015,9 +1015,7 @@ def check(code, num_inputs=None, num_outputs=None):
 # at -O1 or -O2 (its time is no longer the rendering), and a large program (2sl gate's core) builds in 0.4 s against
 # 1.2 s and 3.4 s.
 
-C_COMPILER_ENVIRONMENT_VARIABLE = "CC"
 COMPILER_FLAGS = ("-O0", "-std=c99", "-fPIC", "-shared", "-ffp-contract=off", "-fno-fast-math", "-fno-builtin")
-CACHE_DIRECTORY_ENVIRONMENT_VARIABLE = "M4L_DEV_GENEXPR_CACHE"
 
 C_PRELUDE = r"""
 #include <math.h>
@@ -1488,86 +1486,17 @@ class CTranslator:
                 f"{self.value(node.arguments[0])})")
 
 
-class GenExprBuildError(RuntimeError):
-    """The C compiler is missing or refused the generated C: the renderer cannot run."""
-
-
 class NoiseState(ctypes.Structure):
     _fields_ = [("words", ctypes.c_uint32 * 624), ("index", ctypes.c_int32)]
 
 
-_compiler_identity_by_command = {}
-_loaded_render_functions_by_digest = {}
-
-
-def c_compiler_command():
-    command = os.environ.get(C_COMPILER_ENVIRONMENT_VARIABLE, "cc")
-    if shutil.which(command) is None:
-        raise GenExprBuildError(
-            f"the GenExpr renderer builds each program with a C compiler and '{command}' is not on PATH: install one "
-            f"(gcc or clang) or set {C_COMPILER_ENVIRONMENT_VARIABLE}=/path/to/compiler")
-    return command
-
-
-def c_compiler_identity(command):
-    if command not in _compiler_identity_by_command:
-        try:
-            completed = subprocess.run([command, "--version"], capture_output=True, text=True, check=True)
-        except (OSError, subprocess.CalledProcessError) as problem:
-            raise GenExprBuildError(f"the C compiler '{command}' does not answer --version: {problem}") from problem
-        _compiler_identity_by_command[command] = shutil.which(command) + "\n" + completed.stdout
-    return _compiler_identity_by_command[command]
-
-
-def build_cache_directory():
-    directory = os.environ.get(CACHE_DIRECTORY_ENVIRONMENT_VARIABLE)
-    if not directory:
-        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-        directory = os.path.join(base, "m4l-dev", "genexpr")
-    os.makedirs(directory, exist_ok=True)
-    return directory
-
-
-def build_library(command, c_source, library_path):
-    source_path = f"{library_path}.{os.getpid()}.c"
-    building_path = f"{library_path}.{os.getpid()}.building"
-    with open(source_path, "w", encoding="utf-8") as handle:
-        handle.write(c_source)
-    try:
-        completed = subprocess.run([command, *COMPILER_FLAGS, "-o", building_path, source_path, "-lm"],
-                                   capture_output=True, text=True)
-        if completed.returncode != 0:
-            raise GenExprBuildError(f"genexpr internal error: the C compiler refused the generated C "
-                                    f"({source_path} kept):\n{completed.stderr}")
-        os.replace(building_path, library_path)   # atomic: a reader never sees half a library
-        os.remove(source_path)
-    finally:
-        if os.path.exists(building_path):
-            os.remove(building_path)
-
-
 def load_render_function(c_source):
-    """The compiled genexpr_render of `c_source`: built once per source, compiler and flags into the cache directory
-    (shared between processes and runs), loaded once per process."""
-    command = c_compiler_command()
-    digest = hashlib.sha256("\n".join((c_compiler_identity(command), " ".join(COMPILER_FLAGS), c_source))
-                            .encode("utf-8")).hexdigest()
-    if digest in _loaded_render_functions_by_digest:
-        return _loaded_render_functions_by_digest[digest]
-    directory = build_cache_directory()
-    library_path = os.path.join(directory, f"{digest}.so")
-    if not os.path.exists(library_path):
-        import fcntl   # POSIX only: parallel test processes that want the same program wait for one build of it
-        with open(f"{library_path}.lock", "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            if not os.path.exists(library_path):
-                build_library(command, c_source, library_path)
-    library = ctypes.CDLL(library_path)
+    """The compiled genexpr_render of `c_source` (m4l_dev/c_library_cache.py builds, caches and loads it)."""
+    library = load_c_library(c_source, COMPILER_FLAGS)
     render = library.genexpr_render
     render.restype = None
     render.argtypes = [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                        ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoiseState)]
-    _loaded_render_functions_by_digest[digest] = render
     return render
 
 
