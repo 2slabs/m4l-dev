@@ -11,7 +11,8 @@ What it promises (tests/test_techniques.py checks each):
   being the loop's own delay (the diffusion allpasses' lengths, the loop low-pass's group delay at DC, the
   saturator's latency: half a sample, it runs at the host rate), so every repeat lands at n T: the left output reads
   at T, the right at T + `right_lag_ms` (a fixed Haas offset that doesn't add up). Nothing compounds per round.
-- **Tape glide.** Time glides like a tape's speed: a one-pole toward the new time (TIME_GLIDE_UP_MS longer,
+- **Tape glide.** The time starts at its target on the first sample (`HistoriesStartAtTheirTargets`: no glide on
+  load, no starting time of its own). Then it glides like a tape's speed: a one-pole toward the new time (TIME_GLIDE_UP_MS longer,
   TIME_GLIDE_DOWN_MS shorter: the RE-201's ballistics, 1.89 s / 1.07 s, scaled down for a synced echo) whose step is
   limited to HIGHEST_TIME_CHANGE ms per ms, so the read head's speed stays in [0.5, 1.5]: never backwards.
 - **Howl.** `feedback` is the loop's gain (small signals): above the loop filters' loss it self-oscillates, held at
@@ -31,6 +32,7 @@ import math
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator
+from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 
 # Live's highest sample rate (Ableton, Live editions: "Multitrack recording up to 32-bit/192 kHz"): the Delay sizes
 # are fixed numbers of samples (gen's Delay takes a sample count), enough at 192 kHz.
@@ -52,11 +54,11 @@ NATURAL_LOG_OF_2 = math.log(2.0)
 
 class TapeStyleEcho(Technique):
     """See the module docstring. Inputs are GenExpr expressions; `diffusion` (allpass gain, 0..0.7) is None for an
-    echo without the allpasses. `initial_time_ms`, `longest_time_ms`, `right_lag_ms` and `rounds_kept` are numbers."""
+    echo without the allpasses. `longest_time_ms`, `right_lag_ms` and `rounds_kept` are numbers."""
 
     def __init__(self, instance_name, *, left_input, right_input, time_ms, feedback, loop_lowpass_hz,
                  loop_highpass_hz, saturation_gain, wow_cents, flutter_cents, stop_pressed, diffusion=None,
-                 initial_time_ms, longest_time_ms, right_lag_ms, rounds_kept):
+                 longest_time_ms, right_lag_ms, rounds_kept):
         inputs = dict(left_input=left_input, right_input=right_input, time_ms=time_ms, feedback=feedback,
                       loop_lowpass_hz=loop_lowpass_hz, loop_highpass_hz=loop_highpass_hz,
                       saturation_gain=saturation_gain, wow_cents=wow_cents, flutter_cents=flutter_cents,
@@ -65,11 +67,10 @@ class TapeStyleEcho(Technique):
             inputs["diffusion"] = diffusion
         super().__init__(instance_name, **inputs)
         self.has_diffusion = diffusion is not None
-        if not 0 < initial_time_ms <= longest_time_ms:
-            raise BuildError(f"TapeStyleEcho {instance_name}: initial time {initial_time_ms} ms outside (0, {longest_time_ms}]")
+        if not longest_time_ms > 0:
+            raise BuildError(f"TapeStyleEcho {instance_name}: longest time {longest_time_ms} ms must be > 0")
         if right_lag_ms < 0 or rounds_kept < 0 or int(rounds_kept) != rounds_kept:
             raise BuildError(f"TapeStyleEcho {instance_name}: right_lag_ms must be >= 0, rounds_kept a whole number >= 0")
-        self.initial_time_ms = float(initial_time_ms)
         self.longest_time_ms = float(longest_time_ms)
         self.right_lag_ms = float(right_lag_ms)
         self.rounds_kept = int(rounds_kept)
@@ -83,6 +84,8 @@ class TapeStyleEcho(Technique):
             input=f"{instance_name}_{side}_filtered * {instance_name}_feedback * {instance_name}_saturation_gain",
             oversampling=1)
             for side in ("left", "right")}
+        self.time_starts_at_its_target = HistoriesStartAtTheirTargets(f"{instance_name}_time_start",
+                                                                      targets={f"{instance_name}_time_ms": time_ms})
 
     def functions(self):
         functions = {}
@@ -98,13 +101,14 @@ class TapeStyleEcho(Technique):
                 for number in (1, 2):
                     lines.append(self.substituted(f"Delay ${{p}}_{side}_diffuser_{number}(${{size}});",
                                                   size=str(self.diffusion_samples)))
-        histories = ["${p}_time_ms(${initial})", "${p}_wow_1(0)", "${p}_wow_2(0)", "${p}_flutter_phase(0)",
+        histories = ["${p}_time_ms(0)", "${p}_wow_1(0)", "${p}_wow_2(0)", "${p}_flutter_phase(0)",
                      "${p}_left_lowpass_1(0)", "${p}_left_lowpass_2(0)", "${p}_left_highpass(0)",
                      "${p}_right_lowpass_1(0)", "${p}_right_lowpass_2(0)", "${p}_right_highpass(0)",
                      "${p}_since_stop(1e9)", "${p}_stop_fade(0)", "${p}_level(0)",
                      "${p}_round_elapsed(0)", "${p}_round_peak_so_far(0)"]
         histories += [f"${{p}}_round_peak_{n}(0)" for n in range(1, self.rounds_kept + 1)]
-        lines.append(self.substituted("History " + ", ".join(histories) + ";", initial=self.initial_time_ms))
+        lines.append(self.substituted("History " + ", ".join(histories) + ";"))
+        lines.append(self.time_starts_at_its_target.declarations())
         lines += [saturator.declarations() for saturator in self.saturators.values()]
         return "\n".join(lines)
 
@@ -150,7 +154,9 @@ if (${{stop_pressed}}) {{
 	{p}_round_peak_so_far = 0;{clear_rounds}
 }}
 
-// Time glides like a tape's speed, never past HIGHEST_TIME_CHANGE ms a ms: the read never runs backwards
+// Time starts at its target, then glides like a tape's speed, never past HIGHEST_TIME_CHANGE ms a ms: the read never
+// runs backwards
+{self.time_starts_at_its_target.statements()}
 {p}_target_ms = ${{time_ms}};
 {p}_glide = ({p}_target_ms - {p}_time_ms) * smoothing_coefficient({p}_target_ms > {p}_time_ms ? {TIME_GLIDE_UP_MS!r} : {TIME_GLIDE_DOWN_MS!r}, samplerate);
 {p}_time_ms = {p}_time_ms + clamp({p}_glide, -{HIGHEST_TIME_CHANGE!r} * 1000 / samplerate, {HIGHEST_TIME_CHANGE!r} * 1000 / samplerate);
