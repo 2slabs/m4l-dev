@@ -14,8 +14,8 @@ derivative-free search moves the parameters. Sources for every choice: reference
 |---|---|
 | `m4l_dev/patch_match_voice.py` | `MatchedVoice` (GenExpr code, inputs / outputs, `MatchedParameter`s, fixed values, `MatchTrigger`, audio output, noise seed) and the unit-cube map: plain picklable data |
 | `m4l_dev/patch_match_score.py` | `MatchTarget`: a target analysed once; `components(candidate)` / `score(candidate)`; the analysis C built into the kit's C cache |
-| `m4l_dev/patch_match_features.c` | onset, loudness (BS.1770 K-weighting from `bs1770.py`), log-mel spectrograms, envelope, YIN, the distance. Every layout decision is here |
-| `m4l_dev/patch_match_search.py` | `match_patch(voice, target, rate, SearchSettings)`: CMA-ES strands in processes, refinement, the score curve |
+| `m4l_dev/patch_match_features.c` | onset, loudness (BS.1770 K-weighting from `bs1770.py`), log-mel spectrograms, envelope, the distance (cells, envelope, log spectral centroid). Every layout decision is here |
+| `m4l_dev/patch_match_search.py` | `match_patch(voice, target, rate, SearchSettings)`: CMA-ES strands in processes, enum sweeps, refinement, the score curve |
 | `m4l_dev/wave_files.py` | WAV in (PCM 8-32, float 32/64, extensible) and out (float 32) |
 | `tools/match_patch.py` | the CLI: `--voice module:NAME --target hit.wav --out result.json` (+ `.match.wav` / `.target.wav` for A/B) |
 | `tests/fixture_drum_voice.py` | the validation voice: swept sine + filtered noise + drive, 8 parameters |
@@ -27,7 +27,8 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
 ## The contract
 
 - **A voice** is any program the kit renders (`m4l_dev/genexpr.py`): a drum voice's own gen~ code, with its Params.
-  Each searched Param has a range on a linear or log scale, or is an integer range, or an enum (its values); the
+  Each searched Param has a range on a linear or log scale, or is an integer range (an ordered count), or an enum (its
+  values: choices in no order of sound, like a filter mode or a shift register's pattern); the
   range must sit inside the Param's own min / max (the renderer would clamp it silently otherwise). Params not
   searched keep their default or a fixed value (a Param whose code leaves its default out, the Init values' to
   write, must be searched or fixed). A hit is: a fresh program (no state from the hit before), the trigger
@@ -37,6 +38,8 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
 - **The score** (`patch_match_score.py`'s docstring for the terms): 0 for identical hits, in dB-like units, blind to
   level and to where the hit starts in the file; at most the first 2 s after the onset. Silence scores the worst
   (`SILENT_CANDIDATE_SCORE`); a NaN or infinity raises (a voice bug, never a score).
+- **A render** is built at -O2 (`genexpr.OPTIMISED_COMPILER_FLAGS`): the same samples as the kit's -O0 renderer
+  (the same floating-point flags), 1.8x faster on the 2sl drums voice; a match renders one program thousands of times.
 - **The search** is deterministic in (voice, target, settings, seed), whatever the number of processes. It returns
   every strand's best, the best first, and the score curve. It never touches the device: its output is parameter
   values, which a preset book then holds.
@@ -50,8 +53,14 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
   512 and up moved < 0.2 dB), which made the score so rugged that searches stopped in local minima.
 - The envelope is a peak follower (instant attack, 50 ms release), not a short RMS: a 5 ms RMS of a 42 Hz tone is its
   cycle (the same 0.24 semitone moved it 0.1 -> 2 dB).
-- The pitch term weights frames by the target's tonality and level, softly; YIN's dip threshold is 0.3 (its paper's
-  0.1 made noisy frames fall to subharmonics, and which subharmonic changed with the noise).
+- No pitch tracker. A YIN pitch term (until 2026-10-20) made the score a needle on the 2sl drums voice: on folded,
+  audio-rate-modulated or noisy tones YIN's chosen dip flips under a 0.1 % move of a parameter, each flip up to 12
+  semitones (PLANS/2026-10-20-matcher-search.md, H5). The ordering it was for comes from the log2 spectral centroid
+  per frame (Turian & Henry, references/sound-matching.md D), 0.25 a semitone: smooth, and the fixture voice's
+  recovery rose from 85 % (YIN) to 100 %.
+- Enums are swept, not searched: each choice tried at the strand's best (after the global phase and after each
+  refinement half); on a CMA-ES axis, any step lands on an unrelated choice. An enum whose first 4 other choices score
+  exactly the held one is silent there and left.
 - A recording never shares the voice's noise: two renders of the same settings with different noise seeds score
   0 .. 3 (a noisy hit the most). Recovery is judged against that: found <= the truth's own score + 0.25.
 - Search: 6 strands x 2000 renders, half spent refining each strand's best (CMA-ES restarted at step 0.05): local
@@ -59,9 +68,16 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
 
 ## Open
 
-- A learned warm start (Genopatch's net; train on the voice's own renders), if matches of real targets are too slow.
-- Recovery, 2026-10-19 (20 random fixture settings, 6 x 2000 renders, ~26 s a match on 6 cores): the sound in 85 %
-  (17 / 20 at most the truth's score + 0.25); per parameter within 0.05 of the truth (unit cube): pitch, decay, drive
-  100 %, sweep depth 70 %, noise decay 70 %, noise cutoff 60 %, sweep time 55 %, noise level 40 %; all eight at once
-  0 %. The noise's level and colour trade against each other and the drive (several settings sound the same); a
-  matched sound, not the target's knob positions, is what the drums need.
+- A learned warm start (Genopatch's net; train on the voice's own renders). The 2sl drums voice (31 parameters) needs
+  it, or something else that finds the basin: see the recovery figures below and PLANS/2026-10-20-matcher-search.md.
+- Recovery, fixture voice (20 random settings, 6 x 2000 renders): 2026-10-19 85 % (YIN pitch term); 2026-10-20
+  100 % (log-centroid term, enum sweeps, -O2 renders; median 111 s a match on a machine at load 20-40). Per parameter within 0.05 of the truth (2026-10-19): pitch, decay, drive 100 %, sweep depth
+  70 %, noise decay 70 %, noise cutoff 60 %, sweep time 55 %, noise level 40 %; all eight at once 0 %. The noise's
+  level and colour trade against each other and the drive (several settings sound the same); a matched sound, not
+  the target's knob positions, is what the drums need.
+- Recovery, 2sl drums synth voice (31 parameters, 6 x 2000 renders), 2026-10-20: 0 / 8 uniform draws (median best
+  5.6 against truths 0-2.7), 0 / 8 demo presets moved by N(0, 0.05) (best 2.7-6.1 against 0-4.4). What stops it
+  (measured, the plan's H1-H9): its landscape is a stiff / sloppy cone (slopes ~100x apart between parameters) with
+  phase-driven local minima along the sweep and fold parameters; a local CMA-ES from 0.1 (unit cube, RMS) away needs
+  > 8000 renders over the 23 benign parameters alone; from a random start the strands end in different sounds
+  (3-9 dB of spectrum away).

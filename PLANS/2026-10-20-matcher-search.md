@@ -183,3 +183,37 @@ The score's pitch term replaced by the log-centroid term; the search holds enums
 and sweeps every one of their values at the strand's best after each global run and between two refinement halves;
 6 x 2000 renders. Prediction: 2 / 8 (from 0 / 8): the discrete fix and the needle's removal help, the slow
 continuous remainder still limits.
+
+### P1 result: refuted
+
+0 / 4 (best 2.9-9.1). The sweeps of all 269 discrete values (pattern 255 + four switches) after every global run ate
+most of each strand's 1000 global renders. Changed after: enums only are swept (an integer is an ordered count, a
+CMA-ES axis; the metal pattern belongs in an enum), once after the global phase (2 passes) and after each refinement
+half (1 pass), and an enum whose first 4 other choices score exactly the held one is inactive and left (the pattern
+while white noise plays).
+
+A drum-like prior (each demo preset, continuous parameters moved by N(0, 0.05)), the P1 code but integers swept once
+after the global phase: kick 3.73 vs truth 1.56, snare 4.73 vs 2.71: missed. The kick's found sound explains the
+truth's 38-semitone 22 ms sweep by an 8-semitone 66 ms one plus low-passed noise and more Compress: a different
+local minimum, 3.65 dB of spectrum away.
+
+## Final measurements (kit e7cff6c's matcher code on the pinned voice: kit aa62cc6 + 2sl-drums 68b58af)
+
+Committed (e7cff6c): log-centroid term instead of YIN; enums swept (integers stay CMA-ES axes); renders at -O2.
+
+| voice, prior (6 x 2000 renders) | recovered (<= truth + 0.25) | best found | truth |
+|---|---|---|---|
+| fixture, 20 uniform draws | 20 / 20 (was 17 / 20) | | 0.09-2.96 |
+| drums, 8 uniform draws (metal pattern as an enum) | 0 / 8 (was 0 / 4 of these) | 4.0-9.4, median 5.6 | 0-2.65 |
+| drums, 8 demo presets moved by N(0, 0.05) | 0 / 8 | 2.7-6.1 | 0-4.4 |
+| drums, the moved kick at 6 x 8000 | 0 / 1 | 2.25 (3.73-3.84 at 6 x 2000) | 1.56 |
+
+Root causes, in the order they bite: (1) the YIN pitch term's needle (fixed); (2) unordered enums / the metal pattern on
+CMA-ES axes (fixed in the kit; the drums' noise_pattern must become an enum, 2sl-drums' MatchedVoice); (3) the drums
+voice's continuous landscape: stiff / sloppy (slopes ~100x apart) with phase-driven local minima along sweep and fold,
+so a local CMA-ES needs > 8000 renders from 0.1 away and random starts end in other sounds 3-9 dB away. (3) is not a
+search setting (H3a population, H9 active CMA-ES / scaling: no change) and not a score term alone (H6: spectral alone
+fails too). What is left to try, each a decision: a learned warm start (Genopatch's net, the architecture's open item)
+to land starts inside the basin; far larger budgets (4x renders moved the kick 3.8 -> 2.25 of 1.56); and the bar
+itself: for the 12 / 20 uniform draws with the metal source the truth scores exactly 0 (the shift register ignores the
+seed), so "recovered" there means within 0.25 dB of the same waveform.
