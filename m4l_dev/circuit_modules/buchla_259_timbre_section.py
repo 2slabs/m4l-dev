@@ -31,8 +31,8 @@ gain (its phase lag only shifts a static folder's output in time). The sine itse
 instrument evaluates the folder (`point_statements`).
 
 Outputs: the folder's output in volts at a point, second-order ADAA through it and the instance's last two points
-(`output_volts_at(point)`: the folder one step late; the audio's); the folder's exact mean over a segment between
-two points (`segment_output_volts`: first order, for a probe of the output's mean); `output_peak_volts`, about where
+(`output_volts_at(point)`: the folder `latency_steps` (one) step late; the audio's); the folder's exact mean over a
+segment between two points (`segment_output_volts`: first order, for a probe of the output's mean); `output_peak_volts`, about where
 the sum sits for drives of 0.6-10 V (3.2 V at 6 V rails, scaling with them), for an instrument that scales it to its
 own level. `statements()` (per host sample) latches the inputs and the drive stage's gain; the instance's own
 History `<name>_before_*` and `<name>_before_before_*` are its last two points (`remember_statements`), for an
@@ -160,6 +160,7 @@ class Buchla259TimbreSection(CircuitModule):
 
     references_entry = "references/circuits/buchla-259.md"
     character_type = Buchla259TimbreSectionCharacter
+    latency_steps = 1                   # output_volts_at is centred on the point before
 
     def __init__(self, instance_name, *, drive_volts, symmetry_offset_volts, frequency_hz, character=None):
         super().__init__(instance_name, character=character, drive_volts=drive_volts,
