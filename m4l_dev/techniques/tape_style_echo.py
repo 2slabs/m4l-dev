@@ -9,7 +9,7 @@ measured glide ratio and wow band, and its tape is a saturating loop, not a head
 What it promises (tests/test_techniques.py checks each):
 - **On the grid.** Both sides loop at one time T (the glided Time). Each side's loop re-reads its tape at T - D, D
   being the loop's own delay (the diffusion allpasses' lengths, the loop low-pass's group delay at DC, the
-  saturator's half sample), so every repeat lands at n T: the left output reads at T, the right at T + `right_lag_ms`
+  saturator's LATENCY_SAMPLES), so every repeat lands at n T: the left output reads at T, the right at T + `right_lag_ms`
   (a fixed Haas offset that doesn't add up). Nothing compounds per round.
 - **Tape glide.** Time glides like a tape's speed: a one-pole toward the new time (TIME_GLIDE_UP_MS longer,
   TIME_GLIDE_DOWN_MS shorter: the RE-201's ballistics, 1.89 s / 1.07 s, scaled down for a synced echo) whose step is

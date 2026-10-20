@@ -162,31 +162,37 @@ def equalised_second_order_outputs(raw_means):
     return [sum(tap * padded[i + k] for k, tap in enumerate(SECOND_ORDER_EQUALISER_TAPS)) for i in range(len(raw_means))]
 
 
-def second_order_equaliser_remez(edge_cycles_per_sample):
-    """(outer tap, inner tap, worst deviation): the symmetric 5-tap equaliser whose product with ADAA2's 3-tap mean
-    (1 + 2 cos w) / 3 is 1 at DC and equiripple up to the edge, by the Remez exchange on three extrema."""
+def adaa_equaliser_remez(mean_response, edge_cycles_per_sample, tap_pairs):
+    """(taps, worst deviation): the symmetric (2 tap_pairs + 1)-tap linear-phase equaliser of an ADAA mean (its
+    zero-phase response `mean_response(w)`, w in radians a sample) whose product with it is 1 at DC and equiripple up
+    to the edge, by the Remez exchange on tap_pairs + 1 extrema. Taps outermost first, symmetric."""
     edge = 2 * math.pi * edge_cycles_per_sample
+    unknowns = tap_pairs + 1                   # the tap pairs (DC fixed at 1 by the middle tap) and the ripple
 
-    def mean_response(w):
-        return (1 + 2 * math.cos(w)) / 3
+    def pair_basis(distance, w):               # a tap pair at +-distance, the middle tap taking up its DC
+        return 2 * (math.cos(distance * w) - 1)
 
-    def deviation(outer, inner, w):            # the equaliser, its DC fixed at 3 / 3 = 1 by its middle tap
-        return mean_response(w) * (1 + 2 * inner * (math.cos(w) - 1) + 2 * outer * (math.cos(2 * w) - 1)) - 1
-    extrema = [0.4 * edge, 0.8 * edge, edge]
+    def deviation(pairs, w):                   # pairs[k]: the tap pair at distance k + 1
+        return mean_response(w) * (1 + sum(tap * pair_basis(k + 1, w) for k, tap in enumerate(pairs))) - 1
+    extrema = [edge * (k + 1) / unknowns for k in range(unknowns)]
     grid = [edge * k / 20000 for k in range(20001)]
-    for _ in range(30):
-        rows = [[mean_response(w) * 2 * (math.cos(2 * w) - 1), mean_response(w) * 2 * (math.cos(w) - 1), -(-1) ** i,
-                 1 - mean_response(w)] for i, w in enumerate(extrema)]
-        for i in range(3):                     # Gauss-Jordan on the 3 x 3 system
-            pivot = max(range(i, 3), key=lambda r: abs(rows[r][i]))
+    for _ in range(40):
+        rows = [[mean_response(w) * pair_basis(k + 1, w) for k in range(tap_pairs)] + [-(-1) ** i, 1 - mean_response(w)]
+                for i, w in enumerate(extrema)]
+        for i in range(unknowns):              # Gauss-Jordan
+            pivot = max(range(i, unknowns), key=lambda r: abs(rows[r][i]))
             rows[i], rows[pivot] = rows[pivot], rows[i]
-            for r in range(3):
+            for r in range(unknowns):
                 if r != i:
                     factor = rows[r][i] / rows[i][i]
                     rows[r] = [a - factor * b for a, b in zip(rows[r], rows[i])]
-        outer, inner = rows[0][3] / rows[0][0], rows[1][3] / rows[1][1]
-        errors = [deviation(outer, inner, w) for w in grid]
+        pairs = [rows[k][unknowns] / rows[k][k] for k in range(tap_pairs)]
+        errors = [deviation(pairs, w) for w in grid]
         peaks = [grid[k] for k in range(1, len(grid) - 1)
                  if abs(errors[k]) >= abs(errors[k - 1]) and abs(errors[k]) >= abs(errors[k + 1]) and abs(errors[k]) > 1e-12]
-        extrema = sorted(set(peaks + [edge]))[-3:]
-    return outer, inner, max(abs(error) for error in errors)
+        extrema = sorted(set(peaks + [edge]))[-unknowns:]
+        if len(extrema) != unknowns:
+            raise AssertionError(f"the Remez exchange lost its extrema: {extrema!r} (edge {edge_cycles_per_sample!r}, "
+                                 f"{tap_pairs} tap pairs)")
+    taps = tuple(reversed(pairs)) + (1 - 2 * sum(pairs),) + tuple(pairs)
+    return taps, max(abs(error) for error in errors)

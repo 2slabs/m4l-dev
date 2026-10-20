@@ -100,7 +100,7 @@ kernels (**La Pastina, D'Angelo & Gabrielli, "Arbitrary-order IIR antiderivative
 (`lapastina-dangelo-gabrielli-dafx21.pdf`),
 https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf, the "generalisations" route: a
 Butterworth or Chebyshev kernel, at the cost of complex exponential integrals of the transfer per pole); and the line
-split the tanh saturator uses, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the transfer), the
+split the tanh saturator used to use, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the transfer), the
 line's whole size at the input's frequency. An equaliser after the transfer lifts an alias as it lifts the harmonics at
 its frequency: the 259 folder at 2× 48 kHz, worst alias under 20 kHz re the fundamental, 4 V at 3.1 kHz −36.4 → −31.5
 dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
@@ -108,7 +108,8 @@ dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V 
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 
 **Bilbao, Esqueda, Parker & Välimäki, "Antiderivative Antialiasing for Memoryless Nonlinearities", IEEE SPL 24(7),
-2017, pp. 1049–1053** (`bilbao-adaa-spl2017.pdf`, Aalto's accepted version).
+2017, pp. 1049–1053** (`bilbao-adaa-spl2017.pdf`, Aalto's accepted version). The technique is eq. (5) on tanh, F1 =
+log cosh, then an equaliser (below).
 - §II.A, eq. (5) [PDF p. 3; the PDF has a cover page]: "y^n = (F1^n − F1^(n−1)) / (x^n − x^(n−1)). Here, F1^n = F1(x^n) represents the first
   antiderivative of F0 evaluated at x^n." "the input sequence x^n is assumed drawn from samples of a piecewise
   linear underlying function x(t), which is then convolved with a box function of one sample duration, and then
@@ -122,12 +123,20 @@ convolution", DAFx-16** (`parker-zavalishin-lebivic-dafx16.pdf`): the method eq.
 particularly simple form" from ([22] there). Higher orders need tanh's second antiderivative (a dilogarithm); not
 used.
 
-**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"** (`jos-thiran-allpass.html`):
-an order-N allpass "can be designed having maximally flat group delay equal to Δ at dc using the formula
-a_k = (−1)^k (N choose k) Π_{n=0..N} (Δ−N+n)/(Δ−N+k+n)". For N = 1, Δ = 0.5: a1 = (1 − Δ)/(1 + Δ) = 1/3.
-The technique puts the linear part of tanh through it (half a sample, flat magnitude) and antialiases only the residual
-tanh x − x, so both halves are half a sample late and small signals aren't low-passed. (Our construction from the
-two sources; measured in the module docstring and tests/test_techniques.py.)
+The mean is the 2-tap mean (1 + z^−1)/2 on small signals (−2.4 dB at 10 kHz at 44.1 kHz). Its remedy is the one the
+piecewise-linear shaper's second order takes (above: Bilbao et al. §IV "Additional linear filtering", Välimäki,
+Pekonen & Nam 2012 eq. (16), a linear-phase FIR after the mean): 5 symmetric taps, equiripple by the Remez exchange
+(our design; its product with cos(w/2) is 1 at DC and within ±0.0099 dB up to 5/24 of the rate), two samples more
+latency, 2.5 in all. Being linear and after the mean, it is the same filter on everything that goes through, at any
+drive.
+
+Replaced (2026-10-20): the split tanh x = x + (tanh x − x), x through a first-order Thiran allpass of half a sample
+(**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"**, `jos-thiran-allpass.html`: a1 =
+(1 − Δ)/(1 + Δ) = 1/3 for N = 1, Δ = 0.5) and ADAA on the residual only. Flat on small signals, but at a hot drive the
+residual is mostly −x, which the 2-tap mean filters and the allpass does not, so the output was off by about
+|allpass − mean| × the drive (48 kHz, 10 kHz, drive 10: the fundamental 1.6 × the band-limited tanh's too big, peaks
+3.2; 15 kHz drive 20: peaks 10.9). Measured with the kit's renderer against tanh's Fourier series (the ideal,
+band-limited, as late); tests/test_techniques.py keeps the new figures.
 
 ## Band-limited edges (m4l_dev/techniques/band_limited_edges.py)
 

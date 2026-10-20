@@ -163,8 +163,8 @@ JOS "Fractional Delay Filters", "Lagrange Interpolation", "Thiran Allpass Interp
 - **Coefficient warping (p. 771, eq. 40):** the substitution `a = (1 − τ)/(1 + τ)` with τ the fractional delay: the
   low-frequency simplification of `(1 − frac)` → `sin[(1 − τ)ω/2]/sin[(1 + τ)ω/2]` at frequency ω. Practical code uses
   "only the first five terms of the Taylor series" (p. 774). **This `a = (1 − τ)/(1 + τ)` is exactly the order-1
-  Thiran coefficient** `a1 = (1 − Δ)/(1 + Δ)` with Δ the fractional delay (JOS Thiran, as already used in dsp.md for
-  the saturator's half-sample allpass, Δ = 0.5: a1 = 1/3) [VERIFIED both; the identity is ours].
+  Thiran coefficient** `a1 = (1 − Δ)/(1 + Δ)` with Δ the fractional delay (JOS Thiran, as dsp.md's tanh saturator
+  used for its half-sample allpass until 2026-10-20, Δ = 0.5: a1 = 1/3) [VERIFIED both; the identity is ours].
 - **Measured THD + N (Part 2 §5.4, p. 774; 400 Hz sinusoid, 0.1 Hz LFO, 44.1 kHz, 24-bit coefficients):** linear
   **−78 … −88 dB**; unwarped all-pass **−53 … −59 dB**; warped (5-term series) all-pass **−77 … −85 dB**, "An improvement
   of 26 dB". "We require that the implementation ... prevent prolonged Nyquist (Fs/2) oscillation that comes about when

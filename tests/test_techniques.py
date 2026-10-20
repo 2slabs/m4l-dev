@@ -19,6 +19,10 @@ from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa:
     SECOND_ORDER_EQUALISER_TAPS, SECOND_ORDER_LATENCY_STEPS, AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable,
     second_order_equaliser_call)
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_EDGE as TANH_EQUALISER_EDGE  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_INNER_TAP as TANH_EQUALISER_INNER_TAP  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_OUTER_TAP as TANH_EQUALISER_OUTER_TAP  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_TAPS as TANH_EQUALISER_TAPS  # noqa: E402
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
 from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
@@ -51,7 +55,7 @@ from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # n
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
 from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, equalised_second_order_outputs,  # noqa: E402
                                exact_second_order_mean, folded, frequency_by_zero_crossings, harness, phase_degrees,
-                               second_order_equaliser_remez, worst_alias_db)
+                               adaa_equaliser_remez, worst_alias_db)
 
 
 class ZeroDelayLadderFilterTests(unittest.TestCase):
@@ -135,9 +139,10 @@ class ZeroDelayLadderFilterTests(unittest.TestCase):
 class AntiderivativeTanhSaturatorTests(unittest.TestCase):
     SAMPLERATE = 44100.0
 
-    def saturate(self, signal, block=True):
+    def saturate(self, signal, block=True, samplerate=SAMPLERATE):
         if block:
-            program = harness([AntiderivativeTanhSaturator("drive", input="in1")], {}, ["drive_out"])
+            program = harness([AntiderivativeTanhSaturator("drive", input="in1")], {}, ["drive_out"],
+                              samplerate=samplerate)
         else:
             program = GenProgram("out1 = tanh(in1);", 1, 1)
         return program.run(len(signal), [signal])[0]
@@ -148,19 +153,59 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
         naive = worst_alias_db(self.saturate(sine, block=False), 8000.0, harmonics, self.SAMPLERATE, 10000.0)
         antialiased = worst_alias_db(self.saturate(sine), 8000.0, harmonics, self.SAMPLERATE, 10000.0)
         self.assertGreater(naive, -30.0)
-        self.assertLess(antialiased, -50.0)
+        self.assertLess(antialiased, -50.0)       # measured 2026-10-20: -54.3 dB
 
-    def test_small_signals_pass_flat(self):
-        for frequency in (1000.0, 10000.0, 15000.0):
-            sine = [0.01 * math.sin(2 * math.pi * frequency * i / self.SAMPLERATE) for i in range(4096)]
-            gain = amplitude_at(self.saturate(sine)[512:], frequency, self.SAMPLERATE) / 0.01
-            self.assertAlmostEqual(20 * math.log10(gain), 0.0, delta=0.05, msg=frequency)
+    def test_the_equaliser_undoes_the_two_tap_mean_up_to_its_edge(self):
+        # the taps are the Remez design's, DC exactly 1, the 2-tap mean's cos(w / 2) within 0.0099 dB up to the edge;
+        # measured on quiet sines through the block, LATENCY_SAMPLES late, linear phase; above the edge it falls
+        taps, worst = adaa_equaliser_remez(lambda w: math.cos(w / 2), TANH_EQUALISER_EDGE, 2)
+        self.assertAlmostEqual(taps[0], TANH_EQUALISER_OUTER_TAP, places=12)
+        self.assertAlmostEqual(taps[1], TANH_EQUALISER_INNER_TAP, places=12)
+        self.assertAlmostEqual(sum(TANH_EQUALISER_TAPS), 1.0, places=15)
+        self.assertLess(-20 * math.log10(1 - worst), 0.0100)
+        self.assertEqual(AntiderivativeTanhSaturator.LATENCY_SAMPLES, 2.5)
+        count = 4096
+        for frequency, lowest_db, highest_db in ((1000.0, -0.01, 0.01), (5000.0, -0.01, 0.01), (9000.0, -0.01, 0.01),
+                                                 (15000.0, -1.7, -1.5)):
+            quiet = [0.001 * math.sin(2 * math.pi * frequency * i / self.SAMPLERATE) for i in range(count)]
+            late = [0.001 * math.sin(2 * math.pi * frequency * (i - AntiderivativeTanhSaturator.LATENCY_SAMPLES)
+                                     / self.SAMPLERATE) for i in range(count)]
+            gain = complex_amplitude_at(self.saturate(quiet)[100:], frequency, self.SAMPLERATE) / complex_amplitude_at(
+                late[100:], frequency, self.SAMPLERATE)
+            self.assertGreater(20 * math.log10(abs(gain)), lowest_db, msg=frequency)
+            self.assertLess(20 * math.log10(abs(gain)), highest_db, msg=frequency)
+            self.assertLess(abs(gain.imag), 1e-6, msg=f"{frequency}: linear phase, LATENCY_SAMPLES late")
+
+    def test_hot_sines_stay_near_the_band_limited_tanh_at_any_drive(self):
+        # the ideal: tanh of the continuous sine, LATENCY_SAMPLES late, its odd harmonics below Nyquist (its Fourier
+        # series); the old split (x on an allpass, ADAA on tanh x - x) was off by about 0.22 x the drive at 10 kHz
+        # (fundamental error 1.6 x the ideal's at drive 10, peaks 3.2; at 15 kHz drive 20, peaks 10.9). Measured
+        # 2026-10-20 here: fundamental error <= 0.40 (the ideal's is 1.27), peaks <= 1.69, alike at drives 3 and 20
+        for samplerate in (44100.0, 48000.0, 96000.0):
+            for frequency in (5000.0, 10000.0, 15000.0):
+                for drive in (3.0, 20.0):
+                    count = 1088
+                    sine = [drive * math.sin(2 * math.pi * frequency * i / samplerate) for i in range(count)]
+                    out = self.saturate(sine, samplerate=samplerate)[64:]
+                    points = 4096
+                    harmonics = [k for k in range(1, 40, 2) if k * frequency < samplerate / 2]
+                    coefficients = {k: 2 / points * sum(math.tanh(drive * math.sin(2 * math.pi * m / points))
+                                                        * math.sin(2 * math.pi * k * m / points) for m in range(points))
+                                    for k in harmonics}
+                    ideal = [sum(coefficients[k] * math.sin(2 * math.pi * k * frequency * (
+                        i - AntiderivativeTanhSaturator.LATENCY_SAMPLES) / samplerate) for k in harmonics)
+                        for i in range(64, count)]
+                    error = abs(complex_amplitude_at(out, frequency, samplerate)
+                                - complex_amplitude_at(ideal, frequency, samplerate))
+                    case = f"{samplerate} Hz rate, {frequency} Hz, drive {drive}"
+                    self.assertLess(error, 0.42, msg=case)
+                    self.assertLess(max(map(abs, out)), 1.75, msg=case)
 
     def test_near_equal_samples_are_exact(self):
         signal = [0.5 + 1e-12 * i for i in range(200)] + [3.0] * 50 + [-20.0] * 50
         out = self.saturate(signal)
-        for i in range(40, 200):          # after the allpass has forgotten the step from 0 (it decays x 1/3 a sample)
-            self.assertAlmostEqual(out[i], math.tanh(signal[i - 1]), delta=1e-9)
+        for i in range(10, 200):          # a constant through the means and the equaliser (DC 1)
+            self.assertAlmostEqual(out[i], math.tanh(signal[i - 2]), delta=1e-9)
         self.assertAlmostEqual(out[-1], -1.0, delta=1e-9)
 
     def biased(self, signal, bias):
@@ -169,11 +214,11 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
         return program.run(len(signal), [signal])[0]
 
     def test_with_a_bias_it_is_the_slid_curve(self):
-        # tanh(x + b) - tanh(b), half a sample late: exact for a slow signal, 0 at 0
+        # tanh(x + b) - tanh(b), LATENCY_SAMPLES late: exact for a slow signal, 0 at 0
         signal = [1.5 * math.sin(2 * math.pi * i / 400) for i in range(800)]
         out = self.biased(signal, 0.3)
         for i in range(100, 800):
-            middle = 0.5 * (signal[i - 1] + signal[i])
+            middle = 0.5 * (signal[i - 2] + signal[i - 3])
             self.assertAlmostEqual(out[i], math.tanh(middle + 0.3) - math.tanh(0.3), delta=2e-4)
         self.assertEqual(self.biased([0.0] * 10, 0.3)[-1], 0.0)
 
@@ -183,8 +228,7 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
         self.assertGreater(amplitude_at(out[512:], 16000.0, self.SAMPLERATE), 0.01, "a second harmonic")
         naive = GenProgram("out1 = tanh(in1 + 0.3) - tanh(0.3);", 1, 1).run(len(sine), [sine])[0]
         self.assertGreater(worst_alias_db(naive, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -30.0)
-        # measured 2026-10-19: -49.9 dB (the even harmonics fold too)
-        self.assertLess(worst_alias_db(out, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -48.0)
+        self.assertLess(worst_alias_db(out, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -47.5)   # measured 2026-10-20: -48.1 dB
 
 
 class BandLimitedEdgesTests(unittest.TestCase):
@@ -426,9 +470,9 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
         # the taps are the Remez design's, the DC exactly 1, the 3-tap mean's droop (at 96 kHz -5.9 dB at 20 kHz)
         # within 0.0972 dB (1 - 0.0111) up to the edge (20 kHz at 96 kHz); measured on a quiet sine through the shaper inside
         # one piece (the clip's unity line), SECOND_ORDER_LATENCY_STEPS late
-        outer, inner, worst = second_order_equaliser_remez(SECOND_ORDER_EQUALISER_EDGE)
-        self.assertAlmostEqual(outer, SECOND_ORDER_EQUALISER_OUTER_TAP, places=12)
-        self.assertAlmostEqual(inner, SECOND_ORDER_EQUALISER_INNER_TAP, places=12)
+        taps, worst = adaa_equaliser_remez(lambda w: (1 + 2 * math.cos(w)) / 3, SECOND_ORDER_EQUALISER_EDGE, 2)
+        self.assertAlmostEqual(taps[0], SECOND_ORDER_EQUALISER_OUTER_TAP, places=12)
+        self.assertAlmostEqual(taps[1], SECOND_ORDER_EQUALISER_INNER_TAP, places=12)
         self.assertAlmostEqual(sum(SECOND_ORDER_EQUALISER_TAPS), 1.0, places=15)
         self.assertLess(-20 * math.log10(1 - worst), 0.0973)
         self.assertEqual(SECOND_ORDER_LATENCY_STEPS, 3)

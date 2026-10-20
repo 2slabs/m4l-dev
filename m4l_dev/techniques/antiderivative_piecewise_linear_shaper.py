@@ -34,9 +34,9 @@ SECOND_ORDER_EQUALISER_EDGE (5/24 of the rate: 20 kHz at 96 kHz, 10 kHz at 48 kH
 (SECOND_ORDER_LATENCY_STEPS, 3 in all). Linear and after the transfer, it lifts a harmonic and an alias at one
 frequency alike (their ratio stays; an alias re the fundamental rises by the lift at its own frequency, at most +5.8 dB
 at the edge), and above the edge it keeps lifting (+15.9 dB at Nyquist: what a 2x instrument's downsampler takes
-away). The split the tanh saturator uses (the line on a filter-free path, ADAA on the rest) is not this: a folder's
-rest is mostly the line, so the split's error, (1 - the 3-tap mean) x (the line - the transfer), is the line's whole
-size at the input's frequency once it folds.
+away). The split the tanh saturator used to use (the line on a filter-free path, ADAA on the rest) is not this: a
+folder's rest is mostly the line, so the split's error, (1 - the 3-tap mean) x (the line - the transfer), is the
+line's whole size at the input's frequency once it folds (the tanh saturator now equalises its mean, as here).
 
 `PiecewiseLinearTable` is the table and its GenExpr functions (`<name>(x)`, `<name>_integral(x)`,
 `<name>_mean(x, x_before, integral, integral_before)`; a continuous table also `<name>_second_order_mean(x,
