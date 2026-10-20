@@ -21,6 +21,13 @@ Subset
   (references/dsp.md, "gen~ delay taps").
 * Then statements: x = expr; if (...) {...} else if (...) {...} else {...};
   d.write(expr); outN = expr; (braces required, plain `=` only).
+* Bounded loops only: for (i = START; i < LIMIT; i += STEP) { ... } (or i <= LIMIT), START, LIMIT and STEP number
+  literals, STEP > 0, the counter a new name that the body reads but never assigns, so the loop runs at most
+  `bounded_loop_iterations` times whatever its body does; break; and continue; inside it. That is gen~'s own `for`
+  (Cycling '74's GenExpr guide: "Branching and looping is supported in GenExpr with if/else, for and while
+  constructs"; references/dsp.md, "gen~ (what Max accepts)"), narrowed to a count known when the code is checked: a
+  `while`, or a `for` whose count is not, is refused (gen~ only guards against an infinite loop at run time).
+  `+=` is accepted in a for's step only (the guide's own form; gen~ has no `++`). The counter is a float, as in gen~.
 * Expressions: numbers, identifiers, calls, parentheses, unary - and !,
   * / %   + -   < > <= >=   == !=   &&   ||   and right-associative a ? b : c.
 * Inputs in1..inN (read only), outputs out1..outN (write only).
@@ -101,13 +108,18 @@ BUILTIN_ARITY = {
 }
 
 DECLARATION_KEYWORDS = frozenset({"Param", "History", "Delay"})
-STATEMENT_KEYWORDS = frozenset({"if", "else", "return"})
+STATEMENT_KEYWORDS = frozenset({"if", "else", "return", "for", "while", "break", "continue"})
 RESERVED_WORDS = DECLARATION_KEYWORDS | STATEMENT_KEYWORDS
 
 INPUT_NAME_PATTERN = re.compile(r"^in(\d+)$")
 OUTPUT_NAME_PATTERN = re.compile(r"^out(\d+)$")
 
 DELAY_INTERPOLATION_MODES = ("none", "linear", "cubic", "spline")
+
+# The most iterations a for loop's header may allow: ours (gen~ states no limit, only a run-time guard against
+# infinite loops), far above any loop a block runs a sample (the LTC1060 section's ticks: 138), so a header that
+# allows more is a mistake, refused when the code is checked.
+MAXIMUM_LOOP_ITERATIONS = 65536
 
 # Operators we recognise only to refuse them with a helpful message.
 UNSUPPORTED_OPERATORS = ("+=", "-=", "*=", "/=", "%=", "<<", ">>", "**", "&", "|", "^", "~")
@@ -293,6 +305,42 @@ class If(Node):
 @dataclass
 class Return(Node):
     expression: "Node"
+
+
+@dataclass
+class For(Node):
+    """for (counter = start; counter < limit (<= when `inclusive`); counter += step) body: bounded by its literals."""
+    counter: str
+    start: float
+    limit: float
+    inclusive: bool
+    step: float
+    body: Block
+
+    @property
+    def bounded_loop_iterations(self):
+        """How many times the body runs at most (break leaves sooner), counted the way the C runs it (float steps);
+        None when that is more than MAXIMUM_LOOP_ITERATIONS or the step is lost in the counter's rounding."""
+        if (self.limit - self.start) / self.step > MAXIMUM_LOOP_ITERATIONS:
+            return None
+        iterations = 0
+        counter = self.start
+        while counter < self.limit or (self.inclusive and counter == self.limit):
+            iterations += 1
+            if counter + self.step == counter or iterations > MAXIMUM_LOOP_ITERATIONS:
+                return None
+            counter = counter + self.step
+        return iterations
+
+
+@dataclass
+class Break(Node):
+    pass
+
+
+@dataclass
+class Continue(Node):
+    pass
 
 
 @dataclass
@@ -569,6 +617,15 @@ class Parser:
                 return self.parse_if()
             if token.text == "else":
                 self.fail_at(token, "'else' without a matching 'if'")
+            if token.text == "for":
+                return self.parse_for()
+            if token.text == "while":
+                self.fail_at(token, "'while' loops are refused: the kit runs only loops it can bound when it checks the "
+                                    "code; write for (i = 0; i < MAXIMUM; i += 1) { ... if (done) { break; } }")
+            if token.text in ("break", "continue"):
+                self.advance()
+                self.expect_semicolon(f"after {token.text}")
+                return (Break if token.text == "break" else Continue)(token.line, token.col)
             if token.text == "return":
                 self.advance()
                 expression = self.parse_expression()
@@ -616,6 +673,52 @@ class Parser:
             else_block = self.parse_block()
             break
         return If(keyword.line, keyword.col, branches, else_block)
+
+    def parse_for(self):
+        """for (i = START; i < LIMIT; i += STEP) { ... }: the only loop, its count fixed by its three literals."""
+        keyword = self.advance()
+        unbounded = ("a for loop must be bounded when it is checked: for (i = START; i < LIMIT; i += STEP) with "
+                     "number literals and STEP > 0")
+        self.expect_op("(", "after 'for'")
+        counter = self.expect_identifier("as the loop counter")
+        self.expect_op("=", f"after the loop counter '{counter.text}'")
+        start = self.parse_for_literal(unbounded)
+        self.expect_semicolon("after the loop's start")
+        if not (self.peek().kind == "ident" and self.peek().text == counter.text):
+            self.fail_at(self.peek(), f"{unbounded}: the condition must test the counter '{counter.text}'")
+        self.advance()
+        comparison = self.peek()
+        if not (comparison.kind == "op" and comparison.text in ("<", "<=")):
+            self.fail_at(comparison, f"{unbounded}: the condition must be {counter.text} < LIMIT or {counter.text} <= LIMIT")
+        self.advance()
+        limit = self.parse_for_literal(unbounded)
+        if not self.at_op(";"):
+            self.fail_at(self.peek(), f"{unbounded}: the condition is the counter against one number literal, "
+                                      f"found {self.describe(self.peek())}")
+        self.advance()
+        step_counter = self.peek()
+        if not (step_counter.kind == "ident" and step_counter.text == counter.text and self.at_op("+=", 1)):
+            self.fail_at(step_counter, f"{unbounded}: the step must be {counter.text} += STEP")
+        self.advance()
+        self.advance()
+        step_token = self.peek()
+        step = self.parse_for_literal(unbounded)
+        if not step > 0:
+            self.fail_at(step_token, f"{unbounded}: the step must be more than 0, got {step!r}")
+        self.expect_op(")", "to close the for loop's header")
+        body = self.parse_block()
+        return For(keyword.line, keyword.col, counter.text, start, limit, comparison.text == "<=", step, body)
+
+    def parse_for_literal(self, unbounded):
+        sign = 1.0
+        if self.at_op("-"):
+            self.advance()
+            sign = -1.0
+        token = self.peek()
+        if token.kind != "number":
+            self.fail_at(token, f"{unbounded}: expected a number literal, found {self.describe(token)}")
+        self.advance()
+        return sign * self.number_value(token)
 
     # -- expressions --
     def parse_expression(self):
@@ -807,6 +910,7 @@ class Analyzer:
         self.used_outputs = set()
         self.closed_block_locals = {}   # name -> line of the block that held it
         self.function_being_checked = None
+        self.loop_counters_in_force = []   # the counters of the for loops being checked, outermost first
 
     def error(self, node_or_position, message):
         if isinstance(node_or_position, tuple):
@@ -871,7 +975,10 @@ class Analyzer:
                 self.error((line, col), f"duplicate function argument '{parameter_name}'")
             scope.variables[parameter_name] = line
         self.function_being_checked = function
+        loop_counters_outside = self.loop_counters_in_force
+        self.loop_counters_in_force = []
         self.check_statements(function.body.statements, scope)
+        self.loop_counters_in_force = loop_counters_outside
         self.function_being_checked = None
         self.functions[function.name] = function
 
@@ -903,12 +1010,42 @@ class Analyzer:
             self.check_expression(statement.expression, scope)
         elif isinstance(statement, MethodStatement):
             self.check_method_statement(statement.call, scope)
+        elif isinstance(statement, For):
+            self.check_for(statement, scope)
+        elif isinstance(statement, (Break, Continue)):
+            if not self.loop_counters_in_force:
+                self.error(statement, f"'{'break' if isinstance(statement, Break) else 'continue'}' is only allowed "
+                                      "inside a for loop")
         else:
             self.error(statement, "internal error: unknown statement type")
+
+    def check_for(self, loop, scope):
+        counter = loop.counter
+        if scope.find(counter) is not None:
+            self.error(loop, f"the loop counter '{counter}' must be a new name: it is already a local here")
+        existing = self.classify_reserved(counter)
+        if existing:
+            self.error(loop, f"the loop counter '{counter}' must be a new name: it is already {existing}")
+        if counter in self.closed_block_locals:
+            self.error(loop, f"the loop counter '{counter}' must be a new name: it is a local of the block at line "
+                             f"{self.closed_block_locals[counter]}")
+        if loop.bounded_loop_iterations is None:
+            self.error(loop, f"the for loop over '{counter}' would run more than {MAXIMUM_LOOP_ITERATIONS} times, or "
+                             "its step is lost in the counter's rounding: the kit runs only loops it can bound")
+        body_scope = Scope(scope, loop.body.line)
+        body_scope.variables[counter] = loop.line
+        self.loop_counters_in_force.append(counter)
+        self.check_statements(loop.body.statements, body_scope)
+        self.loop_counters_in_force.pop()
+        for name in body_scope.variables:
+            self.closed_block_locals[name] = loop.body.line
 
     def check_assignment_target(self, statement, scope):
         name = statement.name
         inside_function = self.function_being_checked is not None
+        if name in self.loop_counters_in_force:
+            self.error(statement, f"cannot assign to the loop counter '{name}' inside its loop: the loop would no "
+                                  "longer be bounded by its header")
         existing_scope = scope.find(name)
         if existing_scope is not None:
             return
@@ -1413,6 +1550,9 @@ class CTranslator:
                     names |= CTranslator.assigned_names(block.statements)
                 if statement.else_block is not None:
                     names |= CTranslator.assigned_names(statement.else_block.statements)
+            elif isinstance(statement, For):
+                names.add(statement.counter)
+                names |= CTranslator.assigned_names(statement.body.statements)
         return names
 
     # -- noise: the one side effect, whose order Python fixes and C does not --
@@ -1428,6 +1568,8 @@ class CTranslator:
                         return True
                 if statement.else_block is not None and self.statements_draw_noise(statement.else_block.statements):
                     return True
+            if isinstance(statement, For) and self.statements_draw_noise(statement.body.statements):
+                return True
         return False
 
     def draws_noise(self, node):
@@ -1487,6 +1629,19 @@ class CTranslator:
                 self.emit_statements(statement.else_block.statements)
                 self.indent -= 1
             self.emit("}")
+        elif isinstance(statement, For):
+            counter = f"v_{statement.counter}"
+            comparison = "<=" if statement.inclusive else "<"
+            self.emit(f"for ({counter} = {c_double_literal(statement.start)}; {counter} {comparison} "
+                      f"{c_double_literal(statement.limit)}; {counter} = {counter} + {c_double_literal(statement.step)}) {{")
+            self.indent += 1
+            self.emit_statements(statement.body.statements)
+            self.indent -= 1
+            self.emit("}")
+        elif isinstance(statement, Break):
+            self.emit("break;")
+        elif isinstance(statement, Continue):
+            self.emit("continue;")
         else:
             raise GenExprError("internal error: cannot translate statement", statement.line, statement.col)
 

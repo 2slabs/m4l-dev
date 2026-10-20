@@ -323,6 +323,76 @@ class PythonArithmeticTests(unittest.TestCase):
         check("out1 = in1 * 0.5;", num_inputs=1, num_outputs=1)   # checking needs no compiler
 
 
+class BoundedLoopTests(unittest.TestCase):
+    """gen~'s for loop (Cycling '74's GenExpr guide; references/dsp.md, "gen~ (what Max accepts)"), as far as the kit
+    renders it: bounded by its header's literals, break and continue inside it; anything it cannot bound refused."""
+
+    def assert_rejected(self, code, expected_fragment, expected_line=None):
+        with self.assertRaises(GenExprError) as caught:
+            check(code, num_inputs=1, num_outputs=1)
+        self.assertIn(expected_fragment, caught.exception.message)
+        if expected_line is not None:
+            self.assertEqual(caught.exception.line, expected_line)
+
+    def test_the_guides_own_loop_renders_its_sum(self):
+        # the guide's example: val = 0; for (i = 0; i < 10; i += 1) { val += i; } (+= in the body is ours to spell out)
+        self.assertEqual(render_single_output("val = 0;\nfor (i = 0; i < 10; i += 1) {\n\tval = val + i;\n}\n"
+                                              "out1 = val;", 2), [45.0, 45.0])
+
+    def test_float_steps_count_as_the_c_counts_them(self):
+        # the guide: "for (i = 0; i <= 1; i += 0.05)" "will likely not reach 1.0"; the kit counts it the C's way
+        code = "n = 0;\nfor (i = 0; i <= 1; i += 0.05) {\n\tn = n + 1;\n}\nout1 = n;"
+        program, _ = analyze(code, 1, 1)
+        self.assertEqual(render_single_output(code, 1), [float(program.statements[1].bounded_loop_iterations)])
+        self.assertEqual(program.statements[1].bounded_loop_iterations, 20)
+
+    def test_break_leaves_and_continue_skips(self):
+        code = ("total = 0;\nfor (i = 0; i < 64; i += 1) {\n\tif (i >= in1) {\n\t\tbreak;\n\t}\n"
+                "\tif (i == 2) {\n\t\tcontinue;\n\t}\n\ttotal = total + i;\n}\nout1 = total;")
+        self.assertEqual(render_single_output(code, 4, [[0, 3, 5, 100]]), [0.0, 1.0, 8.0, 2014.0])
+
+    def test_a_history_stepped_in_a_loop_keeps_every_step(self):
+        code = "History x(1);\nfor (i = 0; i < 3; i += 1) {\n\tx = x * 2;\n}\nout1 = x;"
+        self.assertEqual(render_single_output(code, 3), [8.0, 64.0, 512.0])
+
+    def test_loops_nest_and_run_in_functions(self):
+        code = ("triangle(n) {\n\ts = 0;\n\tfor (k = 1; k <= 8; k += 1) {\n\t\tif (k > n) {\n\t\t\treturn s;\n"
+                "\t\t}\n\t\ts = s + k;\n\t}\n\treturn s;\n}\nproduct = 0;\nfor (i = 0; i < 3; i += 1) {\n"
+                "\tfor (j = 0; j < 4; j += 1) {\n\t\tproduct = product + 1;\n\t}\n}\n"
+                "out1 = product * 100 + triangle(in1);")
+        self.assertEqual(render_single_output(code, 3, [[2, 4, 20]]), [1203.0, 1210.0, 1236.0])
+
+    def test_noise_drawn_in_a_loop_is_pythons_sequence(self):
+        code = "s = 0;\nfor (i = 0; i < 5; i += 1) {\n\ts = s + noise();\n}\nout1 = s;"
+        generator = random.Random(1)
+        expected = [sum(generator.random() * 2 - 1 for _ in range(5)) for _ in range(3)]
+        for value, wanted in zip(render_single_output(code, 3), expected):
+            self.assertAlmostEqual(value, wanted, places=12)
+
+    def test_what_it_cannot_bound_is_refused(self):
+        self.assert_rejected("i = 0;\nwhile (i < 10) {\n\ti = i + 1;\n}\nout1 = i;", "'while' loops are refused", 2)
+        self.assert_rejected("for (i = 0; i < in1; i += 1) {\n}\nout1 = 0;", "expected a number literal", 1)
+        self.assert_rejected("for (i = 0; i > 10; i += 1) {\n}\nout1 = 0;", "i < LIMIT or i <= LIMIT", 1)
+        self.assert_rejected("for (i = 0; i < 10; i = i + 1) {\n}\nout1 = 0;", "the step must be i += STEP", 1)
+        self.assert_rejected("for (i = 0; i < 10; i += 0) {\n}\nout1 = 0;", "more than 0", 1)
+        self.assert_rejected("for (i = 0; i < 10; i += -1) {\n}\nout1 = 0;", "more than 0", 1)
+        self.assert_rejected("for (i = 0; i < 10; i += 1) {\n\ti = 0;\n}\nout1 = 0;", "cannot assign to the loop counter", 2)
+        self.assert_rejected("for (i = 0; i < 1e9; i += 1) {\n}\nout1 = 0;", "more than 65536", 1)
+        self.assert_rejected("for (i = 1e20; i < 2e20; i += 1) {\n}\nout1 = 0;", "more than 65536", 1)
+        self.assert_rejected("for (i = 0; i < 10 + 1; i += 1) {\n}\nout1 = 0;", "one number literal", 1)
+        self.assert_rejected("for (i = 0; j < 10; i += 1) {\n}\nout1 = 0;", "must test the counter 'i'", 1)
+
+    def test_its_names_and_statements_are_checked(self):
+        self.assert_rejected("break;\nout1 = 0;", "'break' is only allowed inside a for loop", 1)
+        self.assert_rejected("f(a) {\n\tcontinue;\n\treturn a;\n}\nout1 = f(1);", "'continue' is only allowed", 2)
+        self.assert_rejected("History h(0);\nfor (h = 0; h < 2; h += 1) {\n}\nout1 = h;", "already a History", 2)
+        self.assert_rejected("i = 3;\nfor (i = 0; i < 2; i += 1) {\n}\nout1 = i;", "already a local", 2)
+        self.assert_rejected("for (i = 0; i < 2; i += 1) {\n\ta = i;\n}\nout1 = i;", "assigned only inside the block", 4)
+        self.assert_rejected("for (i = 0; i < 2; i += 1) {\n\ta = i;\n}\nout1 = a;", "assigned only inside the block", 4)
+        self.assert_rejected("for (i = 0; i < 2; i += 1) {\n\tb = a;\n\ta = i;\n}\nout1 = 0;", "read before it is assigned", 2)
+        self.assert_rejected("x = 0;\nx += 1;\nout1 = x;", "compound assignment '+=' is not supported", 2)
+
+
 class SpeedTests(unittest.TestCase):
     def test_speed_smoke(self):
         lines = ["History s(0);", "Param amount(0.5, min=0, max=1);"]

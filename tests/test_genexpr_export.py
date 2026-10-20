@@ -15,10 +15,21 @@ from m4l_dev.genexpr import GenProgram, NoiseState  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
 
-# a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, histories
+# a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, histories,
+# bounded loops (in a function and stepping a History, with break and continue)
 CODE = """
 smooth(x, ms) {
 	return 1 - exp(-1000 / (ms * samplerate));
+}
+halvings(x) {
+	s = x;
+	for (k = 0; k < 6; k += 1) {
+		if (k >= 4) {
+			break;
+		}
+		s = s * 0.5 + 0.1;
+	}
+	return s;
 }
 Param cutoff(500, min=20, max=20000);
 Param time(3, min=0, max=10);
@@ -29,6 +40,12 @@ ph = fract(ph + cutoff / samplerate);
 echo.write(lp + noise() * 0.01);
 out1 = echo.read(mstosamps(time) + 0.5);
 out2 = sin(twopi * ph) + noise() * noise();
+for (i = 0; i < 8; i += 1) {
+	if (i == 3) {
+		continue;
+	}
+	lp = lp * 0.999 + halvings(in2) * 0.0001;
+}
 out3 = in2 * mstosamps(1);
 """
 INPUTS, OUTPUTS = 2, 3

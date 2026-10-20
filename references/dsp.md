@@ -502,4 +502,14 @@ Histories, exact; a pad of 0 is the input.
   it has taps.
 - **GenExpr** (https://docs.cycling74.com/userguide/gen/gen_genexpr/): "functions must be declared before all
   statements"; functions take arguments and "can return multiple values". The gen blocks keep to the kit renderer's
-  subset (one return value, no loops), which is narrower.
+  subset (one return value, bounded loops only), which is narrower.
+- **gen~ loops in GenExpr** (the same guide, "Branching and Looping" and "Continue and Break", read 2026-10-20):
+  "Branching and looping is supported in GenExpr with `if/else`, `for` and `while` constructs."; "`for` loops are
+  also similar to this in many other languages although there is no `++` operator in GenExpr to increment a loop
+  counter. Instead, += can be used: `val = 0; for (i = 0; i < 10; i += 1) { // accumulate val += i; } out = val;`";
+  "All of the gen objects have protections against infinite loops, so while an infinite loop might slow things down,
+  it won't cause Max to get stuck and freeze."; "in many cases values in GenExpr are floating point, even loop
+  counters"; "With looping constructs, GenExpr supports `break` and `continue` statements. `break` causes an early
+  exit from a loop[;] `continue` causes the loop to start the next iteration without finishing the current one." The
+  kit renderer takes the guide's `for` with literal start, limit and step (so its count is known when the code is
+  checked), `break` and `continue`, and refuses `while` and any `for` it cannot bound (m4l_dev/genexpr.py).
