@@ -10,9 +10,19 @@ A device keeps its Init values and its presets in one JSON file, its preset book
 
 Values are in each control's own units: a dial's or number box's number, a menu's or tab's item name, a toggle's
 `off` / `on`. Every control the presets set has an Init value (it is the control's initial value in the patch, the
-gen~ Param default it must match, and the displays' starting value); a control given `initial_outside_presets` has
+default of each gen~ Param it sets, and the displays' starting value); a control given `initial_outside_presets` has
 none and presets leave it alone. The build fails on an unknown control, a missing Init value, a value out of range or
 not an item, and a preset name used twice.
+
+**The Init values are the gen~ Params' defaults: one source.** A Param a control sets leaves its default out of the
+device's GenExpr (`Param cutoff(min=40, max=12000);`); the patch builder writes it into the code the patch holds, the
+value the initial values send that Param (scaled, looked up, or a tempo-synced time at 120 BPM, as the route sends
+it: `DevicePatchBuilder.write_gen_param_defaults`, `genexpr.code_with_param_defaults`). A Param no control sets (Stop's
+panic, Live's tempo from the brain) keeps the default its code writes. The build fails, listing each, on a Param with a
+default in its code that a control also sets (two sources), a Param with neither, two controls starting one Param at
+different values, and a value outside the Param's min / max. Whatever renders or exports the code as given sets those
+Params first: `GenProgram.run` refuses while one is unset, `genexpr_export.export_c` refuses code without its defaults
+(export `DevicePatchBuilder.gen_code_as_built`), and a MatchedVoice must search or fix each.
 
 The same book makes either or both outputs:
 

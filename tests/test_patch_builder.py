@@ -13,7 +13,8 @@ from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
 from m4l_dev.preset_book import PresetBook  # noqa: E402
 
 INFO = {name: (name, "text") for name in ("A", "B", "C", "Volume", "Page", "Preset", "Stop", "Link view", "Pick", "Tool")}
-GEN_CODE = "Param a(0, min=0, max=1);\nParam b(0.25, min=0, max=1);\nParam volume(0);\nout1 = in1 * a;\n"
+# a and volume: set by controls, so no default in the code (the build writes it); b: set by no control in most tests
+GEN_CODE = "Param a(min=0, max=1);\nParam b(0.25, min=0, max=1);\nParam volume;\nout1 = in1 * a;\n"
 
 
 def preset_book(init=None, presets=None):
@@ -25,14 +26,14 @@ def preset_book(init=None, presets=None):
 HEADER_INFO = ("Volume", "Page", "Stop", "Link view")
 
 
-def builder(width=400, book=None, preset_menu=None, info_keys=None):
-    """A builder with a gen~ (patch.target) and the header. info_keys: the Info texts it has (default all of INFO;
+def builder(width=400, book=None, preset_menu=None, info_keys=None, gen_code=GEN_CODE):
+    """A builder with a gen~ (patch.target, holding `gen_code`) and the header. info_keys: the Info texts it has (default all of INFO;
     check() fails on a text nothing uses, so a test that passes check() names the ones it uses)."""
     info = INFO if info_keys is None else {key: INFO[key] for key in HEADER_INFO + tuple(info_keys)}
     patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
                                device_type="instrument", device_width=width, page_names=["one", "two"], info=info,
                                preset_book=book or preset_book())
-    patch.target = patch.gen_box(GEN_CODE, 1, 1, rect=(0, 0, 80, 22))
+    patch.target = patch.gen_box(gen_code, 1, 1, rect=(0, 0, 80, 22))
     patch.header(output_level_target=patch.target, output_level_name="Volume", preset_menu=preset_menu)
     return patch
 
@@ -127,7 +128,7 @@ class LayoutTests(unittest.TestCase):
                                    info={name: (name, "text") for name in ("Output", "Page", "Stop", "Link view")},
                                    preset_book=PresetBook({"init": {"Output": -6}, "presets": [
                                        {"name": "init", "group": "init", "idea": "init", "values": {}}]}, "book"))
-        target = patch.gen_box("Param volume(-6);\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
+        target = patch.gen_box("Param volume;\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
         made = patch.header(output_level_target=target, output_level_name="Output")
         values = saved_values(patch, made["output_level"])
         self.assertEqual((values["parameter_longname"], values["parameter_shortname"]), ("Output", "Output"))
@@ -286,12 +287,61 @@ class GroupTests(unittest.TestCase):
 
 
 class GenTests(unittest.TestCase):
-    def test_param_defaults_must_be_what_the_init_values_send(self):
+    @staticmethod
+    def codebox_code(patch, gen_box_id):
+        return patch.find(gen_box_id)["patcher"]["boxes"][0]["box"]["code"]
+
+    def test_the_build_writes_each_param_default_from_the_init_values(self):
+        patch = builder(book=preset_book(init={"A": 0.75, "Volume": -3}), info_keys=("A",))
+        patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        patch.check()
+        self.assertEqual(self.codebox_code(patch, patch.target), "Param a(0.75, min=0, max=1);\nParam b(0.25, min=0, "
+                         "max=1);\nParam volume(-3);\nout1 = in1 * a;\n")
+        self.assertEqual(patch.gen_code_as_built(patch.target), self.codebox_code(patch, patch.target))
+        patch.check()                                  # checking twice writes the same (from the code as given)
+        self.assertIn("Param a(0.75, min=0, max=1);", self.codebox_code(patch, patch.target))
+
+    def test_a_scaled_or_derived_value_is_written_as_sent(self):
+        patch = builder(book=preset_book(init={"A": "y", "B": 50, "Volume": 0}), info_keys=("A", "B"),
+                        gen_code="Param a(min=0, max=1);\nParam b;\nParam volume;\nout1 = in1 * a * b;\n")
+        menu = patch.menu("A", "A", ["x", "y"], 12, 98, 60, "one")
+        patch.tell(patch.menu_lookup(menu, [0.1, 0.3]), "a", patch.target)
+        patch.dial("B", "B", patch.target, "b", 0, 100, 0, 76, 119, "one", scale=0.01)
+        self.assertIn("Param a(0.3, min=0, max=1);\nParam b(0.5);", patch.gen_code_as_built(patch.target))
+
+    def test_a_default_in_the_code_and_from_the_init_values_fails(self):
         patch = builder(book=preset_book(init={"A": 0, "B": 50, "Volume": 0}))
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
         patch.dial("B", "B", patch.target, "b", 0, 100, 0, 60, 119, "one", scale=0.01)
-        with self.assertRaisesRegex(BuildError, r"Param b\(0.25\), the Init values send 0.5"):
+        with self.assertRaisesRegex(BuildError, r"B -> Param b\(0.25, ...\): the initial values give it \(0.5\): "
+                                                r"leave the default out"):
             patch.check()
+
+    def test_a_param_with_no_default_and_no_control_fails(self):
+        patch = builder(book=preset_book(init={"Volume": 0}))
+        with self.assertRaisesRegex(BuildError, "Param a .* has no default in its code and no control sets it"):
+            patch.check()
+
+    def test_two_controls_sending_one_param_different_initial_values_fail(self):
+        patch = builder(book=preset_book(init={"A": 0, "B": 1, "Volume": 0}))
+        patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        patch.dial("B", "B", patch.target, "a", 0, 1, 0, 60, 119, "one")
+        with self.assertRaisesRegex(BuildError, "Param a: A sends 0, B sends 1 at the start"):
+            patch.check()
+
+    def test_an_initial_value_outside_the_params_range_fails(self):
+        patch = builder(book=preset_book(init={"A": 5, "Volume": 0}))
+        patch.dial("A", "A", patch.target, "a", 0, 10, 0, 12, 119, "one")
+        with self.assertRaisesRegex(BuildError, r"the initial values send 5, outside its \[0.0, 1.0\]"):
+            patch.check()
+
+    def test_a_tempo_synced_time_writes_its_default_at_the_starting_tempo(self):
+        patch = builder(book=preset_book(init={"A": "1/8", "Volume": 0}), info_keys=("A",),
+                        gen_code="Param a(0.5);\nParam time(min=1, max=4000);\nParam volume;\nout1 = in1 * a;\n")
+        menu = patch.menu("A", "A", ["1/16", "1/8", "1/4"], 12, 98, 40, "one")
+        patch.tempo_synced_milliseconds(menu, [0.25, 0.5, 1.0], patch.box("t f", rect=(0, 0, 30, 22)), "time",
+                                        patch.target)
+        self.assertIn("Param time(250, min=1, max=4000);", patch.gen_code_as_built(patch.target))
 
     def test_a_message_to_no_param_fails(self):
         patch = builder(book=preset_book(init={"A": 0, "Volume": 0}))
@@ -311,8 +361,9 @@ class GenTests(unittest.TestCase):
         menu = patch.menu("A", "A", ["x", "y"], 12, 98, 60, "one")
         lookup = patch.derived(patch.box("expr $i1 * 0.25"), "A", lambda v: v * 0.25)
         patch.wire(menu, lookup)
-        patch.tell(lookup, "b", patch.target)
+        patch.tell(lookup, "a", patch.target)
         patch.check()
+        self.assertIn("Param a(0.25, min=0, max=1);", self.codebox_code(patch, patch.target))
 
 
 if __name__ == "__main__":

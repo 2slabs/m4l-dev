@@ -29,7 +29,8 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
 - **A voice** is any program the kit renders (`m4l_dev/genexpr.py`): a drum voice's own gen~ code, with its Params.
   Each searched Param has a range on a linear or log scale, or is an integer range, or an enum (its values); the
   range must sit inside the Param's own min / max (the renderer would clamp it silently otherwise). Params not
-  searched keep their default or a fixed value. A hit is: a fresh program (no state from the hit before), the trigger
+  searched keep their default or a fixed value (a Param whose code leaves its default out, the Init values' to
+  write, must be searched or fixed). A hit is: a fresh program (no state from the hit before), the trigger
   on its input (an impulse, or a gate held `held_seconds`), the other inputs at 0, the audio output, a fixed noise seed
   (gen~'s noise(), and the voice's seed Param, `noise_seed_param`, which its kit techniques read: SeededWhiteNoise,
   PitchModulator's random). A hit is a function of its parameters.

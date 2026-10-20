@@ -12,6 +12,9 @@ Subset
 * Function definitions first: name(a, b) { ... }  (only arguments, own locals,
   builtins and constants; `return expr;` allowed; falling off the end returns 0).
 * Then declarations: Param name(default[, min=X][, max=Y]); History a(0), b(1);
+  A Param may leave its default out (`Param name(min=X, max=Y);`, `Param name;`): its default is then the value the
+  device's Init values send it, which the patch builder writes into the code it builds
+  (code_with_param_defaults; m4l_dev/patch_builder.py). GenProgram makes such a Param be set before it runs.
   Delay d(size[, taps]);  (d.read(t[, interp="none"|"linear"|"cubic"|"spline"]), d.write(x);)
   A Delay is read at most `taps` times in the code (default 1): Max's delay operator has one read tap per
   "tap inlet/outlet pair" (its second argument), and code that reads one Delay at two places declares 2
@@ -307,7 +310,7 @@ class FunctionDef(Node):
 @dataclass
 class ParamDecl(Node):
     name: str
-    default: float
+    default: "float | None"     # None: left out of the code, the Init values give it (code_with_param_defaults)
     minimum: "float | None"
     maximum: "float | None"
 
@@ -476,28 +479,42 @@ class Parser:
         return [self.parse_delay_declaration(keyword)]
 
     def parse_param_declaration(self, keyword):
+        """Param name(default[, min=X][, max=Y]); the default may be left out: Param name(min=X, max=Y); Param name;"""
         name = self.expect_identifier("after Param")
-        self.expect_op("(", "after the Param name")
-        default = self.parse_signed_number("as the Param default")
+        default = None
         limits = {}
-        while self.at_op(","):
+        if self.at_op("("):
             self.advance()
-            key = self.peek()
-            if key.kind != "ident" or key.text not in ("min", "max"):
-                self.fail_at(key, f"expected min=... or max=... in Param, found {self.describe(key)}")
-            self.advance()
-            if key.text in limits:
-                self.fail_at(key, f"duplicate '{key.text}' in Param {name.text}")
-            self.expect_op("=", f"after '{key.text}'")
-            limits[key.text] = self.parse_signed_number(f"for '{key.text}'")
-        self.expect_op(")", "to close the Param")
+            if self.at_limit_keyword():
+                self.parse_param_limit(name, limits)
+            elif not self.at_op(")"):
+                default = self.parse_signed_number("as the Param default")
+            while (default is not None or limits) and self.at_op(","):
+                self.advance()
+                self.parse_param_limit(name, limits)
+            self.expect_op(")", "to close the Param")
         self.expect_semicolon("after the Param declaration")
         minimum, maximum = limits.get("min"), limits.get("max")
         if minimum is not None and maximum is not None and minimum > maximum:
             self.fail_at(name, f"Param {name.text}: min {minimum} is greater than max {maximum}")
-        if (minimum is not None and default < minimum) or (maximum is not None and default > maximum):
+        if default is not None and ((minimum is not None and default < minimum)
+                                    or (maximum is not None and default > maximum)):
             self.fail_at(name, f"Param {name.text}: default {default} is outside its min/max range")
         return ParamDecl(name.line, name.col, name.text, default, minimum, maximum)
+
+    def parse_param_limit(self, name, limits):
+        key = self.peek()
+        if not self.at_limit_keyword():
+            self.fail_at(key, f"expected min=... or max=... in Param, found {self.describe(key)}")
+        self.advance()
+        if key.text in limits:
+            self.fail_at(key, f"duplicate '{key.text}' in Param {name.text}")
+        self.expect_op("=", f"after '{key.text}'")
+        limits[key.text] = self.parse_signed_number(f"for '{key.text}'")
+
+    def at_limit_keyword(self):
+        token = self.peek()
+        return token.kind == "ident" and token.text in ("min", "max") and self.at_op("=", 1)
 
     def parse_history_declaration(self):
         declarations = []
@@ -692,6 +709,59 @@ class Parser:
 
 def parse(code):
     return Parser(tokenize(code)).parse_program()
+
+
+def param_default_text(value):
+    """A Param default as the code shows it: an integer without a decimal point (700), any other value as Python's
+    shortest repr that reads back to the same double (0.22)."""
+    value = float(value)
+    if not math.isfinite(value):
+        raise BuildError(f"a Param default must be a finite number, not {value}")
+    if value.is_integer() and abs(value) < 1e15:
+        return str(int(value))
+    return repr(value)
+
+
+def code_with_param_defaults(code, defaults_by_name):
+    """`code` with each Param of `defaults_by_name` given that default where its declaration leaves it out
+    (`Param cutoff(min=40, max=12000);` -> `Param cutoff(700, min=40, max=12000);`, `Param x;` -> `Param x(0.5);`).
+    Fails on a name that is no Param, on a Param whose code already holds a default (one number, one source), and if
+    the result does not read back with exactly these defaults."""
+    tokens = tokenize(code)
+    declarations = {declaration.name: declaration for declaration in parse(code).declarations
+                    if isinstance(declaration, ParamDecl)}
+    unknown = sorted(set(defaults_by_name) - set(declarations))
+    if unknown:
+        raise BuildError(f"defaults for {unknown}, which the code does not declare as Params "
+                         f"(it declares: {', '.join(declarations) or 'none'})")
+    written_twice = sorted(name for name in defaults_by_name if declarations[name].default is not None)
+    if written_twice:
+        raise BuildError(f"Params {written_twice} hold a default in the code and are given one: leave the default "
+                         f"out of the code (Param name(min=..., max=...);), the one given is the default")
+    line_starts = [0] + [index + 1 for index, character in enumerate(code) if character == "\n"]
+
+    def offset_of(token):
+        return line_starts[token.line - 1] + token.col - 1
+
+    insertions = []                                   # (offset, text), applied from the end
+    for index, token in enumerate(tokens):
+        if not (token.kind == "ident" and token.text == "Param" and tokens[index + 1].text in defaults_by_name):
+            continue
+        name_token, following = tokens[index + 1], tokens[index + 2]
+        default_text = param_default_text(defaults_by_name[name_token.text])
+        if following.kind == "op" and following.text == "(":
+            closing = tokens[index + 3].kind == "op" and tokens[index + 3].text == ")"
+            insertions.append((offset_of(following) + 1, default_text if closing else default_text + ", "))
+        else:
+            insertions.append((offset_of(name_token) + len(name_token.text), f"({default_text})"))
+    for offset, inserted in sorted(insertions, reverse=True):
+        code = code[:offset] + inserted + code[offset:]
+    read_back = {declaration.name: declaration.default for declaration in parse(code).declarations
+                 if isinstance(declaration, ParamDecl) and declaration.name in defaults_by_name}
+    if read_back != {name: float(value) for name, value in defaults_by_name.items()}:
+        raise BuildError(f"internal error: the Param defaults written read back as {read_back}, "
+                         f"not {dict(defaults_by_name)}")
+    return code
 
 
 # ----------------------------------------------------------------------------
@@ -1536,7 +1606,11 @@ class GenProgram:
         self.histories = list(info.histories)
         self._param_index = {name: index for index, name in enumerate(info.params)}
         self._history_index = {name: index for index, name in enumerate(info.histories)}
-        self._param_values = array.array("d", (decl.default for decl in info.params.values()))
+        # a Param whose code leaves its default out (the build writes it from the Init values) holds nothing until
+        # set_param: run() refuses to start while one is unset
+        self._params_never_set = {name for name, decl in info.params.items() if decl.default is None}
+        self._param_values = array.array("d", (math.nan if decl.default is None else decl.default
+                                               for decl in info.params.values()))
         self._history_values = array.array("d", (decl.initial for decl in info.histories.values()))
         self._delay_memory = array.array("d", bytes(8 * sum(decl.size for decl in info.delays.values())))
         self._delay_positions = (ctypes.c_long * max(1, len(info.delays)))()
@@ -1566,10 +1640,14 @@ class GenProgram:
         if limits["max"] is not None and value > limits["max"]:
             value = limits["max"]
         self._param_values[self._param_index[name]] = value
+        self._params_never_set.discard(name)
 
     def get_param(self, name):
         if name not in self.params:
             raise KeyError(f"unknown Param '{name}'; this program declares: {', '.join(self.params) or '(none)'}")
+        if name in self._params_never_set:
+            raise ValueError(f"Param '{name}' has no default in the code (the build writes it from the Init values) "
+                             "and was never set")
         return self._param_values[self._param_index[name]]
 
     def get_history(self, name):
@@ -1590,6 +1668,10 @@ class GenProgram:
     def run(self, num_samples, inputs=None):
         if num_samples < 0:
             raise ValueError("num_samples must be >= 0")
+        if self._params_never_set:
+            raise ValueError(f"Params {sorted(self._params_never_set)} have no default in the code (the build writes "
+                             "each from the Init values it sends) and were never set: set_param them before running "
+                             "(a device's render sets them through its patch, messages_for its Init values)")
         if inputs is None:
             inputs = [0.0] * self.num_inputs
         if len(inputs) != self.num_inputs:

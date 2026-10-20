@@ -18,6 +18,7 @@ checks that).
 import re
 import sys
 
+from m4l_dev.build_error import BuildError
 from m4l_dev.genexpr import COMPILER_FLAGS, CTranslator, GenExprError, analyze, c_double_literal
 
 PREFIX_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -82,6 +83,11 @@ def export_c(code, num_inputs, num_outputs, prefix):
     if not PREFIX_PATTERN.match(prefix):
         raise ValueError(f"genexpr_export: the prefix '{prefix}' must be a lower-case C identifier")
     program, info = analyze(code, num_inputs, num_outputs)
+    without_default = [name for name, param in info.params.items() if param.default is None]
+    if without_default:
+        raise BuildError(f"genexpr_export: Params {without_default} have no default in this code (the build writes "
+                         "each from the Init values): export the code as the device's patch built it "
+                         "(DevicePatchBuilder.gen_code_as_built)")
     source = RuntimeSampleRateTranslator(program, info).translate()
     source = replace_once(source, NOISE_STATE_TYPEDEF, f'#include "{prefix}.h"', "the noise state's typedef")
     source = replace_once(source, NOISE_SOURCE_DECLARATION,

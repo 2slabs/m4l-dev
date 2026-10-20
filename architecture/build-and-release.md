@@ -4,7 +4,7 @@
 (`m4l_dev/device_build.py`), in order:
 
 1. **Check the patch** (`DevicePatchBuilder.check`): the preset book against the controls, the gen~ Param defaults
-   against what the Init values send, the layout (nothing shown at the same time overlaps or leaves the device, on
+   written from what the initial values send (presets.md), the layout (nothing shown at the same time overlaps or leaves the device, on
    every page and every group choice), Info View text for every visible parameter and display (and none unused), every
    name the UI script looks up, every wire's outlet and inlet. The gen~ code was checked when each gen~ was made.
 2. **Generate the scripts**: the UI script and the views script from the kit's templates, the device's own scripts

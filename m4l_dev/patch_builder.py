@@ -10,6 +10,10 @@ Initial values come from the preset book (m4l_dev/preset_book.py): every control
 value from the book's Init values. A control given `initial_outside_presets` is saved with the set but presets leave
 it alone (a group selector, the Preset menu itself, a device's pattern tools).
 
+A gen~ Param a control sets has no default in the device's GenExpr (`Param cutoff(min=40, max=12000);`): the build
+writes it, the value the initial values send that Param (`write_gen_param_defaults`), so the Init values are its one
+source. A Param no control sets (Stop's panic, Live's tempo from the brain) keeps the default its code writes.
+
 A page can hold groups of controls that a selector shows one at a time: a live.tab (`group_selector`), or any
 control (`groups_selected_by`). The layout contract is m4l_dev/layout_rules.py's.
 """
@@ -23,6 +27,9 @@ from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.preset_book import TOGGLE_ITEMS, SavedControl
 from m4l_dev.themes import theme_from_live_js
 
+# what a tempo-synced time (tempo_synced_milliseconds) is computed at before Live tells the tempo: the [pak]'s initial
+# tempo, so the gen~ Param default it writes too
+TEMPO_BEFORE_LIVE_SAYS = 120
 MAX_APPLICATION_VERSION = {"major": 9, "minor": 1, "revision": 5, "architecture": "x64", "modernui": 1}
 LIVE_OBJECT_OUTLETS = {"live.dial": (2, ["", "float"]), "live.menu": (3, ["", "", "float"]),
                        "live.tab": (3, ["", "", "float"]), "live.text": (2, ["", ""]),
@@ -68,8 +75,9 @@ class DevicePatchBuilder:
         self.control_by_box = {}                    # box id -> (control long name, the value's transform on the way)
         self.view_mode_by_box = {}
         self.view_defaults = {}                     # view mode -> {message: value it gets from the Init values}
-        self.gen_param_from_init = []               # (gen box id, Param name, value the Init values send, control)
-        self.gen_params_by_box = {}                 # gen~ box id -> {Param name: ParamDecl}
+        self.gen_param_from_init = []               # (gen box id, Param name, value the initial values send, control)
+        self.gen_params_by_box = {}                 # gen~ box id -> {Param name: ParamDecl} of the code as given
+        self.gen_code_by_box = {}                   # gen~ box id -> its code as given (defaults left out)
         self.control_routes = []                    # (control, transform, destination box, message or None, scale)
         self.tempo_routes = []                      # (control, beats of its value as held, destination box, message)
         self.stop_turns_off = []                    # varnames of controls the Stop action sets to 0
@@ -122,6 +130,7 @@ class DevicePatchBuilder:
         box_id = self.box(box_text, rect=rect, ins=max(ins, 1), outs=outs, outtype=[outlet_type] * outs,
                           patcher=self.gen_patcher(code, used_ins, outs))
         self.gen_params_by_box[box_id] = program_info.params
+        self.gen_code_by_box[box_id] = code
         return box_id
 
     @staticmethod
@@ -228,7 +237,8 @@ class DevicePatchBuilder:
 
     def tell(self, source, message, destination, inlet=0, scale=None):
         """Wire `source`'s value to `destination` as `message value` (or raw when message is None). A control's value
-        told a display becomes that display's starting value; told a gen~, it must be the Param's default. Every
+        told a display becomes that display's starting value; told a gen~, the Param's default (the build writes it
+        into the code: write_gen_param_defaults). Every
         control's route is recorded for messages_for (a raw value as the message None)."""
         if source in self.control_by_box:
             control_name, transform = self.control_by_box[source]
@@ -275,7 +285,7 @@ class DevicePatchBuilder:
         beats = self.menu_lookup(control, beats_by_item)
         initial_beats = float(beats_by_item[int(transform(self.initial_values[control_name]))])
         y = 1400 + 2 * len(self.boxes)
-        pair = self.box(f"pak 120. {initial_beats!r}", rect=(1550, y, 90, 22), ins=2, outs=1)
+        pair = self.box(f"pak {TEMPO_BEFORE_LIVE_SAYS}. {initial_beats!r}", rect=(1550, y, 90, 22), ins=2, outs=1)
         milliseconds = self.box("expr 60000. / $f1 * $f2", rect=(1650, y, 150, 22), ins=2, outs=1)
         prepend = self.box(f"prepend {message}", rect=(1810, y, 110, 22))
         self.wire(tempo, pair, 0, 0)
@@ -285,6 +295,9 @@ class DevicePatchBuilder:
         self.wire(prepend, destination)
         self.tempo_routes.append((control_name, lambda held: float(beats_by_item[int(transform(held))]), destination,
                                   message))
+        if destination in self.gen_params_by_box:
+            self.gen_param_from_init.append((destination, message, initial_beats * 60000 / TEMPO_BEFORE_LIVE_SAYS,
+                                             control_name))
         return prepend
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
@@ -622,7 +635,7 @@ class DevicePatchBuilder:
         if self.header_boxes["preset"] is not None:
             preset_values = self.find(self.header_boxes["preset"])["saved_attribute_attributes"]["valueof"]
             preset_values.update(parameter_enum=[preset.name for preset in presets], parameter_mmax=len(presets) - 1)
-        self.check_gen_param_defaults()
+        self.write_gen_param_defaults()
         problems = layout_rules.overlap_problems(
             [x["box"] for x in self.boxes if x["box"].get("presentation") == 1 and not x["box"].get("background")],
             self.page_names, self.pages, self.groups, self.device_width)
@@ -654,19 +667,63 @@ class DevicePatchBuilder:
         if problems:
             self.fail("controls too narrow for their text:\n  " + "\n  ".join(problems))
 
-    def check_gen_param_defaults(self):
-        """The gen~ Param defaults must be what the Init values send them (the sound before Live recalls the
-        controls)."""
-        mismatches = []
+    def gen_param_defaults_by_box(self):
+        """{gen~ box id: {Param name: default}}: each Param a control sets gets the value the initial values send it
+        (the sound before Live recalls the controls). Fails, listing every problem: a message to no Param, two
+        controls sending one Param different values, a value outside the Param's min / max, a Param whose code holds a
+        default and is set by a control (one number, one source: leave it out of the code), and a Param with neither
+        (its code leaves the default out, and no control sets it)."""
+        defaults_by_box = {box_id: {} for box_id in self.gen_params_by_box}
+        senders_by_box = {box_id: {} for box_id in self.gen_params_by_box}
+        problems = []
         for gen_box_id, param_name, sent, control_name in self.gen_param_from_init:
             declared = self.gen_params_by_box[gen_box_id].get(param_name)
             if declared is None:
-                mismatches.append(f"{control_name} -> {param_name}: no such Param")
-            elif abs(declared.default - sent) > 1e-9:
-                mismatches.append(f"{control_name} -> Param {param_name}({declared.default:g}), the Init values send "
-                                  f"{sent:g}")
-        if mismatches:
-            self.fail("gen~ Param defaults disagree with the Init values:\n  " + "\n  ".join(mismatches))
+                problems.append(f"{control_name} -> {param_name}: no such Param")
+                continue
+            if declared.default is not None:
+                problems.append(f"{control_name} -> Param {param_name}({declared.default:g}, ...): the initial values "
+                                f"give it ({sent:g}): leave the default out of the code (Param {param_name}(min=..., "
+                                "max=...);)")
+                continue
+            if ((declared.minimum is not None and sent < declared.minimum)
+                    or (declared.maximum is not None and sent > declared.maximum)):
+                problems.append(f"{control_name} -> Param {param_name}: the initial values send {sent:g}, outside its "
+                                f"[{declared.minimum}, {declared.maximum}]")
+                continue
+            earlier = defaults_by_box[gen_box_id].get(param_name)
+            if earlier is not None and earlier != sent:
+                problems.append(f"Param {param_name}: {senders_by_box[gen_box_id][param_name]} sends {earlier:g}, "
+                                f"{control_name} sends {sent:g} at the start")
+                continue
+            defaults_by_box[gen_box_id][param_name] = sent
+            senders_by_box[gen_box_id][param_name] = control_name
+        for gen_box_id, params in self.gen_params_by_box.items():
+            for param_name, declared in params.items():
+                if declared.default is None and param_name not in defaults_by_box[gen_box_id]:
+                    problems.append(f"Param {param_name} ({self.find(gen_box_id)['text']}) has no default in its code "
+                                    "and no control sets it: give the code its default, or set it from a control")
+        if problems:
+            self.fail("gen~ Param defaults:\n  " + "\n  ".join(problems))
+        return defaults_by_box
+
+    def gen_code_as_built(self, gen_box_id):
+        """A gen~ box's code with every Param default written (gen_param_defaults_by_box): what the patch holds, and
+        what a renderer or exporter of the device's DSP as Max runs it takes (m4l_dev/genexpr_export.py)."""
+        if gen_box_id not in self.gen_code_by_box:
+            self.fail(f"box {gen_box_id!r} is no gen~ box")
+        return genexpr.code_with_param_defaults(self.gen_code_by_box[gen_box_id],
+                                                self.gen_param_defaults_by_box()[gen_box_id])
+
+    def write_gen_param_defaults(self):
+        """Every gen~ box's codebox gets its code as built (gen_code_as_built): the Params' defaults written from the
+        initial values. Always from the code as given, so checking twice writes the same."""
+        defaults_by_box = self.gen_param_defaults_by_box()
+        for gen_box_id, code in self.gen_code_by_box.items():
+            codebox = self.find(gen_box_id)["patcher"]["boxes"][0]["box"]
+            if codebox["id"] != "cb":
+                self.fail(f"internal error: gen~ box {gen_box_id!r}'s first box is not its codebox")
+            codebox["code"] = genexpr.code_with_param_defaults(code, defaults_by_box[gen_box_id]).strip() + "\n"
 
     def ui_lookups(self):
         """Every scripting name the UI script looks up."""

@@ -130,6 +130,10 @@ class VoiceTests(unittest.TestCase):
             dataclasses.replace(FIXTURE_DRUM_VOICE, parameters=(MatchedParameter.continuous("cutoff", 1, 2),))
         with self.assertRaisesRegex(BuildError, "outside its Param"):
             dataclasses.replace(FIXTURE_DRUM_VOICE, parameters=(MatchedParameter.continuous("drive", 0.5, 2),))
+        without_its_drive_default = FIXTURE_DRUM_VOICE.gen_code.replace("Param drive(2, ", "Param drive(")
+        with self.assertRaisesRegex(BuildError, r"Params \['drive'\] have no default in the code and are neither"):
+            dataclasses.replace(FIXTURE_DRUM_VOICE, gen_code=without_its_drive_default, parameters=tuple(
+                parameter for parameter in FIXTURE_DRUM_VOICE.parameters if parameter.name != "drive"))
         with self.assertRaisesRegex(BuildError, "both fixed and searched"):
             dataclasses.replace(FIXTURE_DRUM_VOICE, fixed_values=(("drive", 2.0),))
         with self.assertRaisesRegex(BuildError, "not one of its choices"):

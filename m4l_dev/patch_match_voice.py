@@ -148,6 +148,12 @@ class MatchedVoice:
                     or (declared.maximum is not None and self.noise_seed > declared.maximum)):
                 raise BuildError(f"{where}: noise seed {self.noise_seed} is outside its Param's "
                                  f"[{declared.minimum}, {declared.maximum}]: the renderer would clamp it")
+        given_a_value = set(names) | {fixed_name for fixed_name, _ in self.fixed_values} | {self.noise_seed_param}
+        without_a_value = [name for name, declared in info.params.items()
+                           if declared.default is None and name not in given_a_value]
+        if without_a_value:
+            raise BuildError(f"{where}: Params {without_a_value} have no default in the code and are neither searched "
+                             "nor fixed: fix them (fixed_values)")
         if not 1 <= self.trigger.input_number <= self.num_inputs:
             raise BuildError(f"{where}: the trigger is on input {self.trigger.input_number}, the voice has "
                                   f"{self.num_inputs}")

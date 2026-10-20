@@ -12,6 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev.genexpr import GenProgram, NoiseState  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
 
 # a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, histories
@@ -109,6 +110,10 @@ class ExportTests(unittest.TestCase):
         for line in ("CORE_INPUTS = 2", "CORE_OUTPUTS = 3", "CORE_PARAMS = 2", "CORE_HISTORIES = 2",
                      "CORE_DELAYS = 1", "CORE_DELAY_MEMORY = 4410", '{"cutoff", "time"}'):
             self.assertIn(line, self.header)
+
+    def test_code_without_its_param_defaults_is_not_exported(self):
+        with self.assertRaisesRegex(BuildError, r"Params \['g'\] have no default in this code"):
+            export_c("Param g(min=0, max=1);\nout1 = in1 * g;", 1, 1, "core")
 
     def test_a_prefix_must_be_a_c_identifier(self):
         with self.assertRaises(ValueError):

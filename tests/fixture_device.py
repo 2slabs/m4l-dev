@@ -33,8 +33,8 @@ FIXTURE_PRESET_BOOK = {
     ],
 }
 FIXTURE_GEN_CODE = """
-Param level(0.5, min=0, max=1);
-Param volume(0, min=-36, max=12);
+Param level(min=0, max=1);
+Param volume(min=-36, max=12);
 Param panic(0);
 out1 = in1 * level * dbtoa(volume);
 """

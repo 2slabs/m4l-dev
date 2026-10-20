@@ -12,7 +12,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev.c_library_cache import CLibraryBuildError  # noqa: E402
-from m4l_dev.genexpr import GenExprError, GenProgram, check  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.genexpr import GenExprError, GenProgram, analyze, check, code_with_param_defaults  # noqa: E402
 
 
 def render_single_output(code, num_samples, inputs=None, num_inputs=1):
@@ -84,8 +85,37 @@ class RejectionTests(unittest.TestCase):
     def test_param_default_outside_range(self):
         self.assert_rejected("Param p(5, min=0, max=1);", "outside")
 
+    def test_a_param_may_leave_its_default_out_but_nothing_else(self):
+        _, info = analyze("Param a(min=0, max=1);\nParam b;\nParam c();\nParam d(max=2);\nout1 = a + b + c + d;")
+        self.assertEqual([(p.default, p.minimum, p.maximum) for p in info.params.values()],
+                         [(None, 0.0, 1.0), (None, None, None), (None, None, None), (None, None, 2.0)])
+        self.assert_rejected("Param p(, min=0);", "Param default")
+        self.assert_rejected("Param p(min=0, 1);", "expected min=... or max=...")
+        self.assert_rejected("Param p(min=0 max=1);", "to close the Param")
+
     def test_comments_and_error_positions(self):
         self.assert_rejected("/* a\nb */ a = 1 ;\n  b = @;", "unexpected character", expected_line=3)
+
+
+class ParamDefaultWritingTests(unittest.TestCase):
+    """code_with_param_defaults: the patch builder writes the defaults a device's Init values give its Params."""
+
+    def test_each_form_gets_its_default(self):
+        code = ("Param a(min=0, max=1);  // a\nParam b;\nParam c();\nParam d(3);\n"
+                "Param f(max=1e4);\nout1 = a + b + c + d + f;")
+        written = code_with_param_defaults(code, {"a": 0.22, "b": -6, "c": 700.0, "f": 0.1 + 0.2})
+        self.assertEqual(written, "Param a(0.22, min=0, max=1);  // a\nParam b(-6);\nParam c(700);\nParam d(3);\n"
+                                  "Param f(0.30000000000000004, max=1e4);\nout1 = a + b + c + d + f;")
+        _, info = analyze(written)
+        self.assertEqual(info.params["f"].default, 0.1 + 0.2)
+
+    def test_a_default_written_twice_or_to_no_param_fails(self):
+        with self.assertRaisesRegex(BuildError, r"Params \['d'\] hold a default in the code"):
+            code_with_param_defaults("Param d(3);\nout1 = d;", {"d": 3})
+        with self.assertRaisesRegex(BuildError, r"defaults for \['x'\], which the code does not declare"):
+            code_with_param_defaults("Param d(3);\nout1 = d;", {"x": 3})
+        with self.assertRaisesRegex(BuildError, "finite"):
+            code_with_param_defaults("Param d;\nout1 = d;", {"d": math.inf})
 
 
 class SemanticsTests(unittest.TestCase):
@@ -129,6 +159,16 @@ class SemanticsTests(unittest.TestCase):
         with self.assertRaises(KeyError) as caught:
             program.set_param("missing", 1)
         self.assertIn("missing", str(caught.exception))
+
+    def test_a_param_without_a_default_must_be_set_before_running(self):
+        program = GenProgram("Param g(min=0, max=1);\nParam h(2);\nout1 = g + h;", 1, 1)
+        self.assertEqual(program.params["g"], {"default": None, "min": 0.0, "max": 1.0})
+        with self.assertRaisesRegex(ValueError, r"Params \['g'\] have no default in the code"):
+            program.run(1)
+        with self.assertRaisesRegex(ValueError, "never set"):
+            program.get_param("g")
+        program.set_param("g", 0.5)
+        self.assertEqual(program.run(1)[0], [2.5])
 
     def test_param_order_of_min_max_and_optional(self):
         program = GenProgram("Param a(2, max=3, min=1);\nParam b(-1);\nout1 = a + b;", 1, 1)
