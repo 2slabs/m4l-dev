@@ -62,8 +62,11 @@ def identity_render(messages, mono, rate):
 
 
 class EffectTests(unittest.TestCase):
+    # the mechanics at the fast rate (the inputs are made at any rate; a device levels at EFFECT_SAMPLE_RATE)
+    rate = preset_loudness.FAST_SAMPLE_RATE
+
     def test_the_effect_inputs_are_eight_seconds_at_minus_18_lufs_and_repeat(self):
-        rate = preset_loudness.EFFECT_SAMPLE_RATE
+        rate = self.rate
         inputs = preset_loudness.effect_inputs(rate)
         self.assertEqual(tuple(inputs), ("drums", "bass", "pad", "full mix", "chords and kick"))
         for name, mono in inputs.items():
@@ -75,10 +78,10 @@ class EffectTests(unittest.TestCase):
         self.assertEqual(preset_loudness.effect_inputs(rate), inputs)
 
     def test_an_effect_is_measured_by_its_median_gain_against_bypass(self):
-        bypass = preset_loudness.effect_measures(identity_render, {"gain": 1.0})
+        bypass = preset_loudness.effect_measures(identity_render, {"gain": 1.0}, self.rate)
         self.assertAlmostEqual(bypass.median_gain_db, 0.0, places=9)
         self.assertAlmostEqual(bypass.worst_miss_db, 0.0, places=9)
-        halved = preset_loudness.effect_measures(identity_render, {"gain": 0.5})
+        halved = preset_loudness.effect_measures(identity_render, {"gain": 0.5}, self.rate)
         self.assertAlmostEqual(halved.median_gain_db, 20 * math.log10(0.5), places=6)
         self.assertEqual(preset_loudness.presets_off_bypass({"bypass": bypass, "halved": halved}),
                          {"halved": -6.02})
@@ -89,12 +92,12 @@ class EffectTests(unittest.TestCase):
 
     def test_presets_are_measured_in_worker_processes(self):
         measures = preset_loudness.effect_measures_by_preset(identity_render, {"one": {"gain": 1.0},
-                                                                               "two": {"gain": 2.0}})
+                                                                               "two": {"gain": 2.0}}, self.rate)
         self.assertAlmostEqual(measures["two"].median_gain_db - measures["one"].median_gain_db, 20 * math.log10(2))
 
     def test_a_render_of_the_wrong_shape_fails(self):
         with self.assertRaisesRegex(BuildError, "two channels"):
-            preset_loudness.effect_measures(lambda messages, mono, rate: (mono,), {})
+            preset_loudness.effect_measures(lambda messages, mono, rate: (mono,), {}, self.rate)
 
 
 if __name__ == "__main__":

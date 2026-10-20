@@ -17,8 +17,8 @@ then the tail, PHRASE_SECONDS in all. Short, because a suite renders it for ever
 
 An audio effect is levelled to bypass instead (architecture/presets.md, "An audio effect: as loud as bypass"): its
 loudness change on music. The kit generates the music (effect_inputs: drums, bass, pad, a full mix, chords and a
-kick; EFFECT_INPUT_SECONDS each at EFFECT_INPUT_LOUDNESS_LUFS, from seeds, no samples), plays every preset on all of
-it in worker processes (effect_measures_by_preset, with the device's own render), and reads each preset's gain on
+kick; EFFECT_INPUT_SECONDS each at EFFECT_INPUT_LOUDNESS_LUFS, from seeds, no samples, at EFFECT_SAMPLE_RATE), plays
+every preset on all of it in worker processes (effect_measures_by_preset, with the device's own render), and reads each preset's gain on
 each input (the loudest moment out minus the loudest moment in), their median (what the preset's output level sets
 to 0 dB) and the worst miss from that median (information: an effect whose gain depends on its input, a
 self-oscillating filter, triggers, can't match bypass on everything).
@@ -135,9 +135,9 @@ def presets_off_init(loudness_by_preset, init_name, tolerance_lu=LOUDNESS_TOLERA
 
 # ---- an audio effect: levelled to bypass on generated music ----
 
-# 22050 Hz: the inputs' content (the hats reach 11 kHz) fits, and BS.1770's K-weighting there is within 0.3 dB of the
-# standard's below 0.4 x the rate (tests/test_bs1770.py); a quarter of 44.1 kHz's cost would lose the hats.
-EFFECT_SAMPLE_RATE = 22050
+# The rate presets are levelled at, not a fast one: an effect's peaks depend on the input's top octave (a saw bass
+# through a high-pass peaked 1.1 dB higher at 44.1 kHz than at 22.05 kHz, 2sl filter, 2026-10-19).
+EFFECT_SAMPLE_RATE = SAMPLE_RATE
 EFFECT_INPUT_SECONDS = 8.0                 # four bars at 120 BPM
 EFFECT_INPUT_LOUDNESS_LUFS = -18.0         # integrated, the pair (the input on both channels)
 EFFECT_FULL_MIX_PART_LUFS = -20.0          # drums, bass and pad each at this before they are summed
