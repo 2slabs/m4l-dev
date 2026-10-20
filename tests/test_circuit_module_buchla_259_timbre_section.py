@@ -1,6 +1,7 @@
 """The Buchla 259 timbre section module (m4l_dev/circuit_modules/buchla_259_timbre_section.py): the folder against
 the circuit (DAFx-17 eqs. 8-11 with the original's extras, references/circuits/buchla-259.md §3), and the GenExpr it
 writes against the Python model, through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
+import cmath
 import math
 import os
 import sys
@@ -14,6 +15,7 @@ from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
     cell_node_volts, output_volts, summed_output_volts_unlimited)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
+from m4l_dev.techniques.halfband_oversampler import HalfbandDownsampler, HalfbandLinearPhaseDownsampler  # noqa: E402
 from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,  # noqa: E402
                                equalised_adaa_outputs, exact_second_order_mean, harness)
 
@@ -225,6 +227,39 @@ class FolderGenExprTests(unittest.TestCase):
             measured = [coherent_worst_alias_db(output[settle:], fundamental_bin, rate, 20000) for output in (first, second)]
             self.assertAlmostEqual(measured[0], first_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, first order")
             self.assertAlmostEqual(measured[1], second_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, second order")
+
+    def test_a_hot_fold_at_2x_peaks_past_the_ideal_through_the_elliptic_downsampler(self):
+        # PLANS/2026-10-20-instrument-2x-folder-peaks.md: the unit at 2x 48 kHz on a pure sine, brought down by the
+        # kit's elliptic HalfbandDownsampler and its HalfbandLinearPhaseDownsampler; the steady peak re the ideal (the
+        # folded tone's harmonics below 24 kHz, flat, their own phases), DC off. Measured (scratchpad numpy, = this renderer):
+        # 8 V at 987.8 Hz elliptic 7.08, linear phase 4.06, ideal 3.00; 10 V at 784.0 Hz 8.45, 5.49, 4.46. The
+        # elliptic's phase near its corner is the 1.5-1.7x between the two; the linear phase's own excess is the 2x
+        # equaliser's lift above 20 kHz folded back by the half-band's transition band (none without the equaliser).
+        rate, count, settle = 48000.0, 12000, 1500
+        for drive, frequency, elliptic_peak, linear_phase_peak, ideal_peak in (
+                (8.0, 987.7666025122480, 7.08, 4.06, 3.00), (10.0, 783.9908719634985, 8.45, 5.49, 4.46)):
+            sine = [math.sin(2 * math.pi * frequency * i / (2 * rate)) for i in range(2 * count)]
+            folded, _, _ = self.folder_program(drive, frequency, samplerate=2 * rate).run(2 * count, [sine])
+            firsts, seconds = folded[0::2], folded[1::2]
+            peaks = {}
+            for downsampler_type in (HalfbandDownsampler, HalfbandLinearPhaseDownsampler):
+                down = downsampler_type("down", first="in1", second="in2")
+                out = harness([down], {}, ["down_out"], num_inputs=2, samplerate=rate).run(count, [firsts, seconds])[0]
+                steady = out[settle:]
+                mean = sum(steady) / len(steady)     # 10 V reaches cell 1's one-sided floor: a DC, taken off
+                peaks[downsampler_type] = max(abs(value - mean) for value in steady)
+            gain = 1 / math.sqrt(1 + (frequency / DRIVE_STAGE_HZ) ** 2)
+            points = 4096
+            transfer = [output_volts(drive * gain * math.sin(2 * math.pi * j / points), ORIGINAL) for j in range(points)]
+            harmonics = [2 / points * sum(value * cmath.exp(-2j * math.pi * k * j / points) for j, value in enumerate(transfer))
+                         for k in range(int(24000 // frequency) + 1)]
+            ideal = max(abs(sum((harmonics[k] * cmath.exp(2j * math.pi * k * frequency * n / rate)).real
+                                for k in range(1, len(harmonics)))) for n in range(count - settle))
+            self.assertAlmostEqual(ideal, ideal_peak, delta=0.03, msg=(drive, frequency))
+            self.assertAlmostEqual(peaks[HalfbandDownsampler], elliptic_peak, delta=0.05, msg=(drive, frequency))
+            self.assertAlmostEqual(peaks[HalfbandLinearPhaseDownsampler], linear_phase_peak, delta=0.05,
+                                   msg=(drive, frequency))
+            self.assertGreater(peaks[HalfbandDownsampler], 1.5 * peaks[HalfbandLinearPhaseDownsampler])
 
     def test_two_units_are_two_folders_in_one_patch(self):
         original, starved = section("original"), section("starved", Buchla259TimbreSectionCharacter(cell_rail_volts=4.5))

@@ -450,6 +450,14 @@ The linear-phase downsampler (`HalfbandLinearPhaseDownsampler`, ours, 2026-10-20
 band ≤ −100 dB from 0.29, pass band within 1e-4 dB to 0.21). A = 100 dB and the elliptic's edges: 83 taps, 20 samples
 late, a 30 kHz tone at 88.2 kHz folds at −120.4 dB; −0.22 dB at 20 kHz at 44.1 kHz (the elliptic flat there).
 
+After the 259 folder at 2× (ours, 2026-10-20; PLANS/2026-10-20-instrument-2x-folder-peaks.md): the elliptic's phase
+rings a hot folded tone too. Steady peaks re the ideal (the tone's harmonics below 24 kHz, flat, own phases), 4–10 V,
+55 Hz–7 kHz at 48 kHz: elliptic up to 2.36 (8 V at 988 Hz: 7.08 V against 3.00; the linear-phase 4.06), its phase
+alone up to 1.77×; the linear-phase one 0.99–1.01× on phase. Its group delay at 48 kHz: 1.78 samples to 2 kHz, 2.21
+at 10 kHz, 3.34 at 16 kHz, 5.77 at 20 kHz (a spread of 9 / 32 / 83 µs): the shape under 10 kHz is the ideal's, the
+excess a headroom matter (and what a saturator after it sees). Both still exceed the ideal by up to 1.35–1.67× with
+the 2× ADAA2 equaliser (0.99–1.01× without it below 1.8 kHz): open.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):
