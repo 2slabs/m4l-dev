@@ -32,7 +32,7 @@ def builder(width=400, book=None, preset_menu=None, info_keys=None, gen_code=GEN
     info = INFO if info_keys is None else {key: INFO[key] for key in HEADER_INFO + tuple(info_keys)}
     patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
                                device_type="instrument", device_width=width, page_names=["one", "two"], info=info,
-                               preset_book=book or preset_book())
+                               preset_book=book or preset_book(), latency_samples=0)
     patch.target = patch.gen_box(gen_code, 1, 1, rect=(0, 0, 80, 22))
     patch.header(output_level_target=patch.target, output_level_name="Volume", preset_menu=preset_menu)
     return patch
@@ -51,6 +51,28 @@ def saved_values(patch, box_id):
 def layout_problems(patch):
     shown = [x["box"] for x in patch.boxes if x["box"].get("presentation") == 1 and not x["box"].get("background")]
     return layout_rules.overlap_problems(shown, patch.page_names, patch.pages, patch.groups, patch.device_width)
+
+
+def builder_with_latency(latency_samples):
+    return DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
+                              device_type="audio", device_width=400, page_names=["one"], info=INFO,
+                              preset_book=preset_book(), latency_samples=latency_samples)
+
+
+class DefinedLatencyTests(unittest.TestCase):
+    """The device's latency reaches Live as the patcher's Defined Latency ("latency", whole samples)."""
+
+    def test_the_patch_reports_the_latency_rounded_to_whole_samples(self):
+        for declared, reported in ((0, 0), (6, 6), (29.03, 29), (29.5, 30), (29.49, 29)):
+            patch = builder_with_latency(declared)
+            self.assertEqual(patch.patch()["patcher"]["latency"], reported, f"declared {declared}")
+            self.assertIsInstance(patch.patch()["patcher"]["latency"], int)
+            self.assertEqual(patch.latency_samples, declared, "the exact figure is kept for the device's tests")
+
+    def test_a_latency_that_is_no_number_of_samples_fails(self):
+        for bad in (None, -1, float("nan"), float("inf"), True, "29"):
+            with self.assertRaisesRegex(BuildError, "latency_samples"):
+                builder_with_latency(bad)
 
 
 class LayoutTests(unittest.TestCase):
@@ -127,7 +149,8 @@ class LayoutTests(unittest.TestCase):
                                    device_type="instrument", device_width=400, page_names=["one"],
                                    info={name: (name, "text") for name in ("Output", "Page", "Stop", "Link view")},
                                    preset_book=PresetBook({"init": {"Output": -6}, "presets": [
-                                       {"name": "init", "group": "init", "idea": "init", "values": {}}]}, "book"))
+                                       {"name": "init", "group": "init", "idea": "init", "values": {}}]}, "book"),
+                                   latency_samples=0)
         target = patch.gen_box("Param volume;\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
         made = patch.header(output_level_target=target, output_level_name="Output")
         values = saved_values(patch, made["output_level"])
@@ -157,7 +180,7 @@ class InfoTests(unittest.TestCase):
         for _ in range(2):
             patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
                                        device_type="instrument", device_width=400, page_names=["one"], info=info,
-                                       preset_book=preset_book())
+                                       preset_book=preset_book(), latency_samples=0)
             SeededRandom(patch, patch.box("js t.js", rect=(0, 0, 50, 22), ins=2), 1)
         self.assertEqual(info, INFO)
 

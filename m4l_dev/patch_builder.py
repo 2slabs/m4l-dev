@@ -14,10 +14,16 @@ A gen~ Param a control sets has no default in the device's GenExpr (`Param cutof
 writes it, the value the initial values send that Param (`write_gen_param_defaults`), so the Init values are its one
 source. A Param no control sets (Stop's panic, Live's tempo from the brain) keeps the default its code writes.
 
+The device's latency (`latency_samples`, required): how late its output is against its input, in samples at low
+frequencies, as its own blocks report it (a technique's `latency_samples`, a circuit module's LATENCY_SAMPLES), never
+typed. The patch carries it rounded to whole samples as the patcher's Defined Latency (`"latency"`), which Live's
+delay compensation takes (references/README.md, "Defined Latency"); a device with no delay declares 0.
+
 A page can hold groups of controls that a selector shows one at a time: a live.tab (`group_selector`), or any
 control (`groups_selected_by`). The layout contract is m4l_dev/layout_rules.py's.
 """
 import json
+import math
 
 from m4l_dev import genexpr
 from m4l_dev import layout_rules
@@ -49,9 +55,11 @@ def identity_transform(value):
 
 class DevicePatchBuilder:
     def __init__(self, device_name, script_name, version, subtitle, link_chip_text, device_type, device_width,
-                 page_names, info, preset_book):
+                 page_names, info, preset_book, latency_samples):
         """device_name ("2sl stab") names the device in messages and scripts; script_name ("2sl-stab") its files;
-        info: {parameter long name or view Info key: (Info View title, text)}; preset_book: a PresetBook."""
+        info: {parameter long name or view Info key: (Info View title, text)}; preset_book: a PresetBook;
+        latency_samples: the device's delay, input to output, in samples (a number >= 0, fractions allowed: the patch
+        reports it rounded to the nearest whole sample, `reported_latency_samples`), from its blocks' own figures."""
         self.device_name = device_name
         self.script_name = script_name
         self.version = version
@@ -60,6 +68,13 @@ class DevicePatchBuilder:
         self.device_type = device_type              # "instrument", "audio" or "midi"
         layout_rules.check_on_grid(f"{script_name}: the device width", device_width)
         self.device_width = device_width
+        if isinstance(latency_samples, bool) or not isinstance(latency_samples, (int, float)) \
+                or not math.isfinite(latency_samples) or latency_samples < 0:
+            raise BuildError(f"{device_name}: latency_samples is the device's delay in samples, a finite number >= 0 "
+                             f"(0 for none), from its blocks' reported latencies; got {latency_samples!r}")
+        self.latency_samples = latency_samples
+        # Live's Defined Latency is whole samples: the nearest, so the track is off by at most half a sample
+        self.reported_latency_samples = int(round(latency_samples))
         self.page_names = list(page_names)
         self.info = dict(info)                     # its own copy: blocks add their controls' text to it
         self.preset_book = preset_book
@@ -763,7 +778,7 @@ class DevicePatchBuilder:
             "fileversion": 1, "appversion": dict(MAX_APPLICATION_VERSION),
             "classnamespace": "box", "rect": [80.0, 80.0, 1300.0, 900.0],
             "openinpresentation": 1, "devicewidth": float(self.device_width),
-            "boxes": self.boxes, "lines": self.lines,
+            "boxes": self.boxes, "lines": self.lines, "latency": self.reported_latency_samples,
         }}
 
     def ui_script(self, presets):

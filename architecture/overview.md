@@ -48,7 +48,9 @@ from m4l_dev.device_repository import DeviceRepository   # DeviceRepository.of_b
 from m4l_dev.preset_book import PresetBook               # PresetBook.from_file(path, display_name)
 from m4l_dev.patch_builder import DevicePatchBuilder     # DevicePatchBuilder(device_name, script_name, version,
                                                          #   subtitle, link_chip_text, device_type, device_width,
-                                                         #   page_names, info, preset_book)
+                                                         #   page_names, info, preset_book, latency_samples)
+                                                         # latency_samples: the device's delay from its blocks'
+                                                         #   own figures (0 if none), the patch's Defined Latency
 from m4l_dev.live_preset_files import LivePresetFiles    # LivePresetFiles(stored_only_values_of_preset)
 from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.device_build import build_device            # build_device(repository, patch, layout, views_code,

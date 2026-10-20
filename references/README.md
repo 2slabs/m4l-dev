@@ -57,6 +57,20 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
 - **Live Object Model, Song** (fetched in LPX_Script/references/live-lom-song.md from
   https://docs.cycling74.com/apiref/lom/song/): `tempo` "Current tempo of the Live Set in BPM, 20.0 ... 999.0";
   `current_song_time` "The playing position in the Live Set, in beats."
+- **Defined Latency** (Max user guide, "Creating Audio Effect Devices", "Defining Latency For A Device":
+  https://docs.cycling74.com/userguide/m4l/live_audiodevices/): "A device can provide latency information to the
+  Live host application so that the host can use latency compensation to adjust the relative timing of different
+  audio tracks"; set in the Patcher Inspector: "Double-click in the Value column for the Defined Latency attribute ...
+  Type in a value for the latency value in samples". Ableton's Max for Live Production Guidelines
+  (https://github.com/Ableton/maxdevtools, m4l-production-guidelines.md, "Latency", at 5b39dec): "Live compensates
+  for this latency on playback"; "To check device latency in Live, load your Max for Live device, then hover your
+  mouse over the device title bar. The device latency amount will be displayed in the Live status bar." The saved
+  attribute is the top patcher's `"latency"` (maxdevtools' maxdiff baseline `maxdiff/tests/test_baselines/
+  Test.amxd.txt` lists the patcher's `latency: 0` beside `gridsize` and `boxanimatetime`; saved devices carry
+  `"latency" : 0` at the end of the patcher). Whole samples: the docs say "in samples", and no saved file with a
+  fraction has been seen. Not to be confused with `amxd~`'s `latency` attribute (milliseconds, a host-side object).
+  The build writes it from `DevicePatchBuilder(latency_samples=...)`, rounded to the nearest sample. Seen in Live:
+  not yet (check: hover the device's title bar, the status bar shows the device's latency).
 - **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending

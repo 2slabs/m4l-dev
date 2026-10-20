@@ -77,7 +77,7 @@ def fixture_patch(preset_book):
     patch = DevicePatchBuilder(device_name="kit fixture", script_name=FIXTURE_SCRIPT_NAME, version="1.2.3",
                                subtitle="a test device", link_chip_text="kit fixture", device_type="instrument",
                                device_width=480, page_names=["one", "two"], info=dict(FIXTURE_INFO),
-                               preset_book=preset_book)
+                               preset_book=preset_book, latency_samples=0)
     brain = patch.box(f"js {FIXTURE_SCRIPT_NAME}.js", rect=(30, 120, 110, 22), ins=2, outs=2)
     gen = patch.gen_box(FIXTURE_GEN_CODE, 1, 1, rect=(30, 350, 160, 22))
     header = patch.header(output_level_target=gen, output_level_name="Volume")
