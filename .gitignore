@@ -3,5 +3,8 @@ __pycache__/
 # Finder adds Icon\r files to folders with custom icons
 Icon?
 references/dsp-sources/
+references/sound-matching-sources/
+# the patch matcher's targets: recordings stay on the developer's disk (architecture/patch-matcher.md)
+match-targets/
 references/itu-r-bs1770-5.pdf
 references/ebu-tech-3341.pdf
