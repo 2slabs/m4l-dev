@@ -48,7 +48,7 @@ rendered at 32 x and decimated: chip_reference.py in the research's scratchpad):
 
 The output is `<name>_out` (volts) = lowpass_gain LP + bandpass_gain BP + highpass_gain HP + feedthrough, three
 samples late: one for the input (the ticks read it between two samples, its straight line's droop undone by a
-symmetric 3-tap pre-emphasis) and two for the band-limited edges' look-ahead. LATENCY_SAMPLES says so. Inside, the
+symmetric 3-tap pre-emphasis) and two for the band-limited edges' look-ahead. `latency_samples` says so. Inside, the
 section works in fractions of full scale: the input is divided by `full_scale_volts` and the output multiplied back. Also `<name>_clock_hz`, `<name>_ticked` (1 when a tick fell in this sample) and
 `<name>_tick_time` (ticks so far, modulo TICK_COUNT_WRAP, plus the phase: what a divided section follows).
 
@@ -71,7 +71,7 @@ RESIDUAL_FULL_BELOW = 0.35           # clock / host rate: the staircase's residu
 RESIDUAL_GONE_AT = 0.5
 LOWEST_DAMPING = -0.2                # a section can be set past oscillation; the rails hold it
 DAMPING_MARGIN = 0.05                # below 2 - F: the tick matrix keeps complex eigenvalues
-LATENCY_SAMPLES = 3
+INPUT_PRE_EMPHASIS_LATENCY_SAMPLES = 1   # the symmetric 3-tap pre-emphasis on the input: its middle tap
 TICK_COUNT_WRAP = 10080              # 2^5 3^2 5 7: 2 x every Harmonics division of the Sherman divides it
 
 FUNCTIONS = {
@@ -105,7 +105,7 @@ class Ltc1060Mf10Section(CircuitModule):
     `clock_ratio`) with damping `damping` (q = 1/Q at a low clock; the chip's Q enhancement lowers it as the clock
     rises), `hold` (> 0.5: pin 12 at V-, the clock stops), `clock_feedthrough` (1 = this unit's feedthrough, the
     datasheets' 10 mV p-p by default) and the summing gains at the pins `lowpass_gain`, `bandpass_gain`,
-    `highpass_gain`. LATENCY_SAMPLES (3) late."""
+    `highpass_gain`. `latency_samples` (3) late."""
 
     references_entry = "references/circuits/ltc1060-mf10.md"
     character_type = Ltc1060Mf10Character
@@ -129,7 +129,8 @@ class Ltc1060Mf10Section(CircuitModule):
         self.clock_ratio = clock_ratio
         self.tick_coefficient = 2 * math.sin(math.pi / clock_ratio)
         self.divided_from = divided_from
-        self.edges = BandLimitedEdges(f"{instance_name}_edges", naive=f"{instance_name}_naive")
+        self.edges = BandLimitedEdges(f"{instance_name}_edges", naive=f"{instance_name}_naive", oversampling=1)
+        self.latency_samples = INPUT_PRE_EMPHASIS_LATENCY_SAMPLES + self.edges.latency_samples
         p = instance_name
         self.edges.add_jump(f"{p}_ticks > 0", f"1 - {p}_last_tick_time", f"{p}_tick_jump")
         self.edges.add_jump(f"{p}_half_crossed > 0", f"1 - {p}_half_time", f"{p}_half_jump")

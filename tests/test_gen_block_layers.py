@@ -128,6 +128,51 @@ class GenBlockLayerTests(unittest.TestCase):
                                 "typical unit)")
 
 
+def assigns_latency_samples(class_definition):
+    """Whether a class body sets `latency_samples`: `self.latency_samples = ...` in its __init__, or a class-level
+    `latency_samples` (an assignment or a property)."""
+    for statement in class_definition.body:
+        if isinstance(statement, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "latency_samples"
+                                                     for target in statement.targets):
+            return True
+        if isinstance(statement, ast.FunctionDef) and statement.name == "latency_samples":
+            return True
+        if isinstance(statement, ast.FunctionDef) and statement.name == "__init__":
+            for node in ast.walk(statement):
+                if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Attribute) and target.attr == "latency_samples"
+                        and isinstance(target.value, ast.Name) and target.value.id == "self" for target in node.targets):
+                    return True
+    return False
+
+
+class GenBlockLatencyTests(unittest.TestCase):
+    def test_every_gen_block_reports_its_latency_in_host_samples(self):
+        # every Technique and CircuitModule subclass in the kit sets latency_samples (0 included), itself or through
+        # a kit base class of its own (the linear twin is its saturator's); GenBlock, Technique, CircuitModule don't
+        for layer in LAYERS:
+            for name in layer_files(layer):
+                module = importlib.import_module(f"m4l_dev.{layer}.{name[:-3]}")
+                for block_class in block_classes_defined_in(module):
+                    kit_bases = [base for base in block_class.__mro__
+                                 if issubclass(base, GenBlock) and base not in (GenBlock, Technique, CircuitModule)]
+                    self.assertTrue(any(assigns_latency_samples(ast.parse(inspect.getsource(base)).body[0])
+                                        for base in kit_bases),
+                                    f"m4l_dev/{layer}/{name}: {block_class.__name__} does not set latency_samples "
+                                    "(how late its output is, host samples, 0 for none)")
+
+    def test_a_block_without_a_latency_fails_the_build(self):
+        class Silent(Technique):
+            def statements(self):
+                return "silent_out = 0;"
+        for bad in (None, -1, float("nan"), True, "0"):
+            block = Silent("silent")
+            if bad is not None:
+                block.latency_samples = bad
+            with self.assertRaisesRegex(BuildError, "latency_samples"):
+                gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*GEN_BLOCK_DECLARATIONS*/\n/*SILENT*/", [block], "t")
+
+
 class GenBlockPatternTests(unittest.TestCase):
     def test_markers_must_match(self):
         ladder = ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="0")
@@ -147,6 +192,8 @@ class GenBlockPatternTests(unittest.TestCase):
 
     def test_one_function_name_one_body(self):
         class Clash(Technique):
+            latency_samples = 0
+
             def functions(self):
                 return {"smoothing_coefficient": "smoothing_coefficient(a, b) { return 0; }"}
 

@@ -28,7 +28,8 @@ step late; after it, ADAA's equaliser for first order at the rate it runs at (th
   the FIR: 1.91 and 1.50. `output_bound_per_unit_mean` is the bound for any input: the sum of |taps| of the chain
   after the mean (2.19 at 2x, 1 at 1x) times the mean's own bound (1, or 1 + |tanh(bias)| with a bias).
 
-`latency_samples` is the instance's delay at low frequencies (its small-signal response's phase delay at 100 Hz).
+`latency_samples` is the instance's delay at low frequencies: its blocks' summed, = its small-signal response's
+phase delay at 100 Hz.
 Measured (tests/test_techniques.py keeps the claims).
 
 Not the split it once was (tanh x = x through a half-sample allpass + ADAA of tanh x - x): at a hot drive the residual
@@ -43,10 +44,6 @@ from m4l_dev.gen_blocks import Technique
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
 from m4l_dev.techniques.halfband_oversampler import (HalfbandLinearPhaseDownsampler, HalfbandUpsampler,
                                                      halfband_coefficients, halfband_response)
-
-# The frequency the latency is the phase delay at (low enough that the elliptic upsampler's delay is flat there)
-LATENCY_FREQUENCY_HZ = 100.0
-LATENCY_SAMPLE_RATE = 44100.0
 
 # Below this input step the quotient loses digits (F1's rounding over the step, about |x| 2e-16 / step); above it the
 # midpoint is off by about tanh''' * step^2 / 24. 1e-5 keeps both near 1e-9 for |x| < 50.
@@ -96,10 +93,11 @@ class AntiderivativeTanhSaturator(Technique):
                                                               first=f"{instance_name}_step_1_out",
                                                               second=f"{instance_name}_step_2_out")
         self.output_bound_per_unit_mean = self._output_bound_per_unit_mean()
-        # the phase delay of its own small-signal response at 100 Hz: at 1x the mean's half step, at 2x the mean and
-        # the equaliser in steps, the elliptic upsampler's delay and the linear-phase downsampler's K - 1
-        w = 2 * math.pi * LATENCY_FREQUENCY_HZ / LATENCY_SAMPLE_RATE
-        self.latency_samples = -cmath.phase(self.small_signal_response(LATENCY_FREQUENCY_HZ, LATENCY_SAMPLE_RATE)) / w
+        # its blocks' summed: at 1x the mean's half step (exactly 0.5), at 2x the mean and the equaliser (1.25), the
+        # elliptic upsampler's phase delay at 100 Hz (1.78) and the linear-phase downsampler's K - 1 (20); = the
+        # phase delay of its own small-signal response at 100 Hz (tested)
+        self.latency_samples = self.equaliser.latency_samples + (
+            0 if oversampling == 1 else self.upsampler.latency_samples + self.downsampler.latency_samples)
 
     def _output_bound_per_unit_mean(self):
         """The sum of |taps| of the linear chain after the mean (the equaliser, at 2x convolved with the downsampler's

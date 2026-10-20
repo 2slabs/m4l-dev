@@ -10,7 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.mutron_bi_phase import (LATENCY_SAMPLES, MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
+from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
                                                      RUNTIME_CHARACTER_FIELDS, cell_ohms, feedback_gain,
                                                      phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
@@ -25,14 +25,17 @@ OUTPUTS = ["unit_out_a", "unit_out_b", "unit_corner_a_hz", "unit_corner_b_hz", "
            "unit_wet_a", "unit_sweep_a", "unit_sweep_b", "unit_phasor_a_out", "unit_phasor_a_loop_input"]
 
 
-def unit(character=MATCHED, **panel):
-    block = MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="rate_1", rate_2_hz="rate_2",
+def unit_block(character=MATCHED):
+    return MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="rate_1", rate_2_hz="rate_2",
                           shape_1="shape_1", shape_2="shape_2", depth_a="depth_a", depth_b="depth_b",
                           feedback_a="feedback_a", feedback_b="feedback_b", sweep_a_source="sweep_a_source",
                           sweep_b_source="sweep_b_source", sweep_sync="sweep_sync", phasor_b_input="phasor_b_input",
                           foot_switch_a="foot_switch_a", foot_switch_b="foot_switch_b", pedal_volts="pedal",
                           character=character)
-    return harness([block], dict(PANEL, **panel), OUTPUTS, samplerate=SAMPLERATE)
+
+
+def unit(character=MATCHED, **panel):
+    return harness([unit_block(character)], dict(PANEL, **panel), OUTPUTS, samplerate=SAMPLERATE)
 
 
 def sine(frequency, samples, amplitude=1.0):
@@ -166,17 +169,18 @@ class MutronBiPhaseTests(unittest.TestCase):
                 self.assertAlmostEqual(crossings, expected * seconds, delta=1)
 
     def test_its_latency_is_the_declared_zero_samples(self):
-        # LATENCY_SAMPLES = 0: the rendered output's phase is the Python model's with no delay added (one sample is
+        # latency_samples 0: the rendered output's phase is the Python model's with no delay added (one sample is
         # 360 f / fs degrees: 8.2 at 1 kHz, 32.7 at 4 kHz, far above the tolerance); the dry alone (foot switch off)
         # is the input sample for sample
-        self.assertEqual(LATENCY_SAMPLES, 0)
         program = unit(pedal=3.8)
+        latency_samples = unit_block().latency_samples
+        self.assertEqual(latency_samples, 0)
         cell = settled_cell_ohms(program)
         for frequency in (250.0, 1000.0, 4000.0):
             signal = sine(frequency, 8820)
             rendered = program.run(8820, [signal])
             model = phasor_small_signal_response(frequency, cell, 0.0, SAMPLERATE, character=MATCHED)
-            expected = math.degrees(math.atan2(model.imag, model.real)) - 360.0 * frequency * LATENCY_SAMPLES / SAMPLERATE
+            expected = math.degrees(math.atan2(model.imag, model.real)) - 360.0 * frequency * latency_samples / SAMPLERATE
             found = phase_degrees(rendered[0][4410:], signal[4410:], frequency, SAMPLERATE)
             with self.subTest(frequency=frequency):
                 self.assertLess(abs((found - expected + 180.0) % 360.0 - 180.0), 0.5)

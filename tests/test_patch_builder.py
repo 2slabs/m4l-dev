@@ -11,6 +11,7 @@ from m4l_dev import live_parameter_identity as identity  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
 from m4l_dev.preset_book import PresetBook  # noqa: E402
+from m4l_dev.techniques.defined_latency_pad import DefinedLatency  # noqa: E402
 
 INFO = {name: (name, "text") for name in ("A", "B", "C", "Volume", "Page", "Preset", "Stop", "Link view", "Pick", "Tool")}
 # a and volume: set by controls, so no default in the code (the build writes it); b: set by no control in most tests
@@ -60,18 +61,26 @@ def builder_with_latency(latency_samples):
 
 
 class DefinedLatencyTests(unittest.TestCase):
-    """The device's latency reaches Live as the patcher's Defined Latency ("latency", whole samples)."""
+    """The device's Defined Latency reaches Live as the patcher's "latency" (whole samples, the rule's figure)."""
 
-    def test_the_patch_reports_the_latency_rounded_to_whole_samples(self):
-        for declared, reported in ((0, 0), (6, 6), (29.03, 29), (29.5, 30), (29.49, 29)):
+    def test_the_patch_carries_the_declared_whole_samples(self):
+        for declared in (0, 6, 29):
             patch = builder_with_latency(declared)
-            self.assertEqual(patch.patch()["patcher"]["latency"], reported, f"declared {declared}")
+            self.assertEqual(patch.patch()["patcher"]["latency"], declared)
             self.assertIsInstance(patch.patch()["patcher"]["latency"], int)
-            self.assertEqual(patch.latency_samples, declared, "the exact figure is kept for the device's tests")
+            self.assertEqual(patch.latency_samples, declared)
 
-    def test_a_latency_that_is_no_number_of_samples_fails(self):
-        for bad in (None, -1, float("nan"), float("inf"), True, "29"):
-            with self.assertRaisesRegex(BuildError, "latency_samples"):
+    def test_the_rules_figure_is_what_it_takes(self):
+        # a device's paths through DefinedLatency: the latest (a half-sample clip on a 2x saturator, 23.03 + 0.5)
+        # rounded up; the builder takes that int as it is
+        rule = DefinedLatency("t", {"clipped": 23.03 + 0.5, "clean": 23.03})
+        self.assertEqual(builder_with_latency(rule.declared_latency_samples).patch()["patcher"]["latency"], 24)
+
+    def test_a_latency_that_is_no_whole_number_of_samples_fails(self):
+        # a fraction (29.03, or a float crumb's 0.5000000000000001) would be rounded where no test sees it: the
+        # device rounds up by the rule (DefinedLatency) and pads its paths, the builder takes the whole number
+        for bad in (None, -1, 29.03, 0.5000000000000001, 6.0, float("nan"), float("inf"), True, "29"):
+            with self.assertRaisesRegex(BuildError, "latency_samples", msg=bad):
                 builder_with_latency(bad)
 
 

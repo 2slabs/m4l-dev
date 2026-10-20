@@ -38,6 +38,7 @@ class ZeroDelayLadderFilter(Technique):
 
     def __init__(self, instance_name, input, cutoff_hz, resonance):
         super().__init__(instance_name, input=input, cutoff_hz=cutoff_hz, resonance=resonance)
+        self.latency_samples = 0       # zero-delay feedback: no sample added (its phase is the analog ladder's)
 
     def declarations(self):
         return self.substituted("History ${p}_s1(0), ${p}_s2(0), ${p}_s3(0), ${p}_s4(0);")

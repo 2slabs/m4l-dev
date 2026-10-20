@@ -16,19 +16,19 @@ where its slope turns by 8 K cot K a cycle (K = drive x pi / 2; none for a perfe
 found on the exact phase, so FM and sweeps stay exact. Measured (48 kHz, the worst alias under 20 kHz re the
 fundamental; tests/test_circuit_module_buchla_259_principal_oscillator.py): a 5 kHz wave at drive 0.05, 1x, -33 dB
 trivial -> -72 dB; at drive 0.95 (2sl gate's), 2x, -68.5 -> -119 dB. The technique needs two steps of look-ahead, so
-`<name>_sine` is LATENCY_STEPS steps late: it is the wave at `<name>_sine_phase` (with `<name>_sine_phase_before`,
+`<name>_sine` is `latency_steps` steps late: it is the wave at `<name>_sine_phase` (with `<name>_sine_phase_before`,
 `_sine_phase_step`, `_sine_phase_unwrapped`), the phase that many steps ago, for an instrument that builds other
 waves in step with it; an instrument delays what it mixes with the sine (an AM) by as many steps.
 
 Inputs: `frequency_hz` (the exponential converter's output) and `frequency_modulation_hz` (linear FM, through zero:
 the phase may run backwards), each evaluated at every step, so a fast pitch sweep (a drum's) is followed exactly.
 `oversampling` (a wiring choice, required) is how many steps the instrument runs it per host sample. `reset_statements()`
-puts the phase at the start of the cycle (a hard sync: a note's start; it reaches `<name>_sine` LATENCY_STEPS steps
+puts the phase at the start of the cycle (a hard sync: a note's start; it reaches `<name>_sine` `latency_steps` steps
 later, its jump band-limited). Each `statements()` is one step; it leaves the oscillator's phase now: `<name>_phase`
 (0..1, the instance's History), `<name>_phase_before`, `<name>_phase_step` (cycles this step, negative when FM runs
 it backwards), `<name>_phase_unwrapped` (before the wrap: >= 1 or < 0 where it wrapped), for an instrument that
 predicts ahead from now (a probe of the wave's mean); and the band-limited `<name>_sine` (-1..1) with its phase
-quartet, LATENCY_STEPS late. `sine_at(phase)` is the trivial shaped wave at any phase (the probe's). A step crosses
+quartet, `latency_steps` late. `sine_at(phase)` is the trivial shaped wave at any phase (the probe's). A step crosses
 at most one peak and one trough: at a step over half a cycle (above the steps' Nyquist) a corner is missed.
 """
 import dataclasses
@@ -36,9 +36,8 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
-from m4l_dev.techniques.band_limited_edges import LOOK_AHEAD_SAMPLES, BandLimitedEdges
+from m4l_dev.techniques.band_limited_edges import BandLimitedEdges
 
-LATENCY_STEPS = LOOK_AHEAD_SAMPLES
 PHASE_QUARTET = ("phase", "phase_before", "phase_step", "phase_unwrapped")
 
 FUNCTIONS = {
@@ -72,13 +71,12 @@ def shaped_sine(phase, character):
 
 
 class Buchla259PrincipalOscillator(CircuitModule):
-    """One step: the phase now, and `<name>_sine`, band-limited, LATENCY_STEPS steps late, at `frequency_hz` +
+    """One step: the phase now, and `<name>_sine`, band-limited, `latency_steps` steps late, at `frequency_hz` +
     `frequency_modulation_hz`, `oversampling` steps a host sample. See the module's docstring for every output."""
 
     references_entry = "references/circuits/buchla-259.md"
     character_type = Buchla259PrincipalOscillatorCharacter
     runtime_character_fields = ("sine_shaper_drive",)
-    latency_steps = LATENCY_STEPS
 
     def __init__(self, instance_name, *, frequency_hz, frequency_modulation_hz, oversampling, character=None,
                  character_inputs=None):
@@ -92,7 +90,10 @@ class Buchla259PrincipalOscillator(CircuitModule):
                              f"got {self.character.sine_shaper_drive!r}")
         self.oversampling = oversampling
         p = instance_name
-        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive")
+        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive", oversampling=oversampling)
+        # `<name>_sine` is the edges' look-ahead late: in steps (the instrument's rings) and in host samples
+        self.latency_steps = self.edges.latency_steps
+        self.latency_samples = self.edges.latency_samples
         # the triangle's peak (phase 1/4) turns the slope down, its trough (3/4) up; a reset jumps to the cycle's
         # start (the sine's 0) one step before this one
         self.edges.add_corner(f"{p}_peak_crossed", f"{p}_peak_fraction", f"-{p}_corner_size")
@@ -116,7 +117,7 @@ class Buchla259PrincipalOscillator(CircuitModule):
 
     def declarations(self):
         p = self.instance_name
-        rings = ", ".join(f"{p}_{name}_ring_{age}(0)" for name in PHASE_QUARTET for age in range(1, LATENCY_STEPS + 1))
+        rings = ", ".join(f"{p}_{name}_ring_{age}(0)" for name in PHASE_QUARTET for age in range(1, self.latency_steps + 1))
         return (f"History {p}_phase(0), {p}_naive_before(0), {p}_reset_pending(0), {rings};\n"
                 + self.edges.declarations())
 
@@ -125,12 +126,12 @@ class Buchla259PrincipalOscillator(CircuitModule):
         return f"buchla_259_principal_sine({phase}, {self._half_pi_drive_term()}, {self._normalisation_term()})"
 
     def _phase_quartet_ring_statements(self):
-        """The phase quartet LATENCY_STEPS steps ago (`<name>_sine_phase...`), read before this step's is pushed, as
+        """The phase quartet `latency_steps` steps ago (`<name>_sine_phase...`), read before this step's is pushed, as
         the edges' ring gives its sample."""
         p, lines = self.instance_name, []
         for name in PHASE_QUARTET:
-            lines.append(f"{p}_sine_{name} = {p}_{name}_ring_{LATENCY_STEPS};")
-            for age in range(LATENCY_STEPS, 1, -1):
+            lines.append(f"{p}_sine_{name} = {p}_{name}_ring_{self.latency_steps};")
+            for age in range(self.latency_steps, 1, -1):
                 lines.append(f"{p}_{name}_ring_{age} = {p}_{name}_ring_{age - 1};")
             lines.append(f"{p}_{name}_ring_1 = {p}_{name};")
         return "\n".join(lines)

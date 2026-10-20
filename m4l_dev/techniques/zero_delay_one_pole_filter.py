@@ -49,6 +49,7 @@ class ZeroDelayOnePoleFilter(Technique):
                 _check_a_number_input(instance_name, input_name, expression)
         super().__init__(instance_name, input=input, cutoff_hz=cutoff_hz,
                          prewarp_hz=f"{instance_name}_cutoff" if prewarp_hz is None else prewarp_hz)
+        self.latency_samples = 0       # zero-delay feedback: no sample added (its phase is the analog one-pole's)
 
     def declarations(self):
         return self.substituted("History ${p}_s(0);")

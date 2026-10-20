@@ -182,6 +182,7 @@ class Buchla259TimbreSection(CircuitModule):
                                                              who=f"Buchla259TimbreSection {instance_name}")
         # output_volts_at: ADAA2 centred on the point before, then the equaliser for this oversampling
         self.latency_steps = self.equaliser.latency_steps
+        self.latency_samples = self.equaliser.latency_samples
         self._points_with_output = set()        # output_statements wrote these points' outputs
 
     @property

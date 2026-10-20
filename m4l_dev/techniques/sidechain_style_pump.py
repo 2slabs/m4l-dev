@@ -61,6 +61,7 @@ class SidechainStylePump(Technique):
         super().__init__(instance_name, live_beat_position=live_beat_position, following_live=following_live, bpm=bpm,
                          division_beats=division_beats, depth=depth, attack_ms=attack_ms,
                          release_fraction=release_fraction, curve=curve, chop=chop)
+        self.latency_samples = 0       # a gain on the beat's own sample
 
     def functions(self):
         return dict(FUNCTIONS)

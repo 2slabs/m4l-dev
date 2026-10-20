@@ -53,6 +53,7 @@ class LedDrivenPhotocell(Technique):
                  law_floor_ohms, darkest_current_amps, release_from_amps, release_to_amps):
         super().__init__(instance_name, drive_current_amps=drive_current_amps, attack_ms=attack_ms,
                          release_ms=release_ms)
+        self.latency_samples = 0       # a control (the cell's resistance) on its drive's own sample
         self.law_scale_ohms = (_run_time(instance_name, "law_scale_ohms", law_scale_ohms)
                                or _positive_number(instance_name, "law_scale_ohms", law_scale_ohms))
         self.law_exponent = (_run_time(instance_name, "law_exponent", law_exponent)

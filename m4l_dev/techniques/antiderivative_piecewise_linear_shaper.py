@@ -326,11 +326,10 @@ class AntiderivativePiecewiseLinearShaper(Technique):
         self.equaliser = AntiderivativeAntialiasingEqualiser(f"{instance_name}_equaliser",
                                                              raw_mean=f"{instance_name}_raw_mean", order=order,
                                                              oversampling=oversampling, who=who)
-
-    @property
-    def latency_steps(self):
-        """Steps late: the ADAA mean's (first order half a step, second one) and its equaliser's."""
-        return self.equaliser.latency_steps
+        # late by the ADAA mean's (first order half a step, second one) and its equaliser's: in its steps (the
+        # instrument's alignments) and in host samples
+        self.latency_steps = self.equaliser.latency_steps
+        self.latency_samples = self.equaliser.latency_samples
 
     def functions(self):
         functions = dict(self.table.functions())

@@ -126,6 +126,7 @@ class Buchla292LowPassGateChannel(CircuitModule):
                  character=None):
         super().__init__(instance_name, character=character, input=input, led_current_amps=led_current_amps,
                          attack_ms=attack_ms, decay_ms=decay_ms, mode=mode, resonance=resonance)
+        self.latency_samples = 0       # the photocell and the zero-delay network: no sample added
         check_the_lowpass_mode_stays_damped(self.character)
         p = instance_name
         character = self.character

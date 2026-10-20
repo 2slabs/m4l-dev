@@ -148,7 +148,8 @@ class AntiderivativeAntialiasingEqualiser(Technique):
     """`<name>_out`: `raw_mean`, ADAA of `order`'s mean this step, through the equaliser decided for `order` at
     `oversampling` x the host rate (`taps`: symmetric, odd in number, summing to 1, so DC is exactly 1; centred on the
     middle one; holding the product with the kernel flat up to `edge_cycles`, cycles a step). One tap (`edge_cycles`
-    None) is no equaliser: the raw mean is the output. `latency_steps`: the kernel's and the equaliser's. State: the
+    None) is no equaliser: the raw mean is the output. `latency_steps`: the kernel's and the equaliser's, in its steps;
+    `latency_samples` the same in host samples (steps / `oversampling`). State: the
     last raw means (`length` - 1 Histories `<name>_raw_mean_before_<age>`). Without `raw_mean` it is used at points
     only (`output_expression`, `remember_statements`) and has no `statements()`."""
 
@@ -166,6 +167,7 @@ class AntiderivativeAntialiasingEqualiser(Technique):
         self.length = len(self.taps)
         # the kernel's latency (centred between its inputs), the equaliser (length - 1) / 2 more
         self.latency_steps = self.kernel.latency_steps + (self.length - 1) // 2
+        self.latency_samples = self.latency_steps / oversampling
         self.function_name = f"adaa{order}_equaliser_{oversampling}x"
 
     def response(self, w):

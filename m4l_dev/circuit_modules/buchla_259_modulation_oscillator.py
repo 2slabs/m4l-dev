@@ -5,7 +5,7 @@ and its timbre (references/circuits/buchla-259.md §5).
 Its waves: sine, triangle, saw, square (`wave` 0..3). The 259's modulation oscillator gives a saw and a square, and
 in its "Both" mode a ramp and a triangle (the repair notes, §5 [SECONDARY]); the sine is 2sl gate's [DESIGN]. Each
 is the trivial wave on the phase, its jumps (saw, square) and corners (triangle) band-limited by the kit's
-band-limited edges technique; the wave is computed `LOOK_AHEAD_SAMPLES` steps ahead of the phase so the band-limited
+band-limited edges technique; the wave is computed `LOOK_AHEAD_STEPS` steps ahead of the phase so the band-limited
 output (that many steps late) is the oscillator now: an FM or AM it drives stays in step with what it modulates.
 
 Inputs: `frequency_hz` (evaluated at every step: a sweep is followed exactly) and `wave`. `oversampling` (a wiring
@@ -22,7 +22,7 @@ import dataclasses
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
-from m4l_dev.techniques.band_limited_edges import LOOK_AHEAD_SAMPLES, BandLimitedEdges
+from m4l_dev.techniques.band_limited_edges import LOOK_AHEAD_STEPS, BandLimitedEdges
 
 WAVES = ("sine", "triangle", "saw", "square")
 
@@ -77,7 +77,8 @@ class Buchla259ModulationOscillator(CircuitModule):
                              f"steps the instrument runs it a host sample) is a whole number >= 1, got {oversampling!r}")
         self.oversampling = oversampling
         p, wave_input = instance_name, self.input_expressions["wave"]
-        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive")
+        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive", oversampling=oversampling)
+        self.latency_samples = 0       # the wave runs the edges' look-ahead ahead of the phase: the output is now
         wrapped, halfway = f"{p}_lead_wrapped", f"{p}_lead_halfway"
         wrap_fraction, halfway_fraction = f"{p}_lead_phase / {p}_step", f"({p}_lead_phase - 0.5) / {p}_step"
         saw_or_square, square = f"{wave_input} > 1.5", f"{wave_input} > 2.5"
@@ -112,7 +113,7 @@ ${p}_phase = ${p}_phase + ${p}_step - floor(${p}_phase + ${p}_step);
 // the trivial wave runs LOOK_AHEAD steps ahead of the phase, so the band-limited wave (that many steps late) is now
 ${p}_lead_before = ${p}_lead_phase;
 ${p}_lead_phase = wrap(${p}_phase + ${look_ahead} * ${p}_step, 0, 1);
-${p}_naive = """, look_ahead=str(LOOK_AHEAD_SAMPLES)) + self.wave_at(f"{p}_lead_phase") + self.substituted(""";
+${p}_naive = """, look_ahead=str(LOOK_AHEAD_STEPS)) + self.wave_at(f"{p}_lead_phase") + self.substituted(""";
 ${p}_lead_wrapped = ${p}_lead_phase < ${p}_lead_before;
 ${p}_lead_halfway = ${p}_lead_before < 0.5 && ${p}_lead_phase >= 0.5;
 """) + self.edges.statements() + f"\n{p}_out = {p}_edges_out;")
@@ -123,6 +124,6 @@ ${p}_lead_halfway = ${p}_lead_before < 0.5 && ${p}_lead_phase >= 0.5;
         p = self.instance_name
         step = f"{p}_reset_step"
         return (f"{step} = {self._step_expression()};\n{p}_phase = 0;\n"
-                f"{p}_lead_phase = {LOOK_AHEAD_SAMPLES} * {step};\n"
+                f"{p}_lead_phase = {LOOK_AHEAD_STEPS} * {step};\n"
                 + self.edges.restart_statements([self.wave_at(f"{ahead} * {step}")
-                                                 for ahead in range(1, LOOK_AHEAD_SAMPLES + 1)]))
+                                                 for ahead in range(1, LOOK_AHEAD_STEPS + 1)]))

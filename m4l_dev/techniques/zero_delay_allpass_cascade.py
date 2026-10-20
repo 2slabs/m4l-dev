@@ -87,6 +87,7 @@ class ZeroDelayAllpassCascade(Technique):
         if prewarp_hz is not None:
             inputs["prewarp_hz"] = prewarp_hz
         super().__init__(instance_name, **inputs)
+        self.latency_samples = 0       # zero-delay all-passes and loop: no sample added (the phase is the analog cascade's)
         p = instance_name
         self.stages = stages
         self.coupling = None if coupling_highpass_hz is None else ZeroDelayOnePoleFilter(

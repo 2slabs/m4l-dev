@@ -11,13 +11,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.circuit_modules.buchla_259_principal_oscillator import (  # noqa: E402
-    LATENCY_STEPS, Buchla259PrincipalOscillator, Buchla259PrincipalOscillatorCharacter, shaped_sine)
+    Buchla259PrincipalOscillator, Buchla259PrincipalOscillatorCharacter, shaped_sine)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from gen_block_harness import folded, frequency_by_zero_crossings, harness, worst_alias_db  # noqa: E402
 
 SAMPLERATE = 44100.0
 SHAPER_THIRD_HARMONIC_DB = -38.4      # the module's stated imperfection at the default drive
+# the sine's latency in steps (the edges' look-ahead), as an instance reports it
+SINE_LATENCY_STEPS = Buchla259PrincipalOscillator("probe", frequency_hz="1", frequency_modulation_hz="0",
+                                                  oversampling=1).latency_steps
 
 
 def harmonic(wave, n):
@@ -40,6 +43,12 @@ class ShapedSineTests(unittest.TestCase):
         with self.assertRaises(BuildError):
             Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0", oversampling=1,
                                          character=Buchla259PrincipalOscillatorCharacter(sine_shaper_drive=1.2))
+
+    def test_its_latency_is_two_steps_in_host_samples_at_its_oversampling(self):
+        for oversampling, latency_samples in ((1, 2), (2, 1)):
+            oscillator = Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0",
+                                                      oversampling=oversampling)
+            self.assertEqual((oscillator.latency_steps, oscillator.latency_samples), (2, latency_samples))
 
     def test_its_oversampling_is_required_and_a_whole_number_of_steps(self):
         for bad in (0, -1, 1.5, True, "2"):
@@ -85,8 +94,8 @@ class PhaseTests(unittest.TestCase):
     def test_the_sine_is_the_shaped_wave_at_its_phase_latency_steps_late(self):
         sine, sine_phase, phase = run(oscillator_program(), 400)
         step = 440 / SAMPLERATE
-        for i in range(LATENCY_STEPS, 400):
-            self.assertEqual(sine_phase[i], phase[i - LATENCY_STEPS])
+        for i in range(SINE_LATENCY_STEPS, 400):
+            self.assertEqual(sine_phase[i], phase[i - SINE_LATENCY_STEPS])
             if away_from_the_corners(sine_phase[i], step):
                 self.assertAlmostEqual(sine[i], shaped_sine(sine_phase[i], Buchla259PrincipalOscillatorCharacter()),
                                        places=13)
@@ -105,9 +114,9 @@ class PhaseTests(unittest.TestCase):
         program.set_param("frequency", 2000.0)
         sine = run(program, 2000)[0]
         phase = 0.0
-        for i in range(2000 - LATENCY_STEPS):
+        for i in range(2000 - SINE_LATENCY_STEPS):
             phase += (2000 + 6000 * math.sin(2 * math.pi * 5000 * i / 96000)) / 96000
-            self.assertAlmostEqual(sine[i + LATENCY_STEPS], math.sin(2 * math.pi * phase), places=9)
+            self.assertAlmostEqual(sine[i + SINE_LATENCY_STEPS], math.sin(2 * math.pi * phase), places=9)
 
     def test_a_sweep_is_followed_at_every_step(self):
         # frequency 2000 Hz falling 30 Hz a sample (a drum's pitch sweep): the phase is the sum of every step's
@@ -121,9 +130,9 @@ class PhaseTests(unittest.TestCase):
         sine, sine_phase, phase = run(program, 120)
         step = 440 / SAMPLERATE
         self.assertAlmostEqual(phase[100], step, places=12)                 # reset, then one step
-        self.assertAlmostEqual(sine_phase[100 + LATENCY_STEPS], step, places=12)
-        self.assertGreater(sine_phase[100 + LATENCY_STEPS - 1], 0.5)       # the old cycle until then
-        for i in range(100 + LATENCY_STEPS + 2, 120):                       # past the jump's band-limiting
+        self.assertAlmostEqual(sine_phase[100 + SINE_LATENCY_STEPS], step, places=12)
+        self.assertGreater(sine_phase[100 + SINE_LATENCY_STEPS - 1], 0.5)       # the old cycle until then
+        for i in range(100 + SINE_LATENCY_STEPS + 2, 120):                       # past the jump's band-limiting
             self.assertAlmostEqual(sine[i], shaped_sine(sine_phase[i], Buchla259PrincipalOscillatorCharacter()),
                                    places=12)
 
@@ -155,7 +164,7 @@ class SineShaperDriveTests(unittest.TestCase):
         program.set_param("frequency", frequency)
         band_limited = run(program, count + settle)[0][settle:]
         character = Buchla259PrincipalOscillatorCharacter(sine_shaper_drive=drive)
-        trivial = [shaped_sine((i + settle - LATENCY_STEPS) * frequency / rate % 1.0, character) for i in range(count)]
+        trivial = [shaped_sine((i + settle - SINE_LATENCY_STEPS) * frequency / rate % 1.0, character) for i in range(count)]
         harmonics = [k for k in range(3, 120, 2) if k * frequency > rate / 2
                      and all(abs(folded(k * frequency, rate) - h * frequency) > 8 for h in range(1, 120, 2)
                              if h * frequency < rate / 2)]

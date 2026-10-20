@@ -2,6 +2,7 @@
 our GenExpr renderer (ours, not Max's compiler), each on a small harness (tests/gen_block_harness.py) at the lowest
 length that still tests it. The claims are stated in fractions of the chip's full scale: the harness feeds the section
 volts (in1 x full scale) and reads its output back in full scale. Standard library only."""
+import cmath
 import math
 import os
 import sys
@@ -11,15 +12,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.ltc1060_mf10_section import (LATENCY_SAMPLES, Ltc1060Mf10Character,  # noqa: E402
+from m4l_dev.circuit_modules.ltc1060_mf10_section import (Ltc1060Mf10Character,  # noqa: E402
                                                           Ltc1060Mf10Section, response_script_code,
                                                           small_signal_response)
-from gen_block_harness import amplitude_at, frequency_by_zero_crossings, harness  # noqa: E402
+from gen_block_harness import (amplitude_at, complex_amplitude_at, frequency_by_zero_crossings,  # noqa: E402
+                               harness)
 
 SAMPLERATE = 44100.0
 FULL_SCALE_VOLTS = Ltc1060Mf10Character().full_scale_volts
 FEEDTHROUGH_AMPLITUDE = Ltc1060Mf10Character().clock_feedthrough_of_full_scale
 OUTPUT_MIX = {"lowpass": ("1", "0", "0"), "bandpass": ("0", "1", "0"), "highpass": ("0", "0", "1")}
+
+
+def section_block(name="sc", output="lowpass", **arguments):
+    lowpass, bandpass, highpass = OUTPUT_MIX[output]
+    return Ltc1060Mf10Section(name, input_volts=f"in1 * {FULL_SCALE_VOLTS!r}", clock_hz="cutoff * 100",
+                              damping="damping", hold="hold", clock_feedthrough="feedthrough", lowpass_gain=lowpass,
+                              bandpass_gain=bandpass, highpass_gain=highpass, **arguments)
 
 
 def section(output="lowpass", divided=False, **params):
@@ -135,6 +144,18 @@ class Ltc1060Mf10SectionTests(unittest.TestCase):
         high = section("bandpass", cutoff=12000.0, damping=0.008).run(17640, [kicked(17640)])[0]
         self.assertGreater(rms(high[-2205:]), 0.3)
 
+    def test_its_latency_is_the_input_and_the_edges_three_samples(self):
+        # latency_samples: one for the input's pre-emphasis, two for the edges' look-ahead; rendered: a 100 Hz sine
+        # through the lowpass at 15 kHz comes out that many samples late, past the response's own phase
+        self.assertEqual(section_block().latency_samples, 3)
+        signal = sine(100.0, 8820, 0.05)
+        out = section("lowpass", cutoff=15000.0, damping=1.0).run(8820, [signal])[0]
+        ratio = complex_amplitude_at(out[4410:], 100.0, SAMPLERATE) / complex_amplitude_at(signal[4410:], 100.0,
+                                                                                          SAMPLERATE)
+        response = small_signal_response(100.0, 100 * 15000.0, 1.0)[0]
+        samples_late = -(cmath.phase(ratio) - cmath.phase(response)) * SAMPLERATE / (2 * math.pi * 100.0)
+        self.assertAlmostEqual(samples_late, section_block().latency_samples, delta=0.02)
+
     def test_hold_freezes_lowpass_and_bandpass(self):
         for output in ("lowpass", "bandpass"):
             program = section(output, cutoff=200.0, damping=0.7)
@@ -142,7 +163,7 @@ class Ltc1060Mf10SectionTests(unittest.TestCase):
             program.run(2205, [signal[:2205]])
             program.set_param("hold", 1.0)
             held = program.run(2205, [signal[2205:]])[0]
-            frozen = held[LATENCY_SAMPLES + 2:]
+            frozen = held[section_block().latency_samples + 2:]
             self.assertLess(max(frozen) - min(frozen), 1e-9, f"{output} holds its last sample")
 
     def test_the_chips_own_images_stay_and_the_hosts_folds_go(self):

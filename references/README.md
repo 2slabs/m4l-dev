@@ -69,7 +69,8 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
   Test.amxd.txt` lists the patcher's `latency: 0` beside `gridsize` and `boxanimatetime`; saved devices carry
   `"latency" : 0` at the end of the patcher). Whole samples: the docs say "in samples", and no saved file with a
   fraction has been seen. Not to be confused with `amxd~`'s `latency` attribute (milliseconds, a host-side object).
-  The build writes it from `DevicePatchBuilder(latency_samples=...)`, rounded to the nearest sample. Seen in Live:
+  The build writes it from `DevicePatchBuilder(latency_samples=...)`, a whole number: the device latency rule's
+  (architecture/overview.md, "Defined Latency": the latest path rounded up, every path padded to it). Seen in Live:
   not yet (check: hover the device's title bar, the status bar shows the device's latency).
 - **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is

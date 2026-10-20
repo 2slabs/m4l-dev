@@ -3,8 +3,10 @@
 
 A device computes its trivial ("naive") waveform mix each sample, and tells the block where in that sample each jump
 or corner happened. Each correction spreads over four samples, two on each side of the edge, so the block delays the
-mix by two samples (a look-ahead ring): `<name>_out` is the mix of two samples ago plus every correction that has
-landed on it. One block per voice serves every edge of every oscillator (the corrections add).
+mix by two steps (a look-ahead ring, LOOK_AHEAD_STEPS): `<name>_out` is the mix of two steps ago plus every correction
+that has landed on it. One block per voice serves every edge of every oscillator (the corrections add). A step is a
+host sample, or 1 / `oversampling` of one where the instrument runs the block `oversampling` times a host sample (the
+259's oscillators at 2x): `latency_steps` is the look-ahead, `latency_samples` the same in host samples.
 
 The residuals are the cubic B-spline's first integral minus the unit step (polyBLEP) and its second integral minus
 the ramp (polyBLAMP), per tap, as polynomials in d, the fraction of a sample from the edge to the first sample after
@@ -18,7 +20,7 @@ from fractions import Fraction
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
 
-LOOK_AHEAD_SAMPLES = 2
+LOOK_AHEAD_STEPS = 2
 TAP_NAMES = ("two_before", "one_before", "at", "one_after")   # samples n-2, n-1, n, n+1; n: the first after the edge
 
 # Coefficients of d^0, d^1, ... per tap (taps in TAP_NAMES order).
@@ -57,14 +59,22 @@ FUNCTIONS = dict(residual_functions("polyblep4", POLYBLEP4_RESIDUAL, "4-point po
 
 
 class BandLimitedEdges(Technique):
-    """`<name>_out`: `naive` two samples late, its jumps and corners band-limited.
+    """`<name>_out`: `naive` two steps late, its jumps and corners band-limited. `oversampling` (required): the steps
+    the instrument runs it a host sample.
 
     add_jump(happened, fraction, height): when `happened` (true this sample), the mix jumped by `height` at
     `fraction` of a sample before this sample. add_corner(happened, fraction, slope_change): its slope changed by
     `slope_change` (per sample) there."""
 
-    def __init__(self, instance_name, naive):
+    def __init__(self, instance_name, *, naive, oversampling):
         super().__init__(instance_name, naive=naive)
+        if isinstance(oversampling, bool) or not isinstance(oversampling, int) or oversampling < 1:
+            raise BuildError(f"BandLimitedEdges {instance_name}: oversampling (required: the steps the instrument "
+                             f"runs it a host sample) is a whole number >= 1, got {oversampling!r}")
+        self.oversampling = oversampling
+        self.latency_steps = LOOK_AHEAD_STEPS
+        self.latency_samples = LOOK_AHEAD_STEPS / oversampling if LOOK_AHEAD_STEPS % oversampling \
+            else LOOK_AHEAD_STEPS // oversampling
         self.edges = []
 
     def add_jump(self, happened, fraction, height):
@@ -74,13 +84,13 @@ class BandLimitedEdges(Technique):
         self.edges.append(("polyblamp4", happened, fraction, slope_change))
 
     def restart_statements(self, next_naive_values):
-        """Statements for a trivial wave whose phase restarts (a hard reset, as at a note): the LOOK_AHEAD_SAMPLES
-        samples the ring holds but has not given out are replaced by `next_naive_values` (GenExpr expressions: the
+        """Statements for a trivial wave whose phase restarts (a hard reset, as at a note): the LOOK_AHEAD_STEPS
+        steps the ring holds but has not given out are replaced by `next_naive_values` (GenExpr expressions: the
         restarted wave at the next outputs, the first one first) and every correction pending in the ring is dropped,
         so nothing from before the restart comes out after it. The restart's own jump is not band-limited. Run them
         before this sample's `statements()`."""
-        if len(next_naive_values) != LOOK_AHEAD_SAMPLES:
-            raise BuildError(f"BandLimitedEdges {self.instance_name}: a restart takes the next {LOOK_AHEAD_SAMPLES} "
+        if len(next_naive_values) != LOOK_AHEAD_STEPS:
+            raise BuildError(f"BandLimitedEdges {self.instance_name}: a restart takes the next {LOOK_AHEAD_STEPS} "
                              f"values of the restarted wave, got {len(next_naive_values)}")
         p = self.instance_name
         lines = [f"{p}_naive_2 = {next_naive_values[0]};", f"{p}_naive_1 = {next_naive_values[1]};"]
@@ -97,7 +107,7 @@ class BandLimitedEdges(Technique):
     def statements(self):
         if not self.edges:
             raise BuildError(f"BandLimitedEdges {self.instance_name}: no jump or corner was added")
-        lines = [self.substituted("// ${p}: band-limited edges, two samples of look-ahead (kit technique: band-limited edges)")]
+        lines = [self.substituted("// ${p}: band-limited edges, two steps of look-ahead (kit technique: band-limited edges)")]
         for number, (kind, happened, fraction, size) in enumerate(self.edges, start=1):
             edge = f"{self.instance_name}_edge_{number}"
             lines.append(f"if ({happened}) {{")

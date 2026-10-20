@@ -39,6 +39,7 @@ class BellEqualizer(Technique):
 
     def __init__(self, instance_name, input, frequency_hz, gain_db, q):
         super().__init__(instance_name, input=input, frequency_hz=frequency_hz, gain_db=gain_db, q=q)
+        self.latency_samples = 0       # the zero-delay SVF's: no sample added
         self.band = ZeroDelayStateVariableFilter(f"{instance_name}_band", input=f"{instance_name}_input",
                                                  cutoff_hz=frequency_hz, q=f"{instance_name}_band_q")
 

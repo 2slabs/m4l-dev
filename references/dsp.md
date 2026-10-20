@@ -458,6 +458,30 @@ at 10 kHz, 3.34 at 16 kHz, 5.77 at 20 kHz (a spread of 9 / 32 / 83 µs): the sha
 excess a headroom matter (and what a saturator after it sees). Both still exceed the ideal by up to 1.35–1.67× with
 the 2× ADAA2 equaliser (0.99–1.01× without it below 1.8 kHz): open.
 
+## Defined-latency pad (m4l_dev/techniques/defined_latency_pad.py)
+
+What it serves: Live's Defined Latency is whole samples (references/README.md, "Defined Latency": the Max user guide
+"Type in a value for the latency value in samples"; saved as the patcher's integer `"latency"`). A device whose paths
+are fractionally late (a 1x ADAA saturator's half sample, the elliptic half-band pair's 3.07) declares its latest
+path rounded up and pads every path to it (architecture/overview.md, "Defined Latency": the rule, ours).
+
+**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"** (`jos-thiran-allpass.html`; quoted in
+references/allpass-and-diffusion.md §5 [VERIFIED there]): `a_k = (−1)^k C(N, k) Π_{n=0..N} (Δ − N + n)/(Δ − N + k + n)`,
+maximally flat group delay "equal to Δ at dc"; "For sufficiently large Δ, stability is guaranteed. Rule of thumb:
+Δ ≈ order" (the bound itself is not on the page: every Δ the pad uses has its poles checked inside the unit circle by
+the step-down test, tests/test_techniques.py); first order `a1 = (1 − Δ)/(1 + Δ)` (Dattorro Part 2
+eq. 40, the same coefficient). Why an all-pass and not an FIR for a fixed sub-sample pad: its magnitude is exactly 1
+(a pad must not change a path's level or tone), where a short fractional FIR droops toward Nyquist (linear
+interpolation's gain at Nyquist |1 − 2f|, allpass-and-diffusion.md §5: at f = 0.5 a null; −16.7 dB at 20 kHz at
+44.1 kHz); a linear-phase FIR has only whole or half-sample delays. Its cost is phase: Thiran's delay is exact at DC
+and leaves Δ toward Nyquist.
+
+Ours (measured, tests/test_techniques.py, every fractional part in 0.01 steps, 44.1 kHz): order N = min(ceil(P), 4)
+at Δ = N − 1 + frac(P), after the whole rest (Δ in (N − 1, N) is where each order's error is least: order 1 at Δ 0.5 is
+0.072 samples off at 10 kHz, at Δ 1.5 0.218). Worst |phase delay − P|: order 1 (pads under 1) 0.003 / 0.073 / 0.33 /
+0.49 samples to 2 / 10 / 18 / 20 kHz; order 4 (pads of 3 or more) 1e-4 / 0.0023 / 0.14 / 0.30. A whole pad is a ring of
+Histories, exact; a pad of 0 is the input.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):

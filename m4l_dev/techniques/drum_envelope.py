@@ -72,6 +72,7 @@ class DrumEnvelope(Technique):
                  clap_burst_spacing_ms="10"):
         super().__init__(instance_name, hit=hit, mode=mode, attack_ms=attack_ms, decay_ms=decay_ms,
                          clap_burst_count=clap_burst_count, clap_burst_spacing_ms=clap_burst_spacing_ms)
+        self.latency_samples = 0       # a hit moves the envelope on the hit's own sample
 
     def functions(self):
         return dict(FUNCTIONS)

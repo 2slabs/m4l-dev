@@ -27,7 +27,7 @@ comes out now, and a hit restarts it at this very sample.
 import math
 
 from m4l_dev.gen_blocks import Technique
-from m4l_dev.techniques.band_limited_edges import LOOK_AHEAD_SAMPLES, BandLimitedEdges
+from m4l_dev.techniques.band_limited_edges import LOOK_AHEAD_STEPS, BandLimitedEdges
 from m4l_dev.techniques.drum_envelope import FUNCTIONS as DRUM_ENVELOPE_FUNCTIONS
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise
 
@@ -66,9 +66,10 @@ class PitchModulator(Technique):
     def __init__(self, instance_name, hit, shape, amount, decay_ms, rate_hz, seed):
         super().__init__(instance_name, hit=hit, shape=shape, amount=amount, decay_ms=decay_ms, rate_hz=rate_hz,
                          seed=seed)
+        self.latency_samples = 0       # the shape runs ahead inside the edges' ring: the offset is now
         p = instance_name
         self.noise = SeededWhiteNoise(f"{p}_noise", seed=seed)
-        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive")
+        self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive", oversampling=1)
         square, saw, triangle = (f"{p}_shape == {SHAPES[name]}" for name in ("square", "saw_down", "triangle"))
         # the half-way point: the square falls by 2, the triangle's slope turns from -4 to +4 a cycle
         self.edges.add_jump(f"{p}_crossed_half && ({square})", f"{p}_half_fraction", f"-2 * {p}_amount")
@@ -105,7 +106,7 @@ ${{p}}_random_coefficient = 1 - exp(-twopi * ${{p}}_step);
 if (${{hit}}) {{
 	${{p}}_random_value = ${{p}}_noise_out;
 {restart}
-	// the ring now holds the restarted shape's first {LOOK_AHEAD_SAMPLES} samples; the state stands one step on
+	// the ring now holds the restarted shape's first {LOOK_AHEAD_STEPS} samples; the state stands one step on
 	${{p}}_phase = ${{p}}_step;
 	${{p}}_decay_progress = ${{p}}_decay_step;
 }} else {{

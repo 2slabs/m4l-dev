@@ -45,9 +45,11 @@ from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateV
 from m4l_dev.techniques import drum_envelope  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
+from m4l_dev.techniques.defined_latency_pad import (THIRAN_MAXIMUM_ORDER,  # noqa: E402
+                                                    THIRAN_PHASE_DELAY_ERROR_BOUNDS, DefinedLatency,
+                                                    DefinedLatencyPad)
 from m4l_dev.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
-from m4l_dev.techniques.halfband_oversampler import (HALFBAND_ROUND_TRIP_LATENCY_SAMPLES,  # noqa: E402
-                                                     HalfbandDownsampler, HalfbandLinearPhaseDownsampler,
+from m4l_dev.techniques.halfband_oversampler import (HalfbandDownsampler, HalfbandLinearPhaseDownsampler,  # noqa: E402
                                                      HalfbandUpsampler, halfband_attenuation_db, halfband_coefficients,
                                                      halfband_response, linear_phase_halfband_response,
                                                      linear_phase_halfband_taps)
@@ -287,6 +289,11 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
         for oversampling, expected in ((1, 0.5), (2, 23.03)):
             block = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
             self.assertAlmostEqual(block.latency_samples, expected, delta=0.005)
+            w = 2 * math.pi * 100.0 / self.SAMPLERATE
+            response_delay = -cmath.phase(block.small_signal_response(100.0, self.SAMPLERATE)) / w
+            self.assertAlmostEqual(block.latency_samples, response_delay, places=9, msg="its own response's")
+            if oversampling == 1:
+                self.assertEqual(block.latency_samples, 0.5, "exactly: no float crumb for a device's sum")
             sine = [0.001 * math.sin(2 * math.pi * 100.0 * i / self.SAMPLERATE) for i in range(8820)]
             delay = -phase_degrees(self.saturate(sine, oversampling)[4410:], sine[4410:], 100.0, self.SAMPLERATE) / 360 \
                 * self.SAMPLERATE / 100.0
@@ -440,7 +447,7 @@ class BandLimitedEdgesTests(unittest.TestCase):
 
     def oscillator(self, fundamental, wave):
         """A saw (jump of -2 at each wrap) or a triangle (corners at phase 0 and 1/2) through the edges block."""
-        edges = BandLimitedEdges("edges", naive="naive")
+        edges = BandLimitedEdges("edges", naive="naive", oversampling=1)
         if wave == "saw":
             edges.add_jump("wrapped", "phase / step", "-2")
             naive = "2 * phase - 1"
@@ -469,7 +476,7 @@ class BandLimitedEdgesTests(unittest.TestCase):
     def test_a_restart_gives_out_nothing_from_before_it(self):
         # a saw run two samples ahead (as a device feeds a wave it needs on time), its phase reset to 0 at sample 300:
         # after the restart the block gives out the restarted saw itself, with no old sample or pending correction
-        edges = BandLimitedEdges("edges", naive="2 * wrap(phase + 2 * step, 0, 1) - 1")
+        edges = BandLimitedEdges("edges", naive="2 * wrap(phase + 2 * step, 0, 1) - 1", oversampling=1)
         edges.add_jump("wrapped", "wrap(phase + 2 * step, 0, 1) / step", "-2")
         restart = edges.restart_statements(["2 * step - 1", "4 * step - 1"])
         step = 1000.0 / self.SAMPLERATE
@@ -489,6 +496,16 @@ class BandLimitedEdgesTests(unittest.TestCase):
         out = self.oscillator(100.0, "saw")
         self.assertAlmostEqual(sum(out[:441 * 9]) / (441 * 9), 0.0, delta=1e-3)
         self.assertAlmostEqual(max(out), 1.0, delta=0.02)
+
+    def test_its_latency_is_two_steps_in_host_samples_at_its_oversampling(self):
+        for oversampling, latency_samples in ((1, 2), (2, 1), (4, 0.5)):
+            edges = BandLimitedEdges("edges", naive="0", oversampling=oversampling)
+            self.assertEqual((edges.latency_steps, edges.latency_samples), (2, latency_samples))
+        with self.assertRaises(TypeError, msg="no default"):
+            BandLimitedEdges("edges", naive="0")
+        for bad in (0, 1.5, True, "2"):
+            with self.assertRaises(BuildError, msg=bad):
+                BandLimitedEdges("edges", naive="0", oversampling=bad)
 
 
 class HistoriesStartAtTheirTargetsTests(unittest.TestCase):
@@ -1670,17 +1687,156 @@ class HalfbandOversamplerTests(unittest.TestCase):
             gain = amplitude_at(out[4410:], frequency, self.SAMPLERATE) / amplitude_at(sine[4410:], frequency,
                                                                                         self.SAMPLERATE)
             self.assertAlmostEqual(20 * math.log10(gain), 0.0, delta=1e-3, msg=frequency)
-        # the latency at low frequencies (the phase delay at 100 Hz, base-rate samples)
+        # the latency at low frequencies (the phase delay at 100 Hz, base-rate samples): the two blocks' reported
+        # latencies summed, 3.07 at the kit's design
         sine = [math.sin(2 * math.pi * 100.0 * n / self.SAMPLERATE) for n in range(8820)]
         out = program.run(8820, [sine])[0]
         delay = -phase_degrees(out[4410:], sine[4410:], 100.0, self.SAMPLERATE) / 360 * self.SAMPLERATE / 100.0
-        self.assertAlmostEqual(delay, HALFBAND_ROUND_TRIP_LATENCY_SAMPLES, delta=0.05)
+        self.assertAlmostEqual(delay, up.latency_samples + down.latency_samples, delta=0.005)
+        self.assertAlmostEqual(up.latency_samples + down.latency_samples, 3.07, delta=0.005)
         # the upsampler's image (44.1 kHz - f, in the 88.2 kHz stream) is gone
         sine = [math.sin(2 * math.pi * 5000.0 * n / self.SAMPLERATE) for n in range(8820)]
         _, first, second = program.run(8820, [sine])
         stream = [value for pair in zip(first, second) for value in pair]
         image = amplitude_at(stream[8820:], self.SAMPLERATE - 5000.0, 2 * self.SAMPLERATE)
         self.assertLess(20 * math.log10(image), -95.0)
+
+
+def poles_inside_the_unit_circle(denominator):
+    """The step-down (Schur-Cohn) test on 1 + a_1 z^-1 + ... + a_N z^-N: every reflection coefficient under 1 in
+    magnitude means every pole is inside the unit circle."""
+    coefficients = list(denominator)
+    while len(coefficients) > 1:
+        reflection = coefficients[-1]
+        if abs(reflection) >= 1:
+            return False
+        order = len(coefficients) - 1
+        coefficients = [(coefficients[i] - reflection * coefficients[order - i]) / (1 - reflection * reflection)
+                        for i in range(order)]
+    return True
+
+
+class DefinedLatencyPadTests(unittest.TestCase):
+    """The device latency rule (DefinedLatency) and its pad (DefinedLatencyPad): every path's latency plus its pad is
+    the declared whole number of samples, exactly for whole pads, within the stated Thiran bounds for fractional ones."""
+    SAMPLERATE = 44100.0
+    IMPULSE_LENGTH = 4096
+
+    def impulse_response(self, blocks, output):
+        program = harness(blocks, {}, [output], samplerate=self.SAMPLERATE)
+        return program.run(self.IMPULSE_LENGTH, [[1.0] + [0.0] * (self.IMPULSE_LENGTH - 1)])[0]
+
+    def response_of(self, impulse_response, frequency):
+        w = 2 * math.pi * frequency / self.SAMPLERATE
+        return sum(value * cmath.exp(-1j * w * n) for n, value in enumerate(impulse_response))
+
+    def phase_delay_error(self, response, frequency, expected_delay_samples):
+        """|phase delay - expected| in samples (the phase taken against the expected delay's, so no unwrapping)."""
+        w = 2 * math.pi * frequency / self.SAMPLERATE
+        return abs(cmath.phase(response * cmath.exp(1j * w * expected_delay_samples)) / w)
+
+    def test_the_declared_figure_is_the_latest_path_rounded_up_and_every_pad_reaches_it(self):
+        stab_like = DefinedLatency("device", {"moog": 2 + 3.067 + 23.03, "clean": 2 + 23.03})
+        self.assertEqual(stab_like.declared_latency_samples, 29)
+        self.assertIsInstance(stab_like.declared_latency_samples, int)
+        for path, latency in stab_like.path_latency_samples.items():
+            self.assertAlmostEqual(latency + stab_like.pad_samples[path], 29, places=12, msg=path)
+        drums_like = DefinedLatency("device", {"kick": 0.5, "hat": 0})
+        self.assertEqual((drums_like.declared_latency_samples, drums_like.pad_samples), (1, {"kick": 0.5, "hat": 1}))
+        self.assertEqual(DefinedLatency("device", {"gate": 8}).pad_samples, {"gate": 0})
+        self.assertEqual(DefinedLatency("device", {"none": 0}).declared_latency_samples, 0)
+
+    def test_float_crumbs_and_ties_decide_nothing(self):
+        crumbs = DefinedLatency("device", {"a": 0.5000000000000001 + 0.5, "b": 3 * 0.1 * 10, "c": 0.5})
+        self.assertEqual(crumbs.declared_latency_samples, 3, "3.0000000000000004 is 3, not 4")
+        self.assertEqual(crumbs.pad_samples["b"], 0)
+        self.assertIsInstance(crumbs.pad_samples["b"], int, "a whole pad is an int: the bypass-exact ring")
+        self.assertEqual(crumbs.pad_samples["a"], 2)
+        self.assertEqual(DefinedLatency("device", {"a": 0.5, "b": 0.5}).declared_latency_samples, 1)
+        self.assertEqual(DefinedLatency("device", {"a": 1.5000000001}).declared_latency_samples, 2)
+
+    def test_a_bad_figure_or_path_fails_the_build(self):
+        for bad in ({}, {"a": -0.5}, {"a": float("nan")}, {"a": float("inf")}, {"a": True}, {"a": "1"}, [("a", 1)]):
+            with self.assertRaises(BuildError, msg=bad):
+                DefinedLatency("device", bad)
+        rule = DefinedLatency("device", {"a": 0.5, "b": 0})
+        with self.assertRaises(BuildError):
+            rule.pad("c", "pad_c", "in1")
+        rule.pad("a", "pad_a", "in1")
+        with self.assertRaisesRegex(BuildError, "'b'"):
+            rule.check_every_path_padded()
+        rule.pad("b", "pad_b", "in1")
+        rule.check_every_path_padded()
+        self.assertTrue(poles_inside_the_unit_circle((1.0, -1.5, 0.7)), "poles at radius sqrt(0.7)")
+        self.assertFalse(poles_inside_the_unit_circle((1.0, 1.2)), "a pole at -1.2: the stability test can fail")
+        for bad in (-1, float("nan"), True, "0.5"):
+            with self.assertRaises(BuildError, msg=bad):
+                DefinedLatencyPad("pad", input="in1", pad_samples=bad)
+
+    def test_a_whole_pad_is_the_input_exactly_that_many_samples_late(self):
+        generator = random.Random(7)
+        signal = [generator.uniform(-1, 1) for _ in range(200)]
+        for pad_samples in (0, 1, 3, 5.0, 2.0000000000000004):
+            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples)
+            whole = round(pad_samples)
+            self.assertEqual((pad.latency_samples, pad.thiran_order), (whole, 0))
+            out = harness([pad], {}, ["pad_out"], samplerate=self.SAMPLERATE).run(200, [signal])[0]
+            self.assertEqual(out, [0.0] * whole + signal[:200 - whole], pad_samples)
+        self.assertEqual(DefinedLatencyPad("pad", input="in1", pad_samples=0).declarations(), "", "no state at 0")
+
+    def test_a_fractional_pad_is_a_thiran_allpass_rendered_as_its_python_response(self):
+        for pad_samples, order, whole in ((0.5, 1, 0), (0.97, 1, 0), (0.03, 1, 0), (1.25, 2, 0), (3.97, 4, 0),
+                                          (25.03, 4, 22)):
+            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples)
+            self.assertEqual((pad.thiran_order, pad.whole_samples, pad.latency_samples), (order, whole, pad_samples))
+            self.assertAlmostEqual(pad.whole_samples + pad.thiran_delay_samples, pad_samples, places=12)
+            rendered = self.impulse_response([pad], "pad_out")
+            for frequency in (100.0, 5000.0, 15000.0, 20000.0):
+                found = self.response_of(rendered, frequency)
+                self.assertLess(abs(found - pad.response(frequency, self.SAMPLERATE)), 1e-9, (pad_samples, frequency))
+                self.assertAlmostEqual(abs(found), 1.0, delta=1e-9, msg="an all-pass: no loss, no lift")
+            self.assertLess(self.phase_delay_error(pad.response(100.0, self.SAMPLERATE), 100.0, pad_samples), 1e-5)
+
+    def test_the_stated_phase_delay_bounds_hold_for_every_fraction(self):
+        # every fractional part in 0.01 steps, each order's pads (order N: pads in (N - 1, N); the top order also
+        # past it, the same all-pass after whole samples); the bounds are tight (the worst is within 85 % of them
+        # above 2 kHz), so the stated numbers are the measured ones
+        for order in range(1, THIRAN_MAXIMUM_ORDER + 1):
+            for top, bound in THIRAN_PHASE_DELAY_ERROR_BOUNDS[order].items():
+                worst = 0.0
+                for hundredths in range(1, 100):
+                    pad_samples = order - 1 + hundredths / 100
+                    pads = [pad_samples] + ([pad_samples + 7] if order == THIRAN_MAXIMUM_ORDER else [])
+                    for samples in pads:
+                        pad = DefinedLatencyPad("pad", input="in1", pad_samples=samples)
+                        self.assertEqual(pad.thiran_order, order, samples)
+                        self.assertTrue(poles_inside_the_unit_circle(pad.thiran_coefficients), samples)
+                        for step in range(1, 401):
+                            frequency = top * step / 400
+                            worst = max(worst, self.phase_delay_error(pad.response(frequency, self.SAMPLERATE),
+                                                                      frequency, samples))
+                self.assertLessEqual(worst, bound, (order, top))
+                if top > 2000.0:
+                    self.assertGreater(worst, 0.85 * bound, (order, top))
+
+    def test_a_path_and_its_pad_are_the_declared_whole_number_late(self):
+        # a 1x tanh saturator's linear twin is half a sample late, linear phase (cos(w / 2)); a dry path is on time:
+        # padded, both are 1 sample late, the dry exactly, the saturated within order 1's bounds, magnitude untouched
+        twin = AntiderivativeTanhSaturatorLinearTwin("twin", input="in1", oversampling=1)
+        rule = DefinedLatency("device", {"saturated": twin.latency_samples, "dry": 0})
+        self.assertEqual(rule.declared_latency_samples, 1)
+        saturated_pad = rule.pad("saturated", "saturated_pad", "twin_out")
+        dry_pad = rule.pad("dry", "dry_pad", "in1")
+        rule.check_every_path_padded()
+        saturated = self.impulse_response([twin, saturated_pad], "saturated_pad_out")
+        dry = self.impulse_response([dry_pad], "dry_pad_out")
+        self.assertEqual(dry[:3], [0.0, 1.0, 0.0])
+        for top, bound in THIRAN_PHASE_DELAY_ERROR_BOUNDS[1].items():
+            for frequency in (top / 4, top / 2, top):
+                response = self.response_of(saturated, frequency)
+                self.assertLessEqual(self.phase_delay_error(response, frequency, 1), bound, frequency)
+                w = 2 * math.pi * frequency / self.SAMPLERATE
+                self.assertAlmostEqual(abs(response), math.cos(w / 2), delta=1e-9, msg="the twin's own magnitude")
 
 
 if __name__ == "__main__":

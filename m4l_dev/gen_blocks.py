@@ -10,13 +10,18 @@ A block instance is made with a name (its prefix: every History, Delay and local
 the GenExpr expressions it reads (its inputs, evaluated once each sample where the block's statements stand). It gives
 - `functions()`: {name: GenExpr function definition}, shared by every instance (gen wants functions first);
 - `declarations()`: its History and Delay lines;
-- `statements()`: its per-sample code, which leaves its outputs in locals named in its docstring.
+- `statements()`: its per-sample code, which leaves its outputs in locals named in its docstring;
+- `latency_samples`: an instance attribute, how late its output is against its input, in host samples (fractions
+  allowed; 0 for none; a block run at steps converts its steps by its `oversampling`), so a device sums its paths'
+  blocks and declares its Defined Latency by the rule (m4l_dev/techniques/defined_latency_pad.py). Every block sets
+  it, including 0 (tests/test_gen_block_layers.py); `gen_code_with_blocks` fails a block without it.
 
 A device's gen~ template holds `/*GEN_BLOCK_FUNCTIONS*/` (first: before the device's own functions),
 `/*GEN_BLOCK_DECLARATIONS*/` (among its declarations) and one `/*<NAME>*/` per instance (where its statements go,
 after the device has computed its inputs). `gen_code_with_blocks` fills them; a missing or extra marker, a name that
 isn't an identifier, two instances of one name and one function name with two bodies all fail the build.
 """
+import math
 import re
 import string
 
@@ -66,6 +71,16 @@ class GenBlock:
         except (KeyError, ValueError) as problem:
             raise BuildError(f"{type(self).__name__} {self.instance_name}: its code names ${{{problem}}}, which "
                              "is neither an input nor a constant it was given") from problem
+
+    def check_latency_samples(self):
+        """The block's `latency_samples` (host samples, a finite number >= 0), or a BuildError naming the block."""
+        latency_samples = getattr(self, "latency_samples", None)
+        if isinstance(latency_samples, bool) or not isinstance(latency_samples, (int, float)) \
+                or not math.isfinite(latency_samples) or latency_samples < 0:
+            raise BuildError(f"{type(self).__name__} {self.instance_name}: every gen block reports latency_samples (how "
+                             f"late its output is, in host samples, a finite number >= 0, 0 for none); got "
+                             f"{latency_samples!r}")
+        return latency_samples
 
     def functions(self):
         return {}
@@ -133,6 +148,7 @@ def gen_code_with_blocks(template_text, blocks, template_name, other_replacement
     functions = {"smoothing_coefficient": SMOOTHING_FUNCTION}
     declarations = []
     for block in blocks:
+        block.check_latency_samples()
         if block.marker in replacements:
             raise BuildError(f"{template_name}: two things fill /*{block.marker}*/ (block instance names must be unique)")
         for function_name, text in block.functions().items():

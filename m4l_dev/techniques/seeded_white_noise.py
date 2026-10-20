@@ -39,6 +39,7 @@ class SeededWhiteNoise(Technique):
 
     def __init__(self, instance_name, seed, restart="0"):
         super().__init__(instance_name, seed=seed, restart=restart)
+        self.latency_samples = 0       # a source: a restart sounds on its own sample
 
     def declarations(self):
         return self.substituted("History ${p}_state(0), ${p}_seeded_from(-1);")

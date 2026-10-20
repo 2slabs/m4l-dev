@@ -19,7 +19,7 @@ p4 / (1 - q4), 1 - q4 >= 1 for k >= 0: never singular). NEWTON_ITERATIONS = 2 fr
 2026-10-20, against RK4 at 64x decimated by a Blackman sinc: 2 iterations are within 0.02 dB of 8 on every harmonic
 below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice, required: 2
 or 1) runs it twice a host sample between the kit's halfband oversampler's upsampler and downsampler (3.07
-samples late at low frequencies, HALFBAND_ROUND_TRIP_LATENCY_SAMPLES), or once with no latency. The worst alias of a
+samples late at low frequencies: `latency_samples`, theirs summed), or once with no latency. The worst alias of a
 hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -55 dB at 2x; drive 5, fc 5 kHz, k 3:
 -84 dB at 1x, -127 dB at 2x; at fc 18 kHz, k 3.9, drive 20: -12 dB at 1x, -34 dB at 2x, the aliases made above the
 doubled rate's Nyquist (the research's table, references/circuits/moog-transistor-ladder.md §6).
@@ -232,6 +232,9 @@ class MoogTransistorLadder(CircuitModule):
             self.upsampler = HalfbandUpsampler(f"{instance_name}_up", input=f"{instance_name}_input")
             self.downsampler = HalfbandDownsampler(f"{instance_name}_down", first=f"{instance_name}_x4_step_1",
                                                    second=f"{instance_name}_x4_step_2")
+        # the ladder and its coupling are zero-delay: the module is as late as its oversampler's pair
+        self.latency_samples = 0 if oversampling == 1 else \
+            self.upsampler.latency_samples + self.downsampler.latency_samples
         self.output_coupling = ZeroDelayOnePoleFilter(f"{instance_name}_coupling", input=f"{instance_name}_ladder_volts",
                                                       cutoff_hz=repr(float(self.character.output_coupling_corner_hz)))
 

@@ -49,8 +49,9 @@ from m4l_dev.preset_book import PresetBook               # PresetBook.from_file(
 from m4l_dev.patch_builder import DevicePatchBuilder     # DevicePatchBuilder(device_name, script_name, version,
                                                          #   subtitle, link_chip_text, device_type, device_width,
                                                          #   page_names, info, preset_book, latency_samples)
-                                                         # latency_samples: the device's delay from its blocks'
-                                                         #   own figures (0 if none), the patch's Defined Latency
+                                                         # latency_samples: the Defined Latency, an int: the
+                                                         #   rule's declared figure (below, "Defined Latency")
+from m4l_dev.techniques.defined_latency_pad import DefinedLatency  # DefinedLatency(device_name, {path: latency})
 from m4l_dev.live_preset_files import LivePresetFiles    # LivePresetFiles(stored_only_values_of_preset)
 from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.device_build import build_device            # build_device(repository, patch, layout, views_code,
@@ -98,6 +99,25 @@ The same idea for the gen~ code (dsp-blocks.md), in three layers: techniques (`m
 inputs as GenExpr expressions; the device's gen~ template has `/*GEN_BLOCK_FUNCTIONS*/`, `/*GEN_BLOCK_DECLARATIONS*/`
 and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. Tests: tests/test_techniques.py,
 tests/test_circuit_module_*.py, and tests/test_gen_block_layers.py for the layers' rules.
+
+## Defined Latency
+
+Live is told a device's latency in whole samples (references/README.md, "Defined Latency"), and compensates it on
+playback. The rule (ours, so no tie and no float crumb decides anything):
+
+- **Every block reports its latency the same way**: `latency_samples`, an instance attribute in host samples
+  (fractions allowed, 0 said; dsp-blocks.md, "Latency is always said"). A path's latency is the sum of its blocks'.
+  A device never types a latency or reads a module constant for one.
+- **The declared figure is the latest audio path rounded UP to a whole sample.** The paths are every way audio reaches
+  an output: each output, each switchable alternative (a Filter Type), each voice (a kick and a hat). Figures within
+  1e-9 of a whole number are that number (0.5000000000000001 + 0.5 is 1).
+- **Every path is padded to exactly that figure**: `DefinedLatency(device, {path: latency})` gives
+  `declared_latency_samples` and, per path, `pad(path, name, input)`: a `DefinedLatencyPad` (whole samples exact; a
+  fraction through a Thiran all-pass: magnitude untouched, its phase delay within the stated bounds, dsp-blocks.md).
+  `check_every_path_padded()` fails a build that left a path early.
+- **`DevicePatchBuilder(latency_samples=...)` takes the declared int**, never a fraction (it would be rounded where no
+  test sees it); the patcher's `"latency"` is that figure. A device's tests render each path and hold its delay to
+  the declared figure.
 
 ## Layout: widths from text
 

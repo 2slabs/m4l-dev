@@ -15,10 +15,11 @@ StageProcTpl's y = a (x - y_before) + x_before.
 
 The kit's design (DEFAULT_*): 8 coefficients, transition 0.04 of the doubled rate (HIIR readme's own example): pass band to 0.21 x 2 sr (18.5 kHz
 at 44.1 kHz), stop band from 0.29 x 2 sr (25.6 kHz, so everything that would fold below 18.5 kHz), attenuation
-`halfband_attenuation_db` (HIIR's compute_atten): 99.3 dB. Latency: the up and down pair's group delay at low
-frequencies, measured in tests/test_techniques.py (HALFBAND_ROUND_TRIP_LATENCY_SAMPLES: 3.07 samples at the base rate,
-the phase delay at 100 Hz); not linear phase (HIIR's
-readme: the delays are "quite flat ... from DC up to about Fs/20" and rise toward the cut-off).
+`halfband_attenuation_db` (HIIR's compute_atten): 99.3 dB. Latency (`latency_samples`, base-rate samples, from the
+half-band's phase delay tau at LATENCY_FREQUENCY_HZ, in doubled-rate samples): the upsampler tau / 2 (its `first` at
+the host sample's time, `second` half a sample after), the downsampler tau / 2 - 1/2 (it takes the half-band's output
+at the second sample); up then down 3.07 samples at the kit's design (rendered: tests/test_techniques.py). Not linear
+phase (HIIR's readme: the delays are "quite flat ... from DC up to about Fs/20" and rise toward the cut-off).
 
 The linear-phase downsampler (`HalfbandLinearPhaseDownsampler`, `linear_phase_halfband_taps`): the same band edges
 and at least the elliptic's depth (100 dB) as a Kaiser-windowed half-band FIR, 83 taps (21 multiplies a base-rate
@@ -31,6 +32,7 @@ How a section runs at 2x: its statements run twice a sample (its marker placed t
 at two points, architecture/dsp-blocks.md "Points"), once on `<name>_first`, once on `<name>_second` of an
 upsampler (or on its own 2x-rate oscillators), and the downsampler takes the two results.
 """
+import cmath
 import math
 
 from m4l_dev.build_error import BuildError
@@ -113,6 +115,20 @@ def halfband_response(frequency_over_doubled_rate, coefficients):
     return (paths[0] + paths[1] / z) / 2
 
 
+# The frequency a block's latency is the phase delay at (low enough that the elliptic half-band's delay is flat there),
+# at the rate it is quoted for: the kit's latencies of non-linear-phase blocks (this oversampler, the tanh saturator)
+LATENCY_FREQUENCY_HZ = 100.0
+LATENCY_SAMPLE_RATE = 44100.0
+
+
+def halfband_phase_delay_doubled_rate_samples(coefficients):
+    """tau: the half-band low-pass's phase delay at LATENCY_FREQUENCY_HZ (the host at LATENCY_SAMPLE_RATE), in samples
+    of the doubled rate."""
+    frequency_over_doubled_rate = LATENCY_FREQUENCY_HZ / (2 * LATENCY_SAMPLE_RATE)
+    return -cmath.phase(halfband_response(frequency_over_doubled_rate, coefficients)) / (
+        2 * math.pi * frequency_over_doubled_rate)
+
+
 def _check_coefficients(name, coefficients):
     if not coefficients or not all(isinstance(a, float) and 0 < a < 1 for a in coefficients):
         raise BuildError(f"{name}: coefficients must be all-pass coefficients in (0, 1), got {coefficients!r}")
@@ -150,6 +166,7 @@ class HalfbandUpsampler(Technique):
         super().__init__(instance_name, input=input)
         self.coefficients = _check_coefficients(f"HalfbandUpsampler {instance_name}",
                                                 halfband_coefficients() if coefficients is None else coefficients)
+        self.latency_samples = halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2
 
     def declarations(self):
         return _stage_declarations(self.instance_name, self.coefficients)
@@ -175,6 +192,7 @@ class HalfbandDownsampler(Technique):
         super().__init__(instance_name, first=first, second=second)
         self.coefficients = _check_coefficients(f"HalfbandDownsampler {instance_name}",
                                                 halfband_coefficients() if coefficients is None else coefficients)
+        self.latency_samples = halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2 - 0.5
 
     def declarations(self):
         return _stage_declarations(self.instance_name, self.coefficients)
@@ -190,10 +208,6 @@ class HalfbandDownsampler(Technique):
 
     def reset_statements(self):
         return _stage_reset_statements(self.instance_name, self.coefficients)
-
-
-# The default design's up-then-down phase delay at 100 Hz, in base-rate samples (measured, tests/test_techniques.py)
-HALFBAND_ROUND_TRIP_LATENCY_SAMPLES = 3.07
 
 
 # The linear-phase half-band (a windowed-sinc FIR, Kaiser's window): the downsampler after a saturator, where the

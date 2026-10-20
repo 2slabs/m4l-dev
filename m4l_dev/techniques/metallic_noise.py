@@ -53,7 +53,8 @@ class LfsrMetallicNoise(Technique):
 
     def __init__(self, instance_name, hit, tune_hz, pattern):
         super().__init__(instance_name, hit=hit, tune_hz=tune_hz, pattern=pattern)
-        self.edges = BandLimitedEdges(f"{instance_name}_edges", naive=f"{instance_name}_naive")
+        self.edges = BandLimitedEdges(f"{instance_name}_edges", naive=f"{instance_name}_naive", oversampling=1)
+        self.latency_samples = self.edges.latency_samples     # its output is the edges' ring: two samples late
         self.edges.add_jump(f"{instance_name}_stepped && {instance_name}_naive != {instance_name}_naive_before",
                             f"{instance_name}_step_fraction",
                             f"{instance_name}_naive - {instance_name}_naive_before")

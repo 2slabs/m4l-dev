@@ -66,6 +66,7 @@ class TapeStyleEcho(Technique):
         if diffusion is not None:
             inputs["diffusion"] = diffusion
         super().__init__(instance_name, **inputs)
+        self.latency_samples = 0       # its repeats land at n T: the loop's own delays are taken out of the time
         self.has_diffusion = diffusion is not None
         if not longest_time_ms > 0:
             raise BuildError(f"TapeStyleEcho {instance_name}: longest time {longest_time_ms} ms must be > 0")

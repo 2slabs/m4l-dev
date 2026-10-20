@@ -31,6 +31,7 @@ class HistoriesStartAtTheirTargets(Technique):
                 raise BuildError(f"HistoriesStartAtTheirTargets {instance_name}: {history_name!r} is not a lower-case "
                                  "GenExpr identifier (a History's name)")
         super().__init__(instance_name, **targets)
+        self.latency_samples = 0       # no signal passes through it: it sets Histories on the first sample
         self.history_names = list(targets)
 
     def declarations(self):
