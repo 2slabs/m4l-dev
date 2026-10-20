@@ -20,9 +20,10 @@ from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, comp
 ORIGINAL = Buchla259TimbreSectionCharacter()
 
 
-def section(name="timbre", character=None):
+def section(name="timbre", character=None, oversampling=2):
+    """A unit wired as the instruments wire it (2x unless a test says)."""
     return Buchla259TimbreSection(name, drive_volts="drive", symmetry_offset_volts="offset", frequency_hz="frequency",
-                                  character=character)
+                                  oversampling=oversampling, character=character)
 
 
 class FolderModelTests(unittest.TestCase):
@@ -117,10 +118,10 @@ class FolderGenExprTests(unittest.TestCase):
                        for k in range(steps)) / steps
             self.assertAlmostEqual(out[i], mean, delta=2e-4, msg=i)
 
-    def folder_program(self, drive, frequency, offset=0.0, samplerate=44100.0):
+    def folder_program(self, drive, frequency, offset=0.0, samplerate=44100.0, oversampling=2):
         """The section on in1 (the sine), Params drive / offset / frequency: out1 the second-order output, out2 the
         running segment's first-order mean, out3 the bus."""
-        timbre = section()
+        timbre = section(oversampling=oversampling)
         statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n"
                       + timbre.output_statements("now") + "\n"
                       + f"out1 = {timbre.output_volts_at('now')};\n"
@@ -130,33 +131,57 @@ class FolderGenExprTests(unittest.TestCase):
                     f"Param frequency({frequency!r});\n/*GEN_BLOCK_DECLARATIONS*/\n/*TIMBRE*/\n" + statements)
         return GenProgram(gen_code_with_blocks(template, [timbre], "test harness"), 1, 3, samplerate=samplerate)
 
-    def test_the_output_is_second_order_adaa_of_the_folder_equalised(self):
+    def test_the_output_is_second_order_adaa_of_the_folder_equalised_for_its_rate(self):
         # each step: Bilbao et al.'s eq. (15) through the last three bus values on the folder's pieces (= the circuit
-        # model, test above), exact, then the technique's equaliser over the last five, on a 5 V, 200 Hz sine with a
-        # 0.4 V offset (from step 2, once the bus has two before it; the raw means before are what ran)
+        # model, test above), exact, then the technique's equaliser for the unit's oversampling (2x: five taps; 1x:
+        # none), on a 5 V, 200 Hz sine with a 0.4 V offset (from step 2, once the bus has two before it)
         frequency, count = 200.0, 300
         sine = [math.sin(2 * math.pi * frequency * i / 44100) for i in range(count)]
-        out, _, bus = self.folder_program(5.0, frequency, 0.4).run(count, [sine])
-        pieces = section().table.pieces
-        raw_means = [exact_second_order_mean(pieces, bus[i], bus[i - 1], bus[i - 2]) for i in range(2, count)]
-        equalised = equalised_second_order_outputs(raw_means)
-        for i in range(6, count):                        # the equaliser's taps all on exact means
-            self.assertAlmostEqual(out[i], equalised[i - 2], delta=1e-9, msg=i)
-        self.assertEqual(Buchla259TimbreSection.latency_steps, 3)
+        for oversampling, latency_steps in ((1, 1), (2, 3)):
+            unit = section(oversampling=oversampling)
+            self.assertEqual(unit.latency_steps, latency_steps)
+            out, _, bus = self.folder_program(5.0, frequency, 0.4, oversampling=oversampling).run(count, [sine])
+            raw_means = [exact_second_order_mean(unit.table.pieces, bus[i], bus[i - 1], bus[i - 2])
+                         for i in range(2, count)]
+            equalised = equalised_second_order_outputs(raw_means, unit.equaliser.taps)
+            for i in range(2 + unit.equaliser.length - 1, count):      # the equaliser's taps all on exact means
+                self.assertAlmostEqual(out[i], equalised[i - 2], delta=1e-9, msg=(oversampling, i))
+
+    def straight_middle_gain(self, oversampling, frequency):
+        """A quiet sine on the straight middle piece (the dry path, slope 5) at 48 kHz x `oversampling`: the output re
+        the bus times 5, `latency_steps` before (the drive stage's roll-off is in the bus, so the bus is the
+        reference)."""
+        rate, count, settle = 48000.0 * oversampling, 3000, 100
+        sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
+        out, _, bus = self.folder_program(0.3, frequency, samplerate=rate, oversampling=oversampling).run(count, [sine])
+        late = section(oversampling=oversampling).latency_steps
+        return complex_amplitude_at(out[settle:], frequency, rate) / complex_amplitude_at(
+            [5 * value for value in bus[settle - late:count - late]], frequency, rate)
 
     def test_the_straight_middle_is_flat_to_20_khz_at_2x(self):
-        # a quiet sine on the straight middle piece (the dry path, slope 5): the output is the bus times 5, latency_steps
-        # late, within 0.0973 dB up to 20 kHz at 2x 48 kHz (raw ADAA2, its 3-tap mean: -1.3 dB at 10 kHz, -5.9 dB at
-        # 20 kHz); the drive stage's roll-off is in the bus, so the bus is the reference
-        rate, count, settle = 96000.0, 3000, 100
+        # within 0.0973 dB up to 20 kHz at 2x 48 kHz (raw ADAA2, its 3-tap mean: -1.3 dB at 10 kHz, -5.9 dB at 20 kHz)
         for frequency in (1000.0, 5000.0, 10000.0, 15000.0, 18000.0, 20000.0):
-            sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
-            out, _, bus = self.folder_program(0.3, frequency, samplerate=rate).run(count, [sine])
-            late = Buchla259TimbreSection.latency_steps
-            gain = complex_amplitude_at(out[settle:], frequency, rate) / complex_amplitude_at(
-                [5 * value for value in bus[settle - late:count - late]], frequency, rate)
+            gain = self.straight_middle_gain(2, frequency)
             self.assertLess(abs(20 * math.log10(abs(gain))), 0.0973, msg=frequency)
             self.assertLess(abs(gain.imag), 1e-6, msg=frequency)
+
+    def test_the_straight_middle_at_1x_is_the_three_tap_mean_and_never_lifted(self):
+        # at 1x (no equaliser: the technique's measurements) the 3-tap mean, never above 0 dB to the host's Nyquist:
+        # within 0.3 dB to 2.4 kHz, -1.3 dB at 5 kHz, -5.9 dB at 10 kHz at 48 kHz
+        for frequency in (1000.0, 2400.0, 5000.0, 10000.0, 15000.0, 20000.0, 23000.0):
+            gain = self.straight_middle_gain(1, frequency)
+            self.assertAlmostEqual(gain.real, (1 + 2 * math.cos(2 * math.pi * frequency / 48000.0)) / 3, delta=1e-9,
+                                   msg=frequency)
+            self.assertLess(abs(gain.imag), 1e-6, msg=frequency)
+            self.assertLessEqual(abs(gain), 1.0, msg=frequency)
+
+    def test_the_oversampling_must_be_known(self):
+        with self.assertRaises(TypeError):                     # never a default
+            Buchla259TimbreSection("timbre", drive_volts="drive", symmetry_offset_volts="offset",
+                                   frequency_hz="frequency")
+        for unknown in (3, 4, 0, True, None):
+            with self.assertRaises(BuildError, msg=unknown):
+                section(oversampling=unknown)
 
     def test_the_output_needs_its_statements_first(self):
         timbre = section()
@@ -184,6 +209,22 @@ class FolderGenExprTests(unittest.TestCase):
             self.assertAlmostEqual(measured[0], first_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, first order")
             self.assertLess(measured[1], second_order + 1.5, msg=f"{drive} V, {frequency} Hz, second order")
             self.assertLess(measured[1], measured[0] - 8)
+
+    def test_second_order_lowers_the_aliases_at_1x(self):
+        # the same at 1x 48 kHz, the unit unequalised (the technique's choice). Measured 2026-10-20, first order ->
+        # second: 4 V at 3.1 kHz -6.3 -> -25.3 dB, 8 V at 1.37 kHz -4.0 -> -11.0 dB, 4 V at 410 Hz -30.4 -> -36.3 dB.
+        # Through the 2x equaliser instead (5af0d09): -15.5, +3.5, -22.0 dB; through the best 1x equaliser (+-0.3 dB to
+        # 8.8 kHz, the response never above +1 dB): -18.6, -1.4, -26.7 dB
+        rate, length, settle = 48000.0, 16384, 300
+        for drive, frequency, first_order, second_order in ((4.0, 3100.0, -6.3, -25.3), (8.0, 1370.0, -4.0, -11.0),
+                                                            (4.0, 410.0, -30.4, -36.3)):
+            fundamental_bin, frequency = coherent_frequency(frequency, rate, length)
+            sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(length + settle)]
+            second, first, _ = self.folder_program(drive, frequency, samplerate=rate, oversampling=1).run(
+                length + settle, [sine])
+            measured = [coherent_worst_alias_db(output[settle:], fundamental_bin, rate, 20000) for output in (first, second)]
+            self.assertAlmostEqual(measured[0], first_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, first order")
+            self.assertAlmostEqual(measured[1], second_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, second order")
 
     def test_two_units_are_two_folders_in_one_patch(self):
         original, starved = section("original"), section("starved", Buchla259TimbreSectionCharacter(cell_rail_volts=4.5))

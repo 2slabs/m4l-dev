@@ -79,8 +79,8 @@ Taking it piece-wise (a line at the three's mean on one piece; the lower piece's
 eq. (15) of a ramp in coordinates at the corner across one corner; eq. (15) itself across more) is our construction
 for conditioning: F2 is a cubic of the input, and eq. (15) divides its differences by products of steps that are tiny
 near a corner at a slow input. tests/test_techniques.py holds it to eq. (15) in exact rational arithmetic and
-measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, below 10 kHz: −55.3 → −72.6 dB raw, −69.9
-equalised).
+measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, run at 1×, below 10 kHz: −55.3 → −72.6 dB;
+through the 2× equaliser, wrongly at that rate, −69.9).
 
 ADAA2's linear filtering and its equaliser: the same paper, §II.A after eq. (16) [PDF p. 4]: "In practice, though aliasing is
 indeed suppressed, such methods do introduce a degree of linear filtering to the original signal, and thus all
@@ -104,6 +104,19 @@ split the tanh saturator used to use, whose error once a folder folds is (1 − 
 line's whole size at the input's frequency. An equaliser after the transfer lifts an alias as it lifts the harmonics at
 its frequency: the 259 folder at 2× 48 kHz, worst alias under 20 kHz re the fundamental, 4 V at 3.1 kHz −36.4 → −31.5
 dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
+
+The equaliser is per rate (ours, measured 2026-10-20): Bilbao et al. evaluate ADAA2 "at a 2× oversampled rate" (above),
+and at 2× the band the equaliser lifts past the host's Nyquist (+15.9 dB at the 2× Nyquist) is the downsampler's. At
+1× that band is the host's top octave, where the 3-tap mean (a zero at a third of the rate, −9.5 dB at Nyquist) holds
+the aliases down. The 2× design at 1× is flat to 10 kHz but +6.4 dB at 24 kHz; the best 1× 5-tap design (±0.3 dB to
+8.8 kHz, the response never above +1 dB: Nyquist pinned at +1 dB, the outer tap the widest feasible) still lifts the
+aliases by up to +10.5 dB. Worst alias under 20 kHz at 48 kHz, unequalised / best 1× / 2× design: the 259 folder 4 V at
+3.1 kHz −25.3 / −18.6 / −15.5 dB, 8 V at 1.37 kHz −11.0 / −1.4 / +3.5, 4 V at 410 Hz −36.3 / −26.7 / −22.0 (first
+order −6.3, −4.0, −30.4); 2sl drums' voice, worst folded line re the loudest kept, FM metal −49.8 / −43.1 / −39.9, ring
+−52.9 / −44.0 / −38.3, Harmonics 1 at 5 kHz −82.7 / −77.4 / −74.6, Fold 4 V at 410 Hz −48.9 / −40.1 / −35.0, FM bright
+−69.3 / −64.6 / −62.2, Fold 4 V at 3.1 kHz −25.3 / −28.2 / −30.6, Fold 8 V at 1.37 kHz −13.5 / −6.4 / −4.9. So at 1×
+there is no equaliser (the raw mean: −1.3 dB at 5 kHz, −5.9 dB at 10 kHz, never lifted), and a block takes its
+oversampling with no default.
 
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 

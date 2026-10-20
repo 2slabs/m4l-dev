@@ -154,12 +154,11 @@ def exact_second_order_mean(pieces, x0, x1, x2):
     return float(2 * (differences[0] - differences[1]) / (x0 - x2))
 
 
-def equalised_second_order_outputs(raw_means):
-    """The technique's second-order output from ADAA2's raw means (oldest first): the equaliser's taps over the last
-    five, the means before the first taken as 0 (its Histories' start)."""
-    from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import SECOND_ORDER_EQUALISER_TAPS
-    padded = [0.0] * (len(SECOND_ORDER_EQUALISER_TAPS) - 1) + list(raw_means)
-    return [sum(tap * padded[i + k] for k, tap in enumerate(SECOND_ORDER_EQUALISER_TAPS)) for i in range(len(raw_means))]
+def equalised_second_order_outputs(raw_means, taps):
+    """The technique's second-order output from ADAA2's raw means (oldest first): the equaliser's `taps` (symmetric)
+    over the last of them, the means before the first taken as 0 (its Histories' start)."""
+    padded = [0.0] * (len(taps) - 1) + list(raw_means)
+    return [sum(tap * padded[i + k] for k, tap in enumerate(taps)) for i in range(len(raw_means))]
 
 
 def adaa_equaliser_remez(mean_response, edge_cycles_per_sample, tap_pairs):

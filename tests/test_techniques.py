@@ -15,9 +15,8 @@ from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
-    SECOND_ORDER_EQUALISER_EDGE, SECOND_ORDER_EQUALISER_INNER_TAP, SECOND_ORDER_EQUALISER_OUTER_TAP,
-    SECOND_ORDER_EQUALISER_TAPS, SECOND_ORDER_LATENCY_STEPS, AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable,
-    second_order_equaliser_call)
+    SECOND_ORDER_EQUALISER_EDGE_AT_2X, SECOND_ORDER_EQUALISER_INNER_TAP_AT_2X, SECOND_ORDER_EQUALISER_OUTER_TAP_AT_2X,
+    SECOND_ORDER_EQUALISERS, AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable, second_order_equaliser)
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
 from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_EDGE as TANH_EQUALISER_EDGE  # noqa: E402
 from m4l_dev.techniques.antiderivative_tanh_saturator import EQUALISER_INNER_TAP as TANH_EQUALISER_INNER_TAP  # noqa: E402
@@ -400,7 +399,7 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
 
     def test_the_mean_is_exact_on_a_piece_and_lowers_the_aliases(self):
         table = PiecewiseLinearTable("clip", self.CLIP)
-        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table)], {},
+        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, oversampling=1)], {},
                           ["shaper_out"], samplerate=self.SAMPLERATE)
         inside = [0.3 * math.sin(2 * math.pi * 500 * i / self.SAMPLERATE) for i in range(200)]
         out = program.run(len(inside), [inside])[0]
@@ -409,7 +408,7 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
         # a hot 3 kHz sine through the clip: the worst alias below 10 kHz, ADAA against the clip taken naively
         count, fundamental = 8192, 3000.0
         hot = [2.0 * math.sin(2 * math.pi * fundamental * i / self.SAMPLERATE) for i in range(count)]
-        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table)], {},
+        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, oversampling=1)], {},
                           ["shaper_out"], samplerate=self.SAMPLERATE)
         antialiased = program.run(count, [hot])[0][1000:]
         naive = [table.value(x) for x in hot][1000:]
@@ -442,53 +441,100 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
                                    msg=(x0, x1, x2))
             self.assertLessEqual(abs(value), 3.0)        # never blows up near a corner (the table stays under 3)
 
-    def test_second_order_is_the_equalised_line_on_a_piece_and_lowers_the_aliases_further(self):
+    def test_second_order_is_the_equalised_line_on_a_piece_at_either_oversampling(self):
+        # inside one piece: the line at the three's mean (raw), through the equaliser for the rate it runs at (at 1x
+        # none: the raw mean itself)
         table = PiecewiseLinearTable("clip", self.CLIP)
         inside = [0.3 * math.sin(2 * math.pi * 500 * i / self.SAMPLERATE) for i in range(200)]
-        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)], {},
-                          ["shaper_out"], samplerate=self.SAMPLERATE)
-        out = program.run(len(inside), [inside])[0]
-        # inside one piece: the line at the three's mean (raw), through the equaliser
         raw_means = [(inside[i] + (inside[i - 1] if i >= 1 else 0.0) + (inside[i - 2] if i >= 2 else 0.0)) / 3
                      for i in range(len(inside))]
-        for i, expected in enumerate(equalised_second_order_outputs(raw_means)):
-            self.assertAlmostEqual(out[i], expected, places=12)
-        # the hot 3 kHz sine (measured 2026-10-20, worst alias below 10 kHz: naive -38.2, ADAA1 -55.3, ADAA2 -72.6 dB raw,
-        # -69.9 equalised: its worst alias, near 10 kHz, is past the equaliser's edge at 44.1 kHz and lifted with the band)
+        for oversampling in (1, 2):
+            shaper = AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2,
+                                                         oversampling=oversampling)
+            out = harness([shaper], {}, ["shaper_out"], samplerate=self.SAMPLERATE).run(len(inside), [inside])[0]
+            taps = SECOND_ORDER_EQUALISERS[oversampling].taps
+            for i, expected in enumerate(equalised_second_order_outputs(raw_means, taps)):
+                self.assertAlmostEqual(out[i], expected, places=12, msg=(oversampling, i))
+        self.assertEqual(SECOND_ORDER_EQUALISERS[1].taps, (1.0,))
+
+    def test_second_order_lowers_the_aliases_further_at_1x(self):
+        # the hot 3 kHz sine at 44.1 kHz, run at that rate (measured 2026-10-20, worst alias below 10 kHz: naive -38.2,
+        # ADAA1 -55.3, ADAA2 -72.6 dB; the 2x equaliser at this rate, wrongly, -69.9)
+        table = PiecewiseLinearTable("clip", self.CLIP)
         count, fundamental = 8192, 3000.0
         hot = [2.0 * math.sin(2 * math.pi * fundamental * i / self.SAMPLERATE) for i in range(count)]
         harmonics = range(9, 40, 2)
         worst = {}
         for order in (1, 2):
-            program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=order)],
+            program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=order,
+                                                                   oversampling=1)],
                               {}, ["shaper_out"], samplerate=self.SAMPLERATE)
             worst[order] = worst_alias_db(program.run(count, [hot])[0][1000:], fundamental, harmonics,
                                           self.SAMPLERATE, 10000)
-        self.assertLess(worst[2], worst[1] - 13)
+        self.assertLess(worst[2], worst[1] - 15)
 
-    def test_the_equaliser_undoes_the_three_tap_mean_up_to_its_edge(self):
-        # the taps are the Remez design's, the DC exactly 1, the 3-tap mean's droop (at 96 kHz -5.9 dB at 20 kHz)
-        # within 0.0972 dB (1 - 0.0111) up to the edge (20 kHz at 96 kHz); measured on a quiet sine through the shaper inside
-        # one piece (the clip's unity line), SECOND_ORDER_LATENCY_STEPS late
-        taps, worst = adaa_equaliser_remez(lambda w: (1 + 2 * math.cos(w)) / 3, SECOND_ORDER_EQUALISER_EDGE, 2)
-        self.assertAlmostEqual(taps[0], SECOND_ORDER_EQUALISER_OUTER_TAP, places=12)
-        self.assertAlmostEqual(taps[1], SECOND_ORDER_EQUALISER_INNER_TAP, places=12)
-        self.assertAlmostEqual(sum(SECOND_ORDER_EQUALISER_TAPS), 1.0, places=15)
-        self.assertLess(-20 * math.log10(1 - worst), 0.0973)
-        self.assertEqual(SECOND_ORDER_LATENCY_STEPS, 3)
-        rate, count = 96000.0, 4000
+    def shaper_gain(self, oversampling, rate, frequency):
+        """A quiet sine inside one piece (the clip's unity line) through the second-order shaper at `oversampling`
+        (run at `rate`): its complex gain re the input `latency_steps` before."""
+        count = 4000
         table = PiecewiseLinearTable("clip", self.CLIP)
+        shaper = AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2,
+                                                     oversampling=oversampling)
+        late = shaper.latency_steps
+        quiet = [0.3 * math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
+        out = harness([shaper], {}, ["shaper_out"], samplerate=rate).run(count, [quiet])[0]
+        return complex_amplitude_at(out[100:], frequency, rate) / complex_amplitude_at(
+            quiet[100 - late:count - late], frequency, rate)
+
+    def test_the_2x_equaliser_undoes_the_three_tap_mean_up_to_its_edge_and_lifts_nothing_to_the_hosts_nyquist(self):
+        # the taps are the Remez design's, the DC exactly 1, the 3-tap mean's droop (at 96 kHz -5.9 dB at 20 kHz)
+        # within 0.0972 dB (1 - 0.0111) up to the edge (20 kHz at 96 kHz), and never above that up to the host's
+        # Nyquist (24 kHz: from there the downsampler's); measured on the shaper, three steps late
+        equaliser = second_order_equaliser(2, "test")
+        taps, worst = adaa_equaliser_remez(lambda w: (1 + 2 * math.cos(w)) / 3, SECOND_ORDER_EQUALISER_EDGE_AT_2X, 2)
+        self.assertAlmostEqual(taps[0], SECOND_ORDER_EQUALISER_OUTER_TAP_AT_2X, places=12)
+        self.assertAlmostEqual(taps[1], SECOND_ORDER_EQUALISER_INNER_TAP_AT_2X, places=12)
+        self.assertEqual(equaliser.taps[:2], (SECOND_ORDER_EQUALISER_OUTER_TAP_AT_2X, SECOND_ORDER_EQUALISER_INNER_TAP_AT_2X))
+        self.assertAlmostEqual(sum(equaliser.taps), 1.0, places=15)
+        self.assertLess(-20 * math.log10(1 - worst), 0.0973)
+        self.assertEqual(equaliser.latency_steps, 3)
+        product = [(1 + 2 * math.cos(w)) / 3 * equaliser.response(w)
+                   for w in (2 * math.pi * 0.25 * k / 5000 for k in range(5001))]   # to the host's Nyquist
+        self.assertLess(20 * math.log10(max(product)), 0.0973)
         for frequency in (100.0, 1000.0, 5000.0, 10000.0, 15000.0, 18000.0, 20000.0):
-            quiet = [0.3 * math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
-            program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)], {},
-                              ["shaper_out"], samplerate=rate)
-            out = program.run(count, [quiet])[0]
-            gain = complex_amplitude_at(out[100:], frequency, rate) / complex_amplitude_at(
-                quiet[100 - SECOND_ORDER_LATENCY_STEPS:count - SECOND_ORDER_LATENCY_STEPS], frequency, rate)
+            gain = self.shaper_gain(2, 96000.0, frequency)
             self.assertLess(abs(20 * math.log10(abs(gain))), 0.0973, msg=frequency)
-            self.assertLess(abs(gain.imag), 1e-6, msg=f"{frequency}: linear phase, SECOND_ORDER_LATENCY_STEPS late")
+            self.assertLess(abs(gain.imag), 1e-6, msg=f"{frequency}: linear phase, latency_steps late")
         with self.assertRaises(BuildError):
-            second_order_equaliser_call(["a", "b", "c", "d"])
+            equaliser.call(["a", "b", "c", "d"])
+
+    def test_at_1x_there_is_no_equaliser_and_nothing_is_lifted_to_nyquist(self):
+        # at 1x the output is ADAA2's raw mean, one step late: the 3-tap mean (1 + 2 cos w) / 3, never above 0 dB to
+        # Nyquist, within 0.3 dB to 2.4 kHz at 48 kHz (-1.3 dB at 5 kHz, -5.9 at 10 kHz, -9.5 at 24 kHz). The 2x
+        # equaliser here was within 0.1 dB to 10 kHz but +6.4 dB at 24 kHz, and lifted the aliases with it (the module
+        # docstring's measurements: every equaliser at 1x lost more alias suppression than it gained)
+        equaliser = second_order_equaliser(1, "test")
+        self.assertEqual((equaliser.taps, equaliser.latency_steps, equaliser.functions()), ((1.0,), 1, {}))
+        self.assertEqual(equaliser.call(["now"]), "now")
+        rate = 48000.0
+        for frequency in (100.0, 1000.0, 2400.0, 5000.0, 10000.0, 15000.0, 17000.0, 20000.0, 23900.0):
+            gain = self.shaper_gain(1, rate, frequency)
+            mean = (1 + 2 * math.cos(2 * math.pi * frequency / rate)) / 3
+            self.assertAlmostEqual(gain.real, mean, delta=1e-9, msg=frequency)
+            self.assertLess(abs(gain.imag), 1e-6, msg=frequency)
+            self.assertLessEqual(abs(gain), 1.0, msg=frequency)
+            if frequency <= 2400.0:
+                self.assertLess(-20 * math.log10(abs(gain)), 0.3, msg=frequency)
+
+    def test_the_oversampling_must_be_known(self):
+        table = PiecewiseLinearTable("clip", self.CLIP)
+        with self.assertRaises(TypeError):                     # never a default
+            AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)
+        for unknown in (3, 4, 0, True, 2.0, None):
+            with self.assertRaises(BuildError, msg=unknown):
+                AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2, oversampling=unknown)
+            with self.assertRaises(BuildError, msg=unknown):
+                second_order_equaliser(unknown, "test")
 
     def test_second_order_needs_a_continuous_table(self):
         jumping = PiecewiseLinearTable("jump", [(-math.inf, 0.0, -1.0), (0.0, 0.0, 1.0)])
@@ -497,17 +543,17 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
         with self.assertRaises(BuildError):
             jumping.second_order_mean_call("a", "b", "c")
         with self.assertRaises(BuildError):
-            AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=jumping, order=2)
+            AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=jumping, order=2, oversampling=2)
         with self.assertRaises(BuildError):
             AntiderivativePiecewiseLinearShaper("shaper", input="in1",
-                                                table=PiecewiseLinearTable("clip", self.CLIP), order=3)
+                                                table=PiecewiseLinearTable("clip", self.CLIP), order=3, oversampling=1)
 
     def test_two_tables_are_two_functions(self):
         one, other = PiecewiseLinearTable("clip", self.CLIP), PiecewiseLinearTable("clip", self.CLIP[:2] + [(0.6, 0.0, 0.6)])
         self.assertNotEqual(one.function_name, other.function_name)
         self.assertEqual(one.function_name, PiecewiseLinearTable("clip", list(self.CLIP)).function_name)
-        blocks = [AntiderivativePiecewiseLinearShaper("a", input="in1", table=one),
-                  AntiderivativePiecewiseLinearShaper("b", input="in1", table=other)]
+        blocks = [AntiderivativePiecewiseLinearShaper("a", input="in1", table=one, oversampling=1),
+                  AntiderivativePiecewiseLinearShaper("b", input="in1", table=other, oversampling=1)]
         harness(blocks, {}, ["a_out + b_out"])       # both in one patch: no clash
 
     def test_a_bad_table_fails_the_build(self):
