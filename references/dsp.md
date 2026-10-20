@@ -59,6 +59,17 @@ The technique is that tick, with 2R = 1 / Q (the circuit literature's Q, e.g. a 
 Q = ½ √(C1/C2)) and g = tan(π fp / sr) · fc / fp, prewarped at fp (by default the cutoff: g = tan(π fc / sr)). Not the LTC1060 / MF10 module's LDI (Chamberlin) form,
 which is a clocked chip's own recursion and is kept for that (circuits/ltc1060-mf10.md).
 
+## Antiderivative piecewise-linear shaper (m4l_dev/techniques/antiderivative_piecewise_linear_shaper.py)
+
+The same method as the tanh saturator's (above): **Bilbao, Esqueda, Parker & Välimäki 2017**, eq. (5), first-order
+ADAA, y = (F1(x) − F1(x_before)) / (x − x_before), with §II.B's midpoint fallback where the step is too small to divide
+by. A piecewise-linear transfer's F1 is closed form piece by piece (each piece's integral is a quadratic), the case
+**Esqueda, Pöntynen, Parker & Bilbao, "Virtual Analog Models of the Lockhart and Serge Wavefolders", Applied Sciences
+7(12):1328, 2017** (https://www.mdpi.com/2076-3417/7/12/1328) applies first-order ADAA to, "allowing real time without
+high oversampling factors" (its intro; the 2sl gate research brief, circuits/buchla-259.md §6). The table, its digest-named
+functions and the balanced comparison tree are our construction; tests/test_techniques.py holds them to the Python
+model and measures the aliases against the transfer taken naively.
+
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 
 **Bilbao, Esqueda, Parker & Välimäki, "Antiderivative Antialiasing for Memoryless Nonlinearities", IEEE SPL 24(7),

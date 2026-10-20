@@ -13,6 +13,8 @@ from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
+from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
+    AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable)
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
@@ -283,6 +285,57 @@ class TapeStyleEchoTests(unittest.TestCase):
         self.assertLess(max(abs(v) for v in left[40:] + right[40:]), 1e-12)
         self.assertEqual(rounds[-1], 0.0)
 
+
+
+class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
+    SAMPLERATE = 44100.0
+    # a hard clip at +-0.5 with unity slope inside: three straight pieces
+    CLIP = [(-math.inf, 0.0, -0.5), (-0.5, 1.0, 0.0), (0.5, 0.0, 0.5)]
+
+    def test_the_functions_are_the_table_and_its_integral(self):
+        table = PiecewiseLinearTable("clip", self.CLIP)
+        code = "\n".join(table.functions().values()) + (f"\nout1 = {table.value_call('in1')};\n"
+                                                         f"out2 = {table.integral_call('in1')};\n")
+        points = [x / 13 for x in range(-30, 31)] + [-0.5, 0.5]
+        values, integrals = GenProgram(code, 1, 2).run(len(points), [points])
+        for x, value, integral in zip(points, values, integrals):
+            self.assertAlmostEqual(value, table.value(x), places=12, msg=x)
+            self.assertAlmostEqual(integral, table.integral(x), places=12, msg=x)
+            area = sum(table.value(x * (k + 0.5) / 4000) for k in range(4000)) * x / 4000      # the area from 0
+            self.assertAlmostEqual(table.integral(x), area, places=5, msg=x)
+
+    def test_the_mean_is_exact_on_a_piece_and_lowers_the_aliases(self):
+        table = PiecewiseLinearTable("clip", self.CLIP)
+        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table)], {},
+                          ["shaper_out"], samplerate=self.SAMPLERATE)
+        inside = [0.3 * math.sin(2 * math.pi * 500 * i / self.SAMPLERATE) for i in range(200)]
+        out = program.run(len(inside), [inside])[0]
+        for i in range(1, len(inside)):                  # inside one piece: the mean of a line, half a sample late
+            self.assertAlmostEqual(out[i], 0.5 * (inside[i] + inside[i - 1]), places=12)
+        # a hot 3 kHz sine through the clip: the worst alias below 10 kHz, ADAA against the clip taken naively
+        count, fundamental = 8192, 3000.0
+        hot = [2.0 * math.sin(2 * math.pi * fundamental * i / self.SAMPLERATE) for i in range(count)]
+        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table)], {},
+                          ["shaper_out"], samplerate=self.SAMPLERATE)
+        antialiased = program.run(count, [hot])[0][1000:]
+        naive = [table.value(x) for x in hot][1000:]
+        harmonics = range(9, 40, 2)
+        self.assertLess(worst_alias_db(antialiased, fundamental, harmonics, self.SAMPLERATE, 10000),
+                        worst_alias_db(naive, fundamental, harmonics, self.SAMPLERATE, 10000) - 6)
+
+    def test_two_tables_are_two_functions(self):
+        one, other = PiecewiseLinearTable("clip", self.CLIP), PiecewiseLinearTable("clip", self.CLIP[:2] + [(0.6, 0.0, 0.6)])
+        self.assertNotEqual(one.function_name, other.function_name)
+        self.assertEqual(one.function_name, PiecewiseLinearTable("clip", list(self.CLIP)).function_name)
+        blocks = [AntiderivativePiecewiseLinearShaper("a", input="in1", table=one),
+                  AntiderivativePiecewiseLinearShaper("b", input="in1", table=other)]
+        harness(blocks, {}, ["a_out + b_out"])       # both in one patch: no clash
+
+    def test_a_bad_table_fails_the_build(self):
+        with self.assertRaises(BuildError):
+            PiecewiseLinearTable("clip", self.CLIP[1:])                   # not from -inf
+        with self.assertRaises(BuildError):
+            PiecewiseLinearTable("clip", [self.CLIP[0], self.CLIP[2], self.CLIP[1]])   # not rising
 
 
 class ZeroDelayStateVariableFilterTests(unittest.TestCase):

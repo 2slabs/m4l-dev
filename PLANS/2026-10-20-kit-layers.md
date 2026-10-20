@@ -25,6 +25,12 @@ block, they're just wrapping it, this is what we're doing)". Level 3, "reorganiz
    all 113 renders of the blocks' tests bit-identical. The devices move onto it in their own steps.
 2. Gate: the 259 (sine core, modulation oscillator, folder) and the 292 (network, vactrol) move into the kit as
    modules; gate wires them. Bit-identical.
+   DONE 2026-10-20: one module per schematic sheet of the 259 (buchla_259_principal_oscillator.py, sheet 2A;
+   buchla_259_timbre_section.py, sheet 3A; buchla_259_modulation_oscillator.py, sheet 4A) and one per 292 channel
+   (buchla_292_low_pass_gate_channel.py), the folder's ADAA a new technique (antiderivative_piecewise_linear_shaper.py);
+   references/circuits/buchla-259.md and buchla-292-low-pass-gate.md (moved from 2sl gate, with their sources in
+   fetch-circuit-sources.sh). 2sl gate 0.3.17 wires them: 361 renders (19 presets x 19 settings, every core outlet)
+   bit-identical to 0.3.16. The principal oscillator takes Hz and FM every step and a reset: drums can use it as is.
 3. Stab + filter: the pump (duplicated in both) moves into the kit; both use it.
    DONE 2026-10-20: `techniques/sidechain_style_pump.py` (`SidechainStylePump`, kit 1ed19d7): stab's shape (quarter-sine
    ramp in, power recovery, 20 ms hand-over between Live's beat and its own clock, 0.442 ms glide) plus the gate as
