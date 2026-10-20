@@ -122,3 +122,19 @@ pattern to an unrelated colour and a switch near its edge to another branch, so 
 bad for a reason unrelated to the continuous parameters, and selection learns nothing. Test: the same local runs
 (r 0.02, all 31 moved; no pitch term) with the five discrete parameters held at the truth and out of the vector.
 Prediction: >= 3 / 4 recovered (from 0 / 4).
+
+### H7 result: refuted as the whole cause
+
+The five discrete parameters held at the truth: 0 / 8 from r 0.02 / 0.05 (target 3 came to 0.31). Holding also
+tone_pitch_hz, pitch_mod_rate_hz and pitch_mod_semitones (23 continuous searched): 0 / 6 in 2000 renders, the best
+0.41-1.27, closer. Given 8000 renders those 23 converge slowly but do converge: 2 / 4 at 2000 renders -> 3 / 4 within
+0.35 by 8000 (target 0 stuck at 1.31 vs 0.91). Control, the toy voice from r 0.05: 8 / 8 within ~1000 renders.
+So three things stack on the drums voice: the pitch term's needle (H5), the unordered discrete axes and the chaotic
+tone parameters (audio-rate pitch modulation, pitch itself on folded / modulated tones), and a slow, ill-conditioned
+continuous remainder (23 parameters need ~4000+ renders from 0.02 away, the toy's 8 need ~500).
+
+## H8. Global search without the hostile parameters
+
+The default search (6 x 2000), no pitch term, the five discrete parameters and the three chaotic tone parameters
+held at the truth (23 searched), targets 0-7. Prediction: >= 4 / 8 recovered. If so, the hostile parameters are the
+cause to fix in the search (sweep them on their own axes); if not, the continuous remainder's global search is.
