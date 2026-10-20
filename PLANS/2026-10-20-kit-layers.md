@@ -26,6 +26,11 @@ block, they're just wrapping it, this is what we're doing)". Level 3, "reorganiz
 2. Gate: the 259 (sine core, modulation oscillator, folder) and the 292 (network, vactrol) move into the kit as
    modules; gate wires them. Bit-identical.
 3. Stab + filter: the pump (duplicated in both) moves into the kit; both use it.
+   DONE 2026-10-20: `techniques/sidechain_style_pump.py` (`SidechainStylePump`, kit 1ed19d7): stab's shape (quarter-sine
+   ramp in, power recovery, 20 ms hand-over between Live's beat and its own clock, 0.442 ms glide) plus the gate as
+   `chop`; the display's duck is the technique's script. Stab 2.1.7 (sound unchanged, 3e-9) and filter 0.2.11 (its pump
+   presets move <= 0.15 dB) use it and both copies are deleted. Both devices are on the layered kit (stab 2.1.6, filter
+   0.2.10: renders bit-identical); filter has architecture/overview.md.
 4. Drums: bump onto the reorganised kit; then its new voice is built on the 259 module (PLANS/2026-10-20-drum-synth-voice.md
    in 2sl-drums).
 5. Later, as instruments need them, with sources first: Roland (IR3109, BA662), Moog 5U, Serge, a deliberately clinical
