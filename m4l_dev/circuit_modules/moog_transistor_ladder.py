@@ -19,8 +19,11 @@ p4 / (1 - q4), 1 - q4 >= 1 for k >= 0: never singular). NEWTON_ITERATIONS = 2 fr
 2026-10-20, against RK4 at 64x decimated by a Blackman sinc: 2 iterations are within 0.02 dB of 8 on every harmonic
 below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice, required: 2
 or 1) runs it twice a host sample between the kit's halfband oversampler's upsampler and downsampler (3.07
-samples late at low frequencies: `latency_samples`, theirs summed), or once with no latency. The worst alias of a
-hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -55 dB at 2x; drive 5, fc 5 kHz, k 3:
+samples late at low frequencies: `latency_samples`, theirs summed), or once with no latency. At 2x the controls
+meet the audio: the cutoff's warp and k, worked out at the host rate, reach each step delayed by the upsampler's own
+latency (`ControlsAtTheUpsampledSteps`), so a cutoff step acts on the audio sent with it (held over both steps they
+led it by 1.53 samples, found by 2sl stab 2.2.8; the test measures the alignment by cutoff FM's sidebands). The worst
+alias of a hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -55 dB at 2x; drive 5, fc 5 kHz, k 3:
 -84 dB at 1x, -127 dB at 2x; at fc 18 kHz, k 3.9, drive 20: -12 dB at 1x, -34 dB at 2x, the aliases made above the
 doubled rate's Nyquist (the research's table, references/circuits/moog-transistor-ladder.md §6).
 
@@ -32,7 +35,8 @@ k = tap (R76 + w R73) / (R76 + R73 + Rtop(rotation)), hyperbolic in the pot's re
 set as the service manual's calibration sets it, so the loop's gain is 4 (regeneration starts) at Emphasis 7.5 of 10
 (`feedback_gain_at_emphasis`, `regeneration_trim_wiper`). With the default taper: k 0.2 at 0, 4 at 7.5, 7.75 at 10. Outputs: `<name>_out` (volts: the output buffer's gain makes it
 the input at low frequencies for k = 0, patent col. 2 l. 6-9; then the output's coupling capacitor's high-pass),
-`<name>_cutoff_hz` (fc, as clamped), `<name>_feedback_gain` (k), `<name>_ladder_current_amps` (If).
+`<name>_cutoff_hz` (fc, as clamped), `<name>_feedback_gain` (k; both as the controls are now, before the 2x
+core's delay), `<name>_ladder_current_amps` (If).
 `reset_statements()` empties the ladder. `response_script_code()`: the instance's small-signal response and its
 Emphasis law in ES5, for a display (templates/moog-transistor-ladder-response.template.js).
 
@@ -49,8 +53,8 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
-from m4l_dev.techniques.halfband_oversampler import (HalfbandDownsampler, HalfbandUpsampler, halfband_coefficients,
-                                                     halfband_response)
+from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,
+                                                     HalfbandUpsampler, halfband_coefficients, halfband_response)
 from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter
 
 NEWTON_ITERATIONS = 2
@@ -227,11 +231,14 @@ class MoogTransistorLadder(CircuitModule):
                              f"oversampler is 2x), got {oversampling!r}")
         check_the_character(self.character, instance_name)
         self.oversampling = oversampling
-        self.upsampler = self.downsampler = None
+        self.upsampler = self.downsampler = self.controls_at_the_steps = None
         if oversampling == 2:
             self.upsampler = HalfbandUpsampler(f"{instance_name}_up", input=f"{instance_name}_input")
             self.downsampler = HalfbandDownsampler(f"{instance_name}_down", first=f"{instance_name}_x4_step_1",
                                                    second=f"{instance_name}_x4_step_2")
+            self.controls_at_the_steps = ControlsAtTheUpsampledSteps(
+                f"{instance_name}_controls", upsampler=self.upsampler,
+                controls=dict(warp=f"{instance_name}_warp", feedback_gain=f"{instance_name}_feedback_gain"))
         # the ladder and its coupling are zero-delay: the module is as late as its oversampler's pair
         self.latency_samples = 0 if oversampling == 1 else \
             self.upsampler.latency_samples + self.downsampler.latency_samples
@@ -242,12 +249,13 @@ class MoogTransistorLadder(CircuitModule):
         declarations = [self.substituted("History ${p}_s1(0), ${p}_s2(0), ${p}_s3(0), ${p}_s4(0), ${p}_x1(0), "
                                          "${p}_x2(0), ${p}_x3(0), ${p}_x4(0);"), self.output_coupling.declarations()]
         if self.oversampling == 2:
-            declarations += [self.upsampler.declarations(), self.downsampler.declarations()]
+            declarations += [self.upsampler.declarations(), self.controls_at_the_steps.declarations(),
+                             self.downsampler.declarations()]
         return "\n".join(declarations)
 
     def _newton_iteration(self):
         """One Newton step on the five-tanh trapezoidal loop (the module docstring's solve)."""
-        return self.substituted("""${p}_t0 = tanh(${p}_drive - ${p}_feedback_gain * ${p}_x4);
+        return self.substituted("""${p}_t0 = tanh(${p}_drive - ${p}_step_feedback_gain * ${p}_x4);
 ${p}_t1 = tanh(${p}_x1);
 ${p}_t2 = tanh(${p}_x2);
 ${p}_t3 = tanh(${p}_x3);
@@ -261,7 +269,7 @@ ${p}_a2 = 1 + ${p}_g2 * ${p}_slope2;
 ${p}_a3 = 1 + ${p}_g3 * ${p}_slope3;
 ${p}_a4 = 1 + ${p}_g4 * (1 - ${p}_t4 * ${p}_t4);
 ${p}_p1 = (${p}_s1 + ${p}_g1 * (${p}_t0 - ${p}_t1) - ${p}_x1) / ${p}_a1;
-${p}_q1 = -${p}_g1 * ${p}_feedback_gain * ${p}_slope0 / ${p}_a1;
+${p}_q1 = -${p}_g1 * ${p}_step_feedback_gain * ${p}_slope0 / ${p}_a1;
 ${p}_p2 = (${p}_s2 + ${p}_g2 * (${p}_t1 - ${p}_t2) - ${p}_x2 + ${p}_g2 * ${p}_slope1 * ${p}_p1) / ${p}_a2;
 ${p}_q2 = ${p}_g2 * ${p}_slope1 * ${p}_q1 / ${p}_a2;
 ${p}_p3 = (${p}_s3 + ${p}_g3 * (${p}_t2 - ${p}_t3) - ${p}_x3 + ${p}_g3 * ${p}_slope2 * ${p}_p2) / ${p}_a3;
@@ -275,11 +283,19 @@ ${p}_x3 = ${p}_x3 + ${p}_p3 + ${p}_q3 * ${p}_d4;
 ${p}_x4 = ${p}_x4 + ${p}_d4;
 """)
 
-    def _step(self, step_number, input_volts):
-        """One trapezoidal step at `oversampling` x the host rate on `input_volts`, leaving `<name>_x4_step_<n>`."""
+    def _step(self, step_number, input_volts, warp, feedback_gain):
+        """One trapezoidal step at `oversampling` x the host rate on `input_volts` at the controls `warp` and
+        `feedback_gain` (the step's own: at 2x delayed to its audio), leaving `<name>_x4_step_<n>`."""
+        ratios = stage_capacitance_ratios(self.character)
         text = self.substituted("""// ${p}: step ${step} of ${steps}
+${p}_g1 = ${warp} / ${ratio1};
+${p}_g2 = ${warp} / ${ratio2};
+${p}_g3 = ${warp} / ${ratio3};
+${p}_g4 = ${warp} / ${ratio4};
+${p}_step_feedback_gain = ${feedback_gain};
 ${p}_drive = ${step_input} * ${p}_drive_per_volt + ${p}_offset_drive;
-""", step=str(step_number), steps=str(self.oversampling), step_input=input_volts)
+""", step=str(step_number), steps=str(self.oversampling), step_input=input_volts, warp=warp,
+            feedback_gain=feedback_gain, ratio1=ratios[0], ratio2=ratios[1], ratio3=ratios[2], ratio4=ratios[3])
         text += self._newton_iteration() * NEWTON_ITERATIONS
         text += self.substituted("""${p}_s1 = 2 * ${p}_x1 - ${p}_s1;
 ${p}_s2 = 2 * ${p}_x2 - ${p}_s2;
@@ -291,17 +307,13 @@ ${p}_x4_step_${step} = ${p}_x4;
 
     def statements(self):
         character = self.character
-        ratios = stage_capacitance_ratios(character)
+        p = self.instance_name
         text = self.substituted("""// ${p}: the Moog transistor ladder (kit circuit module: Moog transistor ladder)
 ${p}_input = ${input_volts};
 ${p}_ladder_current_amps = ${current_at_zero} * pow(2, ${control_volts} / ${volts_per_octave});
 ${p}_cutoff_hz = clamp(${p}_ladder_current_amps / ${current_per_hz}, ${lowest}, samplerate * ${highest});
 ${p}_feedback_gain = ${numerator} / (${loop_ohms} + ${pot_ohms_per_taper_step} * (pow(${taper_base}, 1 - clamp(${emphasis}, 0, 1)) - 1));
 ${p}_warp = tan(pi * ${p}_cutoff_hz / (samplerate * ${steps}));
-${p}_g1 = ${p}_warp / ${ratio1};
-${p}_g2 = ${p}_warp / ${ratio2};
-${p}_g3 = ${p}_warp / ${ratio3};
-${p}_g4 = ${p}_warp / ${ratio4};
 ${p}_drive_per_volt = ${drive_per_volt};
 ${p}_offset_drive = ${offset_drive};
 """, current_at_zero=character.ladder_current_at_zero_control_volts_amps,
@@ -312,14 +324,15 @@ ${p}_offset_drive = ${offset_drive};
             loop_ohms=character.regeneration_fixed_ohms + character.regeneration_trim_ohms,
             pot_ohms_per_taper_step=character.emphasis_pot_ohms / (emphasis_taper_base(character) - 1),
             taper_base=emphasis_taper_base(character), steps=str(self.oversampling),
-            ratio1=ratios[0], ratio2=ratios[1], ratio3=ratios[2], ratio4=ratios[3],
             drive_per_volt=character.base_volts_per_input_volt / (2 * character.thermal_voltage_volts),
             offset_drive=character.input_pair_offset_volts / (2 * character.thermal_voltage_volts))
         if self.oversampling == 1:
-            text += self._step(1, f"{self.instance_name}_input") + self.substituted("${p}_x4_out = ${p}_x4_step_1;\n")
+            text += self._step(1, f"{p}_input", f"{p}_warp", f"{p}_feedback_gain") + \
+                self.substituted("${p}_x4_out = ${p}_x4_step_1;\n")
         else:
-            text += self.upsampler.statements() + "\n"
-            text += self._step(1, f"{self.instance_name}_up_first") + self._step(2, f"{self.instance_name}_up_second")
+            text += self.upsampler.statements() + "\n" + self.controls_at_the_steps.statements() + "\n"
+            text += self._step(1, f"{p}_up_first", f"{p}_controls_warp_step_1", f"{p}_controls_feedback_gain_step_1")
+            text += self._step(2, f"{p}_up_second", f"{p}_controls_warp_step_2", f"{p}_controls_feedback_gain_step_2")
             text += self.downsampler.statements() + self.substituted("\n${p}_x4_out = ${p}_down_out;\n")
         text += self.substituted("""// the output buffer: the last stage's volts (2 VT x4) back to the input's scale
 ${p}_ladder_volts = ${p}_x4_out * ${volts_out_per_x4};

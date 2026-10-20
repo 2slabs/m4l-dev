@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.circuit_modules import moog_transistor_ladder  # noqa: E402
+from m4l_dev.techniques import halfband_oversampler  # noqa: E402
 from m4l_dev.circuit_modules.moog_transistor_ladder import (  # noqa: E402
     MoogTransistorLadder, MoogTransistorLadderCharacter, control_volts_for_cutoff_hz, cutoff_hz_at_control_volts,
     emphasis_for_feedback_gain, emphasis_pot_ohms_above_wiper, feedback_gain_at_emphasis, ladder_cutoff_hz,
@@ -280,6 +281,36 @@ class LargeSignalTests(unittest.TestCase):
             aliases[oversampling] = worst_alias_db(out, fundamental, harmonics, SAMPLERATE, 20000.0)
         self.assertGreater(aliases[1], -36)
         self.assertLess(aliases[2], -53)
+
+    def test_cutoff_modulation_lands_on_the_audio_it_belongs_to(self):
+        # audio-rate FM of the cutoff (2 kHz +- half an octave at 646 Hz) on a quiet 861 Hz sine: each sideband's
+        # phase re the carrier rotates with how late the cutoff acts against the audio, so the 2x module's against
+        # the 1x module's (no latency at all) is the cutoff's delay at the output, which must be the module's own
+        # latency (its audio's). Before the controls met the upsampled steps it was 1.53 samples early (the
+        # upsampler's 1.78 less the quarter sample of holding a control over two steps); the kit's design and a
+        # shorter half-band, so the delay is read from the upsampler, not typed
+        count = 8192
+        audio_hz, modulation_hz = SAMPLERATE * 160 / count, SAMPLERATE * 120 / count
+        audio = [0.01 * math.sin(2 * math.pi * audio_hz * i / SAMPLERATE) for i in range(2 * count)]
+        centre_volts = control_volts_for_cutoff_hz(2000.0, TYPICAL)
+        control = [centre_volts + 0.5 * math.sin(2 * math.pi * modulation_hz * i / SAMPLERATE) for i in range(2 * count)]
+
+        def sidebands_and_latency(oversampling):
+            block = MoogTransistorLadder("moog", input_volts="in1", control_volts="in2", emphasis="0",
+                                         oversampling=oversampling)
+            out = harness([block], {}, ["moog_ladder_volts"], num_inputs=2).run(2 * count, [audio, control])[0][count:]
+            carrier = complex_amplitude_at(out, audio_hz, SAMPLERATE)
+            return [complex_amplitude_at(out, audio_hz + sign * modulation_hz, SAMPLERATE) / carrier
+                    for sign in (1, -1)], block.latency_samples
+
+        aligned_sidebands, _ = sidebands_and_latency(1)
+        kit_design = halfband_oversampler.halfband_coefficients
+        for design in (kit_design(), kit_design(4, 0.1)):
+            with mock.patch.object(halfband_oversampler, "halfband_coefficients", lambda *_, design=design: design):
+                sidebands, latency = sidebands_and_latency(2)
+            for sign, sideband, aligned in zip((1, -1), sidebands, aligned_sidebands):
+                cutoff_delay = -sign * cmath.phase(sideband / aligned) / (2 * math.pi * modulation_hz) * SAMPLERATE
+                self.assertAlmostEqual(cutoff_delay, latency, delta=0.1, msg=(design, sign))
 
     def test_a_reset_empties_the_ladder(self):
         block = MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0", oversampling=2)

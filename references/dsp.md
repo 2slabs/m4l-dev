@@ -443,6 +443,12 @@ folds to 14.1 kHz at −113.5 dB (naive decimation: 0 dB); an FM pair (9 kHz car
 at 2× aliases at −84.1 dB re the carrier below 20 kHz, at 1× at −11.8 dB; up then down is flat to 15 kHz (±0.001 dB)
 and 3.07 samples late at 100 Hz.
 
+A 2x section's controls (ours, 2026-10-20: 2sl stab 2.2.8 found the Moog ladder's cutoff leading its audio):
+`ControlsAtTheUpsampledSteps` delays each host-rate control to its step's audio, the upsampler's `latency_samples`
+(its half-band's phase delay at 100 Hz) for the first step and half a sample less for the second, by linear
+interpolation (its delay at low frequencies is its fraction). Measured: a 100 Hz control in phase with the same sine
+through the upsampler within 0.002 doubled-rate samples; held over both steps instead it leads by 1.53 samples.
+
 The linear-phase downsampler (`HalfbandLinearPhaseDownsampler`, ours, 2026-10-20: for after a saturator; above,
 "Peaks"): the ideal half-band 0.5 sinc(k/2) under **Kaiser's window**, its β and length from Kaiser's formulas as
 **Oppenheim & Schafer, *Discrete-Time Signal Processing*, 3rd ed., §7.6.1, eqs. (7.62)–(7.63)** give them (β =

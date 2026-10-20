@@ -49,9 +49,11 @@ from m4l_dev.techniques.defined_latency_pad import (THIRAN_MAXIMUM_ORDER,  # noq
                                                     THIRAN_PHASE_DELAY_ERROR_BOUNDS, DefinedLatency,
                                                     DefinedLatencyPad)
 from m4l_dev.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
-from m4l_dev.techniques.halfband_oversampler import (HalfbandDownsampler, HalfbandLinearPhaseDownsampler,  # noqa: E402
+from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,  # noqa: E402
+                                                     HalfbandLinearPhaseDownsampler,
                                                      HalfbandUpsampler, halfband_attenuation_db, halfband_coefficients,
-                                                     halfband_response, linear_phase_halfband_response,
+                                                     halfband_phase_delay_doubled_rate_samples, halfband_response,
+                                                     linear_phase_halfband_response,
                                                      linear_phase_halfband_taps)
 from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetallicNoise, lfsr_cycle  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
@@ -1700,6 +1702,34 @@ class HalfbandOversamplerTests(unittest.TestCase):
         stream = [value for pair in zip(first, second) for value in pair]
         image = amplitude_at(stream[8820:], self.SAMPLERATE - 5000.0, 2 * self.SAMPLERATE)
         self.assertLess(20 * math.log10(image), -95.0)
+
+    def test_controls_reach_each_step_as_late_as_its_audio_at_any_design(self):
+        # the same 100 Hz sine as the audio into the upsampler and as a control through ControlsAtTheUpsampledSteps:
+        # the two 2x streams in phase (the kit's design, 1.78 samples late, and a shorter one, so the delay is the
+        # upsampler's figure, not a typed one); the control read as it is now leads by the whole latency
+        for design in (halfband_coefficients(), halfband_coefficients(4, 0.1)):
+            up = HalfbandUpsampler("up", input="in1", coefficients=design)
+            controls = ControlsAtTheUpsampledSteps("controls", upsampler=up, controls=dict(cv="in1"))
+            self.assertEqual(controls.latency_samples, up.latency_samples)
+            program = harness([up, controls], {}, ["up_first", "up_second", "controls_cv_step_1",
+                                                   "controls_cv_step_2", "in1"])
+            sine = [math.sin(2 * math.pi * 100.0 * n / self.SAMPLERATE) for n in range(8820)]
+            first, second, control_first, control_second, now = (signal[4410:] for signal in program.run(8820, [sine]))
+            audio_stream = [value for pair in zip(first, second) for value in pair]
+            control_stream = [value for pair in zip(control_first, control_second) for value in pair]
+            held_stream = [value for pair in zip(now, now) for value in pair]
+            doubled_samples_per_degree = 2 * self.SAMPLERATE / 100.0 / 360
+            control_lag = phase_degrees(audio_stream, control_stream, 100.0, 2 * self.SAMPLERATE) * doubled_samples_per_degree
+            self.assertLess(abs(control_lag), 0.002, msg=design)
+            held_lead = -phase_degrees(audio_stream, held_stream, 100.0, 2 * self.SAMPLERATE) * doubled_samples_per_degree
+            # held over both steps the control sits a quarter sample (half a step) after the first step
+            self.assertAlmostEqual(held_lead / 2, up.latency_samples - 0.25, delta=0.002, msg=design)
+        self.assertGreater(abs(halfband_phase_delay_doubled_rate_samples(halfband_coefficients(4, 0.1)) / 2
+                               - HalfbandUpsampler("up", input="in1").latency_samples), 0.5)
+        with self.assertRaises(BuildError):
+            ControlsAtTheUpsampledSteps("controls", upsampler="up", controls=dict(cv="in1"))
+        with self.assertRaises(BuildError):
+            ControlsAtTheUpsampledSteps("controls", upsampler=HalfbandUpsampler("up", input="in1"), controls={})
 
 
 def poles_inside_the_unit_circle(denominator):

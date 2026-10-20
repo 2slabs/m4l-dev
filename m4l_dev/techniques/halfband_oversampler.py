@@ -30,13 +30,16 @@ past it (-0.22 dB at 20 kHz at 44.1 kHz, where the elliptic is still flat to 1e-
 
 How a section runs at 2x: its statements run twice a sample (its marker placed twice, or its point code evaluated
 at two points, architecture/dsp-blocks.md "Points"), once on `<name>_first`, once on `<name>_second` of an
-upsampler (or on its own 2x-rate oscillators), and the downsampler takes the two results.
+upsampler (or on its own 2x-rate oscillators), and the downsampler takes the two results. Its controls (a cutoff, a
+feedback gain, a bias) go through `ControlsAtTheUpsampledSteps`, which delays each to the time of the audio in each
+step (the upsampler's latency, read from it), so they meet the audio they belong to.
 """
 import cmath
 import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 
 DEFAULT_COEFFICIENT_COUNT = 8
 DEFAULT_TRANSITION = 0.04
@@ -316,3 +319,68 @@ class HalfbandLinearPhaseDownsampler(Technique):
         second sample (one doubled-rate step early)."""
         w = 2 * math.pi * frequency_over_doubled_rate
         return linear_phase_halfband_response(frequency_over_doubled_rate, self.taps) * complex(math.cos(w), math.sin(w))
+
+
+class ControlsAtTheUpsampledSteps(Technique):
+    """`<name>_<control>_step_1`, `<name>_<control>_step_2`: each control (a host-rate GenExpr expression, `controls`
+    {control: expression}) as it was when the audio now in `upsampler`'s `first` and `second` entered it, so a section
+    run at 2x between the pair gets its controls (a cutoff, a feedback gain, a bias) at the same time as its audio.
+
+    Why: the upsampler's two streams are its input `upsampler.latency_samples` late (its `first` that late, `second`
+    half a sample less), while a control read as it is now is not late at all; a section that takes both leads its
+    audio with its controls by that much (the Moog ladder's cutoff, 2sl stab 2.2.8: 1.78 samples at the kit's design),
+    and a fast control (an envelope's attack, audio-rate modulation of a cutoff) lands on the wrong audio. The delay is
+    the upsampler's own figure, read from the instance (never typed), so it follows any change of its design.
+
+    How: step 1's value is the control `upsampler.latency_samples` back, step 2's half a sample less, each by linear
+    interpolation between host samples (both delays are whole plus fractional; the delay of linear interpolation is
+    its fraction at low frequencies, the frequency the upsampler's figure is quoted at, LATENCY_FREQUENCY_HZ). State:
+    floor(latency) + 1 past host samples per control, started at the control's value on the first sample
+    (`HistoriesStartAtTheirTargets`, so nothing sweeps when the device loads). `latency_samples` is the upsampler's:
+    the step values are as late as its streams. Nothing to reset: the controls keep flowing through a Stop."""
+
+    def __init__(self, instance_name, *, upsampler, controls):
+        if not isinstance(upsampler, HalfbandUpsampler):
+            raise BuildError(f"ControlsAtTheUpsampledSteps {instance_name}: upsampler is the HalfbandUpsampler whose "
+                             f"steps the controls meet, got {upsampler!r}")
+        if not controls:
+            raise BuildError(f"ControlsAtTheUpsampledSteps {instance_name}: no controls to delay")
+        super().__init__(instance_name, **controls)
+        self.control_names = list(controls)
+        self.latency_samples = upsampler.latency_samples
+        # step 1's audio entered the upsampler latency_samples ago, step 2's half a sample later
+        self.step_delays_samples = (upsampler.latency_samples, upsampler.latency_samples - 0.5)
+        if self.step_delays_samples[1] < 0:
+            raise BuildError(f"ControlsAtTheUpsampledSteps {instance_name}: the upsampler is "
+                             f"{upsampler.latency_samples} samples late, under the half sample its second step needs "
+                             "to read a control from the past")
+        self.past_samples_kept = math.floor(self.step_delays_samples[0]) + 1
+        self.histories_start = HistoriesStartAtTheirTargets(
+            f"{instance_name}_start", targets={self._past_name(control, age): f"{instance_name}_{control}_now"
+                                               for control in self.control_names
+                                               for age in range(1, self.past_samples_kept + 1)})
+
+    def _past_name(self, control, age):
+        return f"{self.instance_name}_{control}_now" if age == 0 else f"{self.instance_name}_{control}_before_{age}"
+
+    def declarations(self):
+        return "History " + ", ".join(f"{self._past_name(control, age)}(0)" for control in self.control_names
+                                      for age in range(1, self.past_samples_kept + 1)) + ";\n" + \
+            self.histories_start.declarations()
+
+    def statements(self):
+        p = self.instance_name
+        lines = [f"// {p}: the controls at the upsampler's two steps, {self.latency_samples!r} and "
+                 f"{self.step_delays_samples[1]!r} samples back (kit technique: halfband oversampler)"]
+        lines += [f"{p}_{control}_now = {self.input_expressions[control]};" for control in self.control_names]
+        lines.append(self.histories_start.statements())
+        for step, delay in enumerate(self.step_delays_samples, start=1):
+            whole = math.floor(delay)
+            fraction = delay - whole
+            for control in self.control_names:
+                lines.append(f"{p}_{control}_step_{step} = {1 - fraction!r} * {self._past_name(control, whole)} + "
+                             f"{fraction!r} * {self._past_name(control, whole + 1)};")
+        for control in self.control_names:
+            lines += [f"{self._past_name(control, age)} = {self._past_name(control, age - 1)};"
+                      for age in range(self.past_samples_kept, 0, -1)]
+        return "\n".join(lines)
