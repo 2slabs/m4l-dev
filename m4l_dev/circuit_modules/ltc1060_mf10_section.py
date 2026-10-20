@@ -26,7 +26,7 @@ th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the module keep
 a guess: A = T (r R) T^-1 (R a rotation, T from an eigenvector), so on every tick |T^-1 e| <= max(1, r^n) |T^-1 e0|,
 and each integrator stays within its rest point plus its row of T times that; within the rail's knee on all n ticks,
 the closed form; otherwise a GenExpr loop steps them one by one through the rails (at most MAXIMUM_TICKS_PER_SAMPLE a
-sample: 137 at the chip's 3 MHz top clock at 22.05 kHz, the kit's lowest rate; the clock is held to that below it).
+sample: 137, the chip's 3 MHz top clock at 22.05 kHz; the clock is held to that below it).
 The last tick is always stepped on its own (its jump is the staircase's band-limited edge).
 
 Against itself at 64 x 44.1 kHz (every tick its own sample), a self-oscillating section at 44.1 and 48 kHz is within
@@ -89,9 +89,10 @@ RESIDUAL_GONE_AT = 0.5
 LOWEST_DAMPING = -0.2                # a section can be set past oscillation; the rails hold it
 DAMPING_MARGIN = 0.05                # below 2 - F: the tick matrix keeps complex eigenvalues
 INPUT_PRE_EMPHASIS_LATENCY_SAMPLES = 1   # the symmetric 3-tap pre-emphasis on the input: its middle tap
-# The most ticks a host sample steps (the GenExpr loop's bound, a literal): the fastest clock (100 x 30 kHz) at the
-# lowest host rate the kit renders at (22.05 kHz: m4l_dev/preset_loudness.py) is 136.05 ticks a sample, so at most 137
-# ticks fall in one; below that rate the clock is held to 137 ticks a sample.
+# The most ticks a host sample steps (the GenExpr loop's bound, a literal). LOWEST_HOST_SAMPLERATE is ours: half the
+# lowest rate the kit levels and tests at (44.1 kHz), so the chip's whole range steps at any rate a host is likely to
+# run. There the fastest clock (100 x 30 kHz) is 136.05 ticks a sample, so at most 137 ticks fall in one; below it the
+# clock is held to 137 ticks a sample (the module's own sc_clock_hz says so).
 LOWEST_HOST_SAMPLERATE = 22050.0
 MAXIMUM_TICKS_PER_SAMPLE = math.ceil(max(CLOCK_RATIOS) * HIGHEST_CENTER_HZ / LOWEST_HOST_SAMPLERATE) + 1
 TICK_COUNT_WRAP = 10080              # 2^5 3^2 5 7: 2 x every Harmonics division of the Sherman divides it
