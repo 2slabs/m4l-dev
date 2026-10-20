@@ -13,11 +13,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.ltc1060_mf10_section import (Q_ENHANCEMENT_FITS, Ltc1060Mf10Character,  # noqa: E402
+from m4l_dev.circuit_modules.ltc1060_mf10_section import (MAXIMUM_TICKS_PER_SAMPLE,  # noqa: E402
+                                                          Q_ENHANCEMENT_FITS, Ltc1060Mf10Character,
                                                           Ltc1060Mf10Section, response_script_code,
                                                           small_signal_response)
-from gen_block_harness import (amplitude_at, complex_amplitude_at, frequency_by_zero_crossings,  # noqa: E402
-                               harness)
+from gen_block_harness import (amplitude_at, cents, complex_amplitude_at,  # noqa: E402
+                               frequency_by_zero_crossings, harness)
 
 SAMPLERATE = 44100.0
 FULL_SCALE_VOLTS = Ltc1060Mf10Character().full_scale_volts
@@ -32,7 +33,7 @@ def section_block(name="sc", output="lowpass", **arguments):
                               bandpass_gain=bandpass, highpass_gain=highpass, **arguments)
 
 
-def section(output="lowpass", divided=False, **params):
+def section(output="lowpass", divided=False, samplerate=SAMPLERATE, **params):
     """A harness around one section (and, `divided`, a second one divided from it). Params: cutoff, damping,
     hold, feedthrough (and cutoff_2, division). Outputs: out, ticked (, the second's out, ticked)."""
     params = dict({"cutoff": 1000.0, "damping": 1.0, "hold": 0.0, "feedthrough": 0.0}, **params)
@@ -49,7 +50,7 @@ def section(output="lowpass", divided=False, **params):
                                          bandpass_gain=bandpass, highpass_gain=highpass,
                                          divided_from=blocks[0], division="division"))
         outputs += [f"sd_out / {FULL_SCALE_VOLTS!r}", "sd_ticked"]
-    return harness(blocks, params, outputs, samplerate=SAMPLERATE)
+    return harness(blocks, params, outputs, samplerate=samplerate)
 
 
 def sine(frequency, samples, amplitude=0.05):
@@ -58,6 +59,26 @@ def sine(frequency, samples, amplitude=0.05):
 
 def kicked(samples):
     return [0.02] * 4 + [0.0] * (samples - 4)
+
+
+# the per-tick reference: the module itself at 64 x 44.1 kHz, where every tick has its own host sample (2.2 MHz, the
+# 22 kHz centre's clock, is 0.78 of a tick a sample) and the rails act on each (converged: 128 x reads the same to
+# 0.004 dB and 0.001 cent at 4 and 20 kHz, damping -0.08, measured 2026-10-20)
+PER_TICK_REFERENCE_SAMPLERATE = 64 * 44100.0
+
+
+def self_oscillation(samplerate, cutoff, damping, seconds=0.25):
+    """(frequency Hz, level dB re full scale) of a section kicked into self-oscillation at its BP pin, over the
+    render's second half (settled: the first half's level is the same)."""
+    count = int(samplerate * seconds)
+    kick = round(4 * samplerate / SAMPLERATE)   # the same kick in time at every rate
+    out = section("bandpass", samplerate=samplerate, cutoff=cutoff, damping=damping).run(
+        count, [[0.02] * kick + [0.0] * (count - kick)])[0]
+    settled = out[count // 2:]
+    frequency = frequency_by_zero_crossings(settled, samplerate)
+    every = max(1, round(samplerate / SAMPLERATE))   # its fundamental read on 4410 samples at about 44.1 kHz
+    level = amplitude_at(settled[::every][:4410], frequency, samplerate / every)
+    return frequency, db(level)
 
 
 def rms(signal):
@@ -137,6 +158,38 @@ class Ltc1060Mf10SectionTests(unittest.TestCase):
             self.assertLessEqual(max(abs(v) for v in out), 1.3)
             self.assertAlmostEqual(db(rms(out[4410:6615]) / rms(out[6615:])), 0.0, delta=0.5)
             self.assertGreater(rms(out[6615:]), 0.3)
+
+    def test_self_oscillation_is_the_per_tick_references_at_the_host_rate(self):
+        # the rails act on every tick, however many fall in a host sample: level within 0.1 dB, pitch within 1 cent of
+        # the per-tick reference from 1 to 20 kHz (rails once a host sample were +0.25 to +1.9 dB loud and up to 64
+        # cents off), at 2sl filter's full Reso (-0.08) and the floor (-0.2)
+        for damping in (-0.08, -0.2):
+            for cutoff in (1000.0, 4000.0, 8000.0, 16000.0, 20000.0):
+                reference_frequency, reference_level = self_oscillation(PER_TICK_REFERENCE_SAMPLERATE, cutoff, damping)
+                for samplerate in (44100.0, 48000.0):
+                    frequency, level = self_oscillation(samplerate, cutoff, damping)
+                    case = f"damping {damping}, {cutoff:.0f} Hz at {samplerate:.0f}"
+                    self.assertAlmostEqual(level, reference_level, delta=0.1, msg=case)
+                    self.assertAlmostEqual(cents(frequency, reference_frequency), 0.0, delta=1.0, msg=case)
+
+    def test_self_oscillation_does_not_lock_to_a_quarter_of_the_host_rate(self):
+        # at 48 kHz every centre from 11.7 to 12.3 kHz oscillated at exactly 12 kHz (fs / 4) with the rails once a
+        # host sample; per tick each keeps the reference's own pitch, which is not fs / 4
+        for cutoff in (11800.0, 12000.0, 12200.0):
+            reference_frequency, _ = self_oscillation(PER_TICK_REFERENCE_SAMPLERATE, cutoff, -0.08)
+            frequency, _ = self_oscillation(48000.0, cutoff, -0.08)
+            self.assertGreater(abs(reference_frequency - 12000.0), 50.0)
+            self.assertAlmostEqual(cents(frequency, reference_frequency), 0.0, delta=1.0, msg=f"{cutoff} Hz")
+
+    def test_the_ticks_a_sample_are_held_to_the_loops_bound(self):
+        # the loop steps at most MAXIMUM_TICKS_PER_SAMPLE ticks a host sample: from 22.05 kHz up the chip's top clock
+        # (3 MHz) fits; below it the clock is held to MAXIMUM_TICKS_PER_SAMPLE - 1 ticks a sample
+        for samplerate, wanted_clock in ((22050.0, 3.0e6), (16000.0, (MAXIMUM_TICKS_PER_SAMPLE - 1) * 16000.0)):
+            program = harness([section_block()], {"cutoff": 30000.0, "damping": 1.0, "hold": 0.0, "feedthrough": 0.0},
+                              ["sc_clock_hz", "sc_ticks"], samplerate=samplerate)
+            clock, ticks = program.run(200, [[0.0] * 200])
+            self.assertAlmostEqual(sum(clock[1:]) / len(clock[1:]), wanted_clock, delta=1e-6 * wanted_clock)
+            self.assertLessEqual(max(ticks), MAXIMUM_TICKS_PER_SAMPLE)
 
     def test_the_chips_q_enhancement_makes_it_sing_only_near_the_top(self):
         # damping 0.008: rings out at 300 Hz (a 30 kHz clock), sings at 12 kHz (1.2 MHz)

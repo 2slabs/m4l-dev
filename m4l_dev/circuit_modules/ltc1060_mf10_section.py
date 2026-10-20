@@ -17,13 +17,25 @@ so the poles sit at exactly clock / clock_ratio, whatever the host rate. Between
 hold: the staircase that makes the chip's images, its "eee"); HP is the chip's summing amplifier, continuous in the
 live input. The input is sampled at the ticks with nothing in front (it folds, as the chip's does).
 
-Per host sample the module finds the ticks that fall in it (a phase accumulator at the clock), and steps the filter
-over all of them at once in closed form (the input a straight line between samples): with A the tick matrix, e the state's
-distance from its rest point (0, x), n ticks take e to A^n e, and A^n = r^(n-1) sin(n th)/sin th A - r^n sin((n-1)
-th)/sin th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the module keeps). The last tick is stepped
-explicitly, so the integrators' rails (a soft clip at full scale) act at the tick rate whenever there is at most one
-tick a sample. Above that the rails act once a host sample: measured, a self-oscillating section is up to 1.9 dB loud
-and 41 cents sharp to 20 kHz and locks to the host rate's fractions (SHORTCUTS.md, 2026-10-19).
+Per host sample the module finds the ticks that fall in it (a phase accumulator at the clock) and steps every one of
+them, the integrators' rails (a soft clip at full scale) acting on each tick, as the chip's do; the input is the
+straight line between samples, read at each tick. Where no rail can act on a sample's ticks it steps all but the last
+at once in closed form, exactly the ticks' own result (1e-11): with A the tick matrix, e the state's distance from its
+rest point under the input's ramp, n ticks take e to A^n e, A^n = r^(n-1) sin(n th)/sin th A - r^n sin((n-1) th)/sin
+th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the module keeps). "No rail can act" is a bound, not
+a guess: A = T (r R) T^-1 (R a rotation, T from an eigenvector), so on every tick |T^-1 e| <= max(1, r^n) |T^-1 e0|,
+and each integrator stays within its rest point plus its row of T times that; within the rail's knee on all n ticks,
+the closed form; otherwise a GenExpr loop steps them one by one through the rails (at most MAXIMUM_TICKS_PER_SAMPLE a
+sample: 137 at the chip's 3 MHz top clock at 22.05 kHz, the kit's lowest rate; the clock is held to that below it).
+The last tick is always stepped on its own (its jump is the staircase's band-limited edge).
+
+Against itself at 64 x 44.1 kHz (every tick its own sample), a self-oscillating section at 44.1 and 48 kHz is within
+0.07 dB and 0.03 cent from 1 to 22 kHz (with the rails once a host sample it was up to +1.9 dB, 64 cents off, and
+locked to fs / 4 at 48 kHz); small signals render what the closed form alone rendered (1e-9).
+CPU (one section, our renderer at -O2, a loaded i7-8700, ns a host sample at 44.1 kHz less the renderer's own 124):
+small signals 140-360 at 100 Hz-20 kHz centres, as before; driven into the rails (a 2 x full-scale input or
+self-oscillation) 90-340 to 1 kHz, 540-950 at 5 kHz, 950-1570 at 10 kHz, 2120-2930 at 20 kHz (before: 130-420
+everywhere). A stereo pair of two sections is four: at 20 kHz in the rails, 8.5-11.7 us a sample, 37-52 % of a core.
 
 What the chip makes and what the host rate would add (measured, research 2026-10-19, against a tick-exact model
 rendered at 32 x and decimated: chip_reference.py in the research's scratchpad):
@@ -77,6 +89,11 @@ RESIDUAL_GONE_AT = 0.5
 LOWEST_DAMPING = -0.2                # a section can be set past oscillation; the rails hold it
 DAMPING_MARGIN = 0.05                # below 2 - F: the tick matrix keeps complex eigenvalues
 INPUT_PRE_EMPHASIS_LATENCY_SAMPLES = 1   # the symmetric 3-tap pre-emphasis on the input: its middle tap
+# The most ticks a host sample steps (the GenExpr loop's bound, a literal): the fastest clock (100 x 30 kHz) at the
+# lowest host rate the kit renders at (22.05 kHz: m4l_dev/preset_loudness.py) is 136.05 ticks a sample, so at most 137
+# ticks fall in one; below that rate the clock is held to 137 ticks a sample.
+LOWEST_HOST_SAMPLERATE = 22050.0
+MAXIMUM_TICKS_PER_SAMPLE = math.ceil(max(CLOCK_RATIOS) * HIGHEST_CENTER_HZ / LOWEST_HOST_SAMPLERATE) + 1
 TICK_COUNT_WRAP = 10080              # 2^5 3^2 5 7: 2 x every Harmonics division of the Sherman divides it
 # The Q enhancement, q' = q - amplitude exp(-settling_clock_hz / f_clock), by (chip mode, supply volts (+-), clock
 # ratio): the LTC1060 datasheet's Q-error-vs-clock graphs read and fitted by
@@ -208,14 +225,15 @@ ${p}_x = ${p}_input_1;
 ${p}_tick_input = (14 * ${p}_input_1 - ${p}_newest_input - ${p}_input_2) / 12;
 ${p}_input_2 = ${p}_input_1;
 ${p}_input_1 = ${p}_newest_input;
-${p}_clock_input_hz = clamp(${clock_hz}, ${lowest_clock}, ${highest_clock});
+// (and to the ticks a host sample the module steps: never less at LOWEST_HOST_SAMPLERATE or above)
+${p}_clock_input_hz = clamp(${clock_hz}, ${lowest_clock}, min(${highest_clock}, ${loop_ticks} * samplerate));
 """, full_scale_volts=self.character.full_scale_volts, lowest_clock=self.clock_ratio * LOWEST_CENTER_HZ,
-            highest_clock=self.clock_ratio * HIGHEST_CENTER_HZ) + self.clock_statements() + self.substituted("""
+            highest_clock=self.clock_ratio * HIGHEST_CENTER_HZ, loop_ticks=MAXIMUM_TICKS_PER_SAMPLE - 1) + self.clock_statements() + self.substituted("""
 // hold: the clock stops
 ${p}_phase_after = ${hold} > 0.5 ? ${p}_phase_before : ${p}_phase_after;
 ${p}_increment = ${p}_phase_after - ${p}_phase_before;
 ${p}_clock_hz = ${p}_increment * samplerate;
-${p}_ticks = clamp(floor(${p}_phase_after), 0, ceil(${top} / samplerate) + 1);
+${p}_ticks = clamp(floor(${p}_phase_after), 0, ${maximum_ticks});
 ${p}_phase = ${p}_phase_after - floor(${p}_phase_after);
 ${p}_tick_count = ${p}_tick_count + ${p}_ticks - ${wrap} * floor((${p}_tick_count + ${p}_ticks) / ${wrap});
 // (the phase kept a hair under 1: count + phase must not round up to the next tick's count before it happens)
@@ -230,27 +248,55 @@ ${p}_a22 = 1 - ${F} * ${F};
 ${p}_last_tick_time = 1;
 ${p}_tick_jump = 0;
 if (${p}_ticks > 0) {
-\t// the ticks in this sample, all but the last at once: A^n e, n = ticks - 1. The input is the straight line between
-\t// the last two samples, read at each tick; under a ramp of dx a tick the state rests at (dx / F, x[tick] - q dx / F), A^n e from there
+\t// the ticks in this sample but the last: n = ticks - 1. The input is the straight line between the last two
+\t// samples, read at each tick
 \t${p}_first_tick_time = (1 - ${p}_phase_before) / ${p}_increment;
 \t${p}_last_tick_time = ${p}_first_tick_time + (${p}_ticks - 1) / ${p}_increment;
 \t${p}_input_slope = ${p}_tick_input - ${p}_previous_tick_input;
+\t${p}_first_tick_input = ${p}_previous_tick_input + ${p}_input_slope * ${p}_first_tick_time;
 \t${p}_last_tick_input = ${p}_previous_tick_input + ${p}_input_slope * ${p}_last_tick_time;
-\t${p}_tick_ramp = ${p}_ticks > 1 ? ${p}_input_slope / ${p}_increment : 0;
-\t${p}_rest_bp = ${p}_tick_ramp / ${F};
-\t${p}_rest_lp_lag = ${p}_q * ${p}_tick_ramp / ${F};
-\t${p}_rest_first_lp = ${p}_previous_tick_input + ${p}_input_slope * ${p}_first_tick_time - ${p}_rest_lp_lag;
-\t${p}_rest_before_lp = ${p}_last_tick_input - ${p}_rest_lp_lag;
-\t${p}_radius = sqrt(${p}_a11);
-\t${p}_trace = ${p}_a11 + ${p}_a22;
-\t${p}_angle = atan2(sqrt(max(4 * ${p}_a11 - ${p}_trace * ${p}_trace, 1e-12)), ${p}_trace);
 \t${p}_n = ${p}_ticks - 1;
-\t${p}_c1 = pow(${p}_radius, ${p}_n - 1) * sin(${p}_n * ${p}_angle) / sin(${p}_angle);
-\t${p}_c0 = 0 - pow(${p}_radius, ${p}_n) * sin((${p}_n - 1) * ${p}_angle) / sin(${p}_angle);
-\t${p}_e_bp = ${p}_bp - ${p}_rest_bp;
-\t${p}_e_lp = ${p}_lp - ${p}_rest_first_lp;
-\t${p}_before_bp = ${p}_c1 * (${p}_a11 * ${p}_e_bp - ${F} * ${p}_e_lp) + ${p}_c0 * ${p}_e_bp + ${p}_rest_bp;
-\t${p}_before_lp = ${p}_c1 * (${F} * ${p}_a11 * ${p}_e_bp + ${p}_a22 * ${p}_e_lp) + ${p}_c0 * ${p}_e_lp + ${p}_rest_before_lp;
+\t${p}_before_bp = ${p}_bp;
+\t${p}_before_lp = ${p}_lp;
+\tif (${p}_n > 0) {
+\t\t// under a ramp of dx a tick the state rests at (dx / F, x[tick] - q dx / F); its distance e from there goes
+\t\t// to A^n e. A = T (r R) T^-1 (r the eigenvalues' radius, R a rotation, T from an eigenvector), so on every
+\t\t// tick |T^-1 e| <= max(1, r^n) |T^-1 e0|, and each integrator is within |its row of T| times that of its rest
+\t\t${p}_tick_ramp = ${p}_input_slope / ${p}_increment;
+\t\t${p}_rest_bp = ${p}_tick_ramp / ${F};
+\t\t${p}_rest_lp_lag = ${p}_q * ${p}_tick_ramp / ${F};
+\t\t${p}_rest_first_lp = ${p}_first_tick_input - ${p}_rest_lp_lag;
+\t\t${p}_rest_before_lp = ${p}_last_tick_input - ${p}_rest_lp_lag;
+\t\t${p}_e_bp = ${p}_bp - ${p}_rest_bp;
+\t\t${p}_e_lp = ${p}_lp - ${p}_rest_first_lp;
+\t\t${p}_radius = sqrt(${p}_a11);
+\t\t${p}_trace = ${p}_a11 + ${p}_a22;
+\t\t${p}_half_trace = ${p}_trace / 2;
+\t\t${p}_eigen_imaginary = sqrt(max(${p}_a11 - ${p}_half_trace * ${p}_half_trace, 1e-24));
+\t\t${p}_eigen_bp = 0 - ${p}_e_bp / ${F};
+\t\t${p}_eigen_lp = (${p}_e_lp - (${p}_half_trace - ${p}_a11) * ${p}_eigen_bp) / ${p}_eigen_imaginary;
+\t\t${p}_reach = sqrt(${p}_eigen_bp * ${p}_eigen_bp + ${p}_eigen_lp * ${p}_eigen_lp) * max(1, pow(${p}_radius, ${p}_n));
+\t\t${p}_reach_bp = abs(${p}_rest_bp) + ${F} * ${p}_reach;
+\t\t${p}_reach_lp = max(abs(${p}_rest_first_lp), abs(${p}_rest_before_lp)) + sqrt((${p}_half_trace - ${p}_a11) * (${p}_half_trace - ${p}_a11) + ${p}_eigen_imaginary * ${p}_eigen_imaginary) * ${p}_reach;
+\t\tif (${p}_reach_bp <= ${rail_knee} && ${p}_reach_lp <= ${rail_knee}) {
+\t\t\t// no rail can act on these ticks: all at once, in closed form, A^n = c1 A + c0 I
+\t\t\t${p}_angle = atan2(${p}_eigen_imaginary * 2, ${p}_trace);
+\t\t\t${p}_c1 = pow(${p}_radius, ${p}_n - 1) * sin(${p}_n * ${p}_angle) / sin(${p}_angle);
+\t\t\t${p}_c0 = 0 - pow(${p}_radius, ${p}_n) * sin((${p}_n - 1) * ${p}_angle) / sin(${p}_angle);
+\t\t\t${p}_before_bp = ${p}_c1 * (${p}_a11 * ${p}_e_bp - ${F} * ${p}_e_lp) + ${p}_c0 * ${p}_e_bp + ${p}_rest_bp;
+\t\t\t${p}_before_lp = ${p}_c1 * (${F} * ${p}_a11 * ${p}_e_bp + ${p}_a22 * ${p}_e_lp) + ${p}_c0 * ${p}_e_lp + ${p}_rest_before_lp;
+\t\t} else {
+\t\t\t// a rail may act: each tick stepped through its rails
+\t\t\tfor (${p}_tick = 0; ${p}_tick < ${loop_ticks}; ${p}_tick += 1) {
+\t\t\t\tif (${p}_tick >= ${p}_n) {
+\t\t\t\t\tbreak;
+\t\t\t\t}
+\t\t\t\t${p}_each_hp = ${p}_first_tick_input + ${p}_tick * ${p}_tick_ramp - ${p}_before_lp - ${p}_q * ${p}_before_bp;
+\t\t\t\t${p}_before_bp = ltc1060_mf10_rail(${p}_before_bp + ${F} * ${p}_each_hp, ${rail_knee}, ${rail_headroom});
+\t\t\t\t${p}_before_lp = ltc1060_mf10_rail(${p}_before_lp + ${F} * ${p}_before_bp, ${rail_knee}, ${rail_headroom});
+\t\t\t}
+\t\t}
+\t}
 \t// the last tick, stepped: the summer, then the two integrators against their rails
 \t${p}_tick_hp = ${p}_last_tick_input - ${p}_before_lp - ${p}_q * ${p}_before_bp;
 \t${p}_new_bp = ltc1060_mf10_rail(${p}_before_bp + ${F} * ${p}_tick_hp, ${rail_knee}, ${rail_headroom});
@@ -287,7 +333,7 @@ ${p}_previous_tick_input = ${p}_tick_input;
             lowest_damping=LOWEST_DAMPING, highest_damping=highest_damping(self.clock_ratio), gone=RESIDUAL_GONE_AT,
             fade=RESIDUAL_GONE_AT - RESIDUAL_FULL_BELOW,
             feedthrough_amplitude=self.character.clock_feedthrough_of_full_scale,
-            top=self.clock_ratio * HIGHEST_CENTER_HZ, rail_knee=self.character.rail_knee_of_full_scale,
+            maximum_ticks=MAXIMUM_TICKS_PER_SAMPLE, loop_ticks=MAXIMUM_TICKS_PER_SAMPLE - 1, rail_knee=self.character.rail_knee_of_full_scale,
             rail_headroom=1 - self.character.rail_knee_of_full_scale)
         return clocked + self.edges.statements() + self.substituted("\n${p}_out = ${p}_edges_out * ${full_scale_volts};",
                                                                     full_scale_volts=self.character.full_scale_volts)
