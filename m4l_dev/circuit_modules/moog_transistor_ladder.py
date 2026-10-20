@@ -17,10 +17,12 @@ loop is exactly 180 degrees at fc), the nonlinear loop solved with no unit delay
 cyclic bidiagonal, so each iteration is one forward sweep and one division (stage i's correction p_i + q_i d4, d4 =
 p4 / (1 - q4), 1 - q4 >= 1 for k >= 0: never singular). NEWTON_ITERATIONS = 2 from the last step's solution (research
 2026-10-20, against RK4 at 64x decimated by a Blackman sinc: 2 iterations are within 0.02 dB of 8 on every harmonic
-below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice, default 2)
-steps it that many times a host sample, the input a straight line between samples and the output the steps' mean.
-Aliases of a hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -51 dB at 2x; at fc 18 kHz,
-k 3.9, drive 20: -12 dB at 1x, -34 dB at 2x (the research's table, references/circuits/moog-transistor-ladder.md §6).
+below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice: 2, the
+default, or 1) runs it twice a host sample between the kit's halfband oversampler's upsampler and downsampler (3.07
+samples late at low frequencies, HALFBAND_ROUND_TRIP_LATENCY_SAMPLES), or once with no latency. The worst alias of a
+hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -55 dB at 2x; drive 5, fc 5 kHz, k 3:
+-84 dB at 1x, -127 dB at 2x; at fc 18 kHz, k 3.9, drive 20: -12 dB at 1x, -34 dB at 2x, the aliases made above the
+doubled rate's Nyquist (the research's table, references/circuits/moog-transistor-ladder.md §6).
 
 Inputs (the circuit's): `input_volts` (the audio at the filter's input), `control_volts` (the sum at the control node,
 exponential: `volts_per_octave` a doubling of If), `emphasis` (the Emphasis / Regeneration pot, 0..1, linear in k up
@@ -39,12 +41,15 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.techniques.halfband_oversampler import (HalfbandDownsampler, HalfbandUpsampler, halfband_coefficients,
+                                                     halfband_response)
 from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter
 
 NEWTON_ITERATIONS = 2
 HIGHEST_CUTOFF_OF_SAMPLE_RATE = 0.45     # fc held under 0.45 of the host rate (the steps prewarp at fc)
 LOWEST_CUTOFF_HZ = 5.0
 STAGES = 4
+OVERSAMPLINGS = (1, 2)                   # once a sample, or twice through the kit's halfband oversampler
 REFERENCE_CUTOFF_HZ = 261.6255653005986  # [DESIGN] 0 V at the control node is middle C
 
 
@@ -117,35 +122,26 @@ def control_volts_for_cutoff_hz(cutoff_hz, character):
 
 def small_signal_response(frequency_hz, cutoff_hz, feedback_gain, sample_rate, character=None, oversampling=2):
     """The module's complex response for small signals (every tanh's slope 1, no offset), input volts to output volts
-    before the coupling high-pass, exact in the steady state: the TPT ladder at N = oversampling x the host rate (each
-    stage the bilinear one-pole at g_i = tan(pi fc / (N sr)) / r_i, the loop 1 / (P^-1 + k)), fed the host tone's
-    straight line (step j reads it at (j + 1) / N: the tone and its N - 1 images at the fine rate) and read as the
-    steps' mean. At N = 1 it is the analog 1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr)."""
+    before the coupling high-pass: the TPT ladder at `oversampling` x the host rate (each stage the bilinear one-pole
+    at g_i = tan(pi fc / (N sr)) / r_i, the loop 1 / (P^-1 + k)); at 2x, between the halfband upsampler and
+    downsampler, the half-band low-pass at f / (2 sr) twice (their images 99 dB down, left out). At 1x it is the
+    analog 1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr)."""
+    if oversampling not in OVERSAMPLINGS:
+        raise BuildError(f"MoogTransistorLadder: oversampling is one of {OVERSAMPLINGS}, got {oversampling!r}")
     character = character or MoogTransistorLadderCharacter()
-    steps = oversampling
     cutoff_hz = min(max(cutoff_hz, LOWEST_CUTOFF_HZ), HIGHEST_CUTOFF_OF_SAMPLE_RATE * sample_rate)
-    warp = math.tan(math.pi * cutoff_hz / (sample_rate * steps))
-    ratios = stage_capacitance_ratios(character)
-    host_omega = 2 * math.pi * frequency_hz / sample_rate
-
-    def ladder(theta):
-        z = complex(math.cos(theta), math.sin(theta))
-        s_bilinear = (z - 1) / (z + 1)
-        product = 1
-        for ratio in ratios:
-            product *= 1 / (1 + s_bilinear * ratio / warp)
-        return product / (1 + feedback_gain * product)
-
-    straight_line = [(j + 1) / steps + (1 - (j + 1) / steps) * complex(math.cos(host_omega), -math.sin(host_omega))
-                     for j in range(steps)]
-    total = 0j
-    for image in range(steps):
-        theta = (host_omega + 2 * math.pi * image) / steps
-        amplitude = sum(weight * complex(math.cos(theta * j), -math.sin(theta * j))
-                        for j, weight in enumerate(straight_line)) / steps
-        total += ladder(theta) * amplitude * sum(complex(math.cos(theta * j), math.sin(theta * j))
-                                                 for j in range(steps)) / steps
-    return total
+    warp = math.tan(math.pi * cutoff_hz / (sample_rate * oversampling))
+    theta = 2 * math.pi * frequency_hz / (sample_rate * oversampling)
+    z = complex(math.cos(theta), math.sin(theta))
+    s_bilinear = (z - 1) / (z + 1)
+    product = 1
+    for ratio in stage_capacitance_ratios(character):
+        product *= 1 / (1 + s_bilinear * ratio / warp)
+    ladder = product / (1 + feedback_gain * product)
+    if oversampling == 1:
+        return ladder
+    # the up / down pair measures as the half-band squared one doubled-rate sample early (z), to 1e-3 degrees
+    return ladder * halfband_response(frequency_hz / (2 * sample_rate), halfband_coefficients()) ** 2 * z
 
 
 class MoogTransistorLadder(CircuitModule):
@@ -158,18 +154,25 @@ class MoogTransistorLadder(CircuitModule):
     def __init__(self, instance_name, *, input_volts, control_volts, emphasis, oversampling=2, character=None):
         super().__init__(instance_name, character=character, input_volts=input_volts, control_volts=control_volts,
                          emphasis=emphasis)
-        if not isinstance(oversampling, int) or isinstance(oversampling, bool) or oversampling < 1:
-            raise BuildError(f"MoogTransistorLadder {instance_name}: oversampling is a whole number of steps a sample, "
-                             f"got {oversampling!r}")
+        if isinstance(oversampling, bool) or oversampling not in OVERSAMPLINGS:
+            raise BuildError(f"MoogTransistorLadder {instance_name}: oversampling is one of {OVERSAMPLINGS} (the kit's "
+                             f"oversampler is 2x), got {oversampling!r}")
         check_the_character(self.character, instance_name)
         self.oversampling = oversampling
+        self.upsampler = self.downsampler = None
+        if oversampling == 2:
+            self.upsampler = HalfbandUpsampler(f"{instance_name}_up", input=f"{instance_name}_input")
+            self.downsampler = HalfbandDownsampler(f"{instance_name}_down", first=f"{instance_name}_x4_step_1",
+                                                   second=f"{instance_name}_x4_step_2")
         self.output_coupling = ZeroDelayOnePoleFilter(f"{instance_name}_coupling", input=f"{instance_name}_ladder_volts",
                                                       cutoff_hz=repr(float(self.character.output_coupling_corner_hz)))
 
     def declarations(self):
-        return self.substituted("History ${p}_s1(0), ${p}_s2(0), ${p}_s3(0), ${p}_s4(0), ${p}_x1(0), ${p}_x2(0), "
-                                "${p}_x3(0), ${p}_x4(0), ${p}_previous_input(0);") + "\n" + \
-            self.output_coupling.declarations()
+        declarations = [self.substituted("History ${p}_s1(0), ${p}_s2(0), ${p}_s3(0), ${p}_s4(0), ${p}_x1(0), "
+                                         "${p}_x2(0), ${p}_x3(0), ${p}_x4(0);"), self.output_coupling.declarations()]
+        if self.oversampling == 2:
+            declarations += [self.upsampler.declarations(), self.downsampler.declarations()]
+        return "\n".join(declarations)
 
     def _newton_iteration(self):
         """One Newton step on the five-tanh trapezoidal loop (the module docstring's solve)."""
@@ -201,19 +204,18 @@ ${p}_x3 = ${p}_x3 + ${p}_p3 + ${p}_q3 * ${p}_d4;
 ${p}_x4 = ${p}_x4 + ${p}_d4;
 """)
 
-    def _step(self, step_index):
-        """One trapezoidal step at oversampling x the host rate: the input's straight line at (j + 1) / N."""
-        fraction = (step_index + 1) / self.oversampling
+    def _step(self, step_number, input_volts):
+        """One trapezoidal step at `oversampling` x the host rate on `input_volts`, leaving `<name>_x4_step_<n>`."""
         text = self.substituted("""// ${p}: step ${step} of ${steps}
-${p}_drive = (${p}_previous_input + (${p}_input - ${p}_previous_input) * ${fraction}) * ${p}_drive_per_volt + ${p}_offset_drive;
-""", step=str(step_index + 1), steps=str(self.oversampling), fraction=fraction)
+${p}_drive = ${step_input} * ${p}_drive_per_volt + ${p}_offset_drive;
+""", step=str(step_number), steps=str(self.oversampling), step_input=input_volts)
         text += self._newton_iteration() * NEWTON_ITERATIONS
         text += self.substituted("""${p}_s1 = 2 * ${p}_x1 - ${p}_s1;
 ${p}_s2 = 2 * ${p}_x2 - ${p}_s2;
 ${p}_s3 = 2 * ${p}_x3 - ${p}_s3;
 ${p}_s4 = 2 * ${p}_x4 - ${p}_s4;
-${p}_x4_sum = ${p}_x4_sum + ${p}_x4;
-""")
+${p}_x4_step_${step} = ${p}_x4;
+""", step=str(step_number))
         return text
 
     def statements(self):
@@ -231,7 +233,6 @@ ${p}_g3 = ${p}_warp / ${ratio3};
 ${p}_g4 = ${p}_warp / ${ratio4};
 ${p}_drive_per_volt = ${drive_per_volt};
 ${p}_offset_drive = ${offset_drive};
-${p}_x4_sum = 0;
 """, current_at_zero=character.ladder_current_at_zero_control_volts_amps,
             volts_per_octave=character.volts_per_octave,
             current_per_hz=8 * math.pi * character.ladder_capacitance_farads * character.thermal_voltage_volts,
@@ -240,17 +241,20 @@ ${p}_x4_sum = 0;
             ratio1=ratios[0], ratio2=ratios[1], ratio3=ratios[2], ratio4=ratios[3],
             drive_per_volt=character.base_volts_per_input_volt / (2 * character.thermal_voltage_volts),
             offset_drive=character.input_pair_offset_volts / (2 * character.thermal_voltage_volts))
-        for step_index in range(self.oversampling):
-            text += self._step(step_index)
-        text += self.substituted("""${p}_previous_input = ${p}_input;
-// the output buffer: the last stage's volts (2 VT x4, the steps' mean) back to the input's scale
-${p}_ladder_volts = ${p}_x4_sum * ${volts_out_per_x4};
-""", volts_out_per_x4=2 * character.thermal_voltage_volts / character.base_volts_per_input_volt / self.oversampling)
+        if self.oversampling == 1:
+            text += self._step(1, f"{self.instance_name}_input") + self.substituted("${p}_x4_out = ${p}_x4_step_1;\n")
+        else:
+            text += self.upsampler.statements() + "\n"
+            text += self._step(1, f"{self.instance_name}_up_first") + self._step(2, f"{self.instance_name}_up_second")
+            text += self.downsampler.statements() + self.substituted("\n${p}_x4_out = ${p}_down_out;\n")
+        text += self.substituted("""// the output buffer: the last stage's volts (2 VT x4) back to the input's scale
+${p}_ladder_volts = ${p}_x4_out * ${volts_out_per_x4};
+""", volts_out_per_x4=2 * character.thermal_voltage_volts / character.base_volts_per_input_volt)
         text += self.output_coupling.statements() + self.substituted("\n${p}_out = ${p}_coupling_highpass;")
         return text
 
     def reset_statements(self):
         """The ladder's capacitors and the coupling capacitor empty (a Stop)."""
         return self.substituted("${p}_s1 = 0;\n${p}_s2 = 0;\n${p}_s3 = 0;\n${p}_s4 = 0;\n${p}_x1 = 0;\n${p}_x2 = 0;\n"
-                                "${p}_x3 = 0;\n${p}_x4 = 0;\n${p}_previous_input = 0;\n") + \
-            self.output_coupling.reset_statements()
+                                "${p}_x3 = 0;\n${p}_x4 = 0;\n") + self.output_coupling.reset_statements() + "".join(
+            "\n" + block.reset_statements() for block in (self.upsampler, self.downsampler) if block is not None)

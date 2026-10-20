@@ -15,6 +15,7 @@ Tags: **[VERIFIED]** read in the source itself this session (file, page / equati
 The module: the large-signal model of §3 (five tanh: the input pair and the four stages), the trapezoidal rule on all
 of it with the loop solved by Newton's method (§6), two steps a host sample by default, the cutoff from the control
 node's volts through the exponential converter and fc = If / (8 pi C VT) (§4), the Emphasis pot as the loop's gain k,
+the two steps between the kit's halfband oversampler's upsampler and downsampler (references/dsp.md),
 the output buffer's unity low-frequency gain and its coupling capacitors' 15.4 Hz high-pass (§2.2). Its character
 (§7): VT, C, each stage's capacitor ratio, the input pair's offset, the input buffer's scale, the converter's
 reference current and volts per octave, the Emphasis pot's top k, the coupling corner.
@@ -159,11 +160,15 @@ against hardware [UNVERIFIED].
   | 5, 800 Hz, 3.5, 220 Hz | 0.76 / -194 | 0.12 / -194 | 0.12 / -194 | 0.09 / -194 | 0.09 / -194 | 0.08 / -194 | -192.5 |
 
   So: 2 iterations = converged (1 is not safe); 2 steps a sample buy ~20 dB of aliases where the drive and the
-  cutoff are high; 4 steps with the mean as decimator buy little more (the mean is a weak decimator; a 7-tap
-  half-band at N = 2 gave -55.4 instead of -51.4, not worth its latency). The module: K = 2, `oversampling` 2 by
-  default.
-- Cost (the kit renderer, compiled C, ns a host sample above an empty program, 2026-10-20): the module 259 (1x),
-  472 (2x), 870 (4x); the zero-delay ladder technique 77. So 2x is ~6x the technique.
+  cutoff are high; 4 steps with the mean as decimator buy little more (the mean is a weak decimator).
+- Then the kit's halfband oversampler (HIIR, 99 dB stop band; references/dsp.md "Halfband oversampler") in place of
+  the straight-line input and the steps' mean, K = 2, the module rendered (`moog-research/halfband_try.py`; worst
+  alias, mean -> halfband): drive 10, fc 12 kHz, k 2: -51.4 -> -55.1; drive 20, fc 18 kHz, k 3.9: -34.0 -> -33.9
+  (made above the doubled rate's Nyquist: only more steps would help); drive 5, fc 5 kHz, k 3: -98.0 -> -126.8;
+  drive 10, fc 8 kHz, k 0: -68.3 -> -98.2. The 3rd harmonic stays within 0.45 dB of the reference's. The module: K = 2,
+  `oversampling` 2 (the halfband pair, 3.07 samples late) by default, or 1.
+- Cost (the kit renderer, compiled C, ns a host sample above an empty program, 2026-10-20): the module 247 (1x),
+  497 (2x); the zero-delay ladder technique 74. So 2x is ~6.7x the technique.
 
 ## 7. The character and its defaults
 

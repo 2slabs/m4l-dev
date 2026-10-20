@@ -129,6 +129,12 @@ def _stage_declarations(prefix, coefficients):
                                   for index in range(len(coefficients))) + ";"
 
 
+def _stage_reset_statements(prefix, coefficients):
+    """Every stage's state emptied (a Stop)."""
+    return "\n".join(f"{prefix}_stage_{index}_in_before = 0;\n{prefix}_stage_{index}_out_before = 0;"
+                     for index in range(len(coefficients)))
+
+
 class HalfbandUpsampler(Technique):
     """`<name>_first`, `<name>_second`: `input` at twice the rate, the half-band's images removed. `coefficients`
     (a Python tuple, default the kit's design) is fixed when the instrument is built. State: two per stage."""
@@ -149,6 +155,9 @@ class HalfbandUpsampler(Technique):
         lines += _path_statements(p, self.coefficients, 1, f"{p}_input")
         lines += [f"{p}_first = {p}_path_0;", f"{p}_second = {p}_path_1;"]
         return "\n".join(lines)
+
+    def reset_statements(self):
+        return _stage_reset_statements(self.instance_name, self.coefficients)
 
 
 class HalfbandDownsampler(Technique):
@@ -171,6 +180,9 @@ class HalfbandDownsampler(Technique):
         lines += _path_statements(p, self.coefficients, 1, f"{p}_first")
         lines.append(f"{p}_out = 0.5 * ({p}_path_0 + {p}_path_1);")
         return "\n".join(lines)
+
+    def reset_statements(self):
+        return _stage_reset_statements(self.instance_name, self.coefficients)
 
 
 # The default design's up-then-down phase delay at 100 Hz, in base-rate samples (measured, tests/test_techniques.py)

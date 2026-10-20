@@ -149,7 +149,7 @@ class LargeSignalTests(unittest.TestCase):
         # at the character's k 4.2 the model's oscillation sits 19.6 cents under fc at every cutoff (its stages'
         # tanh lower their gain on the swing: RK4 at 64x, the research table in the reference §6); the module within
         # 0.5 cents of that from 100 Hz to 3 kHz, 1.5 at 8 kHz, 2.5 at 12 kHz (the trapezoid's error on the swing),
-        # its swing 0.115 V at the output's scale (12 kHz: 0.105, the steps' mean, the decimator, takes 9 %)
+        # its swing 0.115 V at the output's scale
         program = ladder_program()
         for cutoff, tolerance in ((100.0, 0.5), (300.0, 0.5), (1000.0, 0.5), (3000.0, 0.5), (8000.0, 1.5),
                                   (12000.0, 2.5)):
@@ -192,7 +192,8 @@ class LargeSignalTests(unittest.TestCase):
 
     def test_oversampling_lowers_the_aliases_of_a_hot_input(self):
         # a 2.5 kHz sine at drive 10 (10.4 V in, 0.52 V at the bases), fc 12 kHz, k 2: the worst folded harmonic
-        # below 20 kHz, dB re the fundamental (research: -30 at 1x, -51 at 2x, the RK4 reference -115)
+        # below 20 kHz, dB re the fundamental (research: -30 at 1x, -55 at 2x through the halfband oversampler, the
+        # RK4 reference -115)
         count, fundamental = 16384, 2500.7
         x = sine(fundamental, 10 * VOLTS_PER_UNIT_DRIVE, count)
         harmonics = range(9, 61, 2)
@@ -203,15 +204,16 @@ class LargeSignalTests(unittest.TestCase):
             out = program.run(count, [x])[1][count // 4:]
             aliases[oversampling] = worst_alias_db(out, fundamental, harmonics, SAMPLERATE, 20000.0)
         self.assertGreater(aliases[1], -36)
-        self.assertLess(aliases[2], -48)
+        self.assertLess(aliases[2], -53)
 
     def test_a_reset_empties_the_ladder(self):
         block = MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0")
-        for state in ("moog_s1 = 0;", "moog_x4 = 0;", "moog_previous_input = 0;", "moog_coupling_s = 0;"):
+        for state in ("moog_s1 = 0;", "moog_x4 = 0;", "moog_coupling_s = 0;", "moog_up_stage_0_in_before = 0;",
+                      "moog_down_stage_7_out_before = 0;"):
             self.assertIn(state, block.reset_statements())
 
     def test_its_cost_is_five_tanh_a_newton_iteration_a_step(self):
-        for oversampling in (1, 2, 4):
+        for oversampling in (1, 2):
             block = MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0",
                                          oversampling=oversampling)
             self.assertEqual(block.statements().count("tanh("), 5 * moog_transistor_ladder.NEWTON_ITERATIONS * oversampling)
@@ -224,7 +226,7 @@ class BuildTests(unittest.TestCase):
             with self.assertRaises(BuildError, msg=bad):
                 MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0",
                                      character=MoogTransistorLadderCharacter(**bad))
-        for oversampling in (0, 1.5, True):
+        for oversampling in (0, 1.5, True, 4):
             with self.assertRaises(BuildError, msg=oversampling):
                 MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0", oversampling=oversampling)
 
