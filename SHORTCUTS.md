@@ -21,8 +21,8 @@ Things done the quick way, to come back to. Each with when it was taken.
   in 44 px dials, played in Live), not from Live's font metrics, which no source gives (references/README.md, "Live's
   control font"). Moved here from 2sl gate. Proper: measure Live's dial / menu / toggle text in Live (a screenshot of
   known strings at known widths), or find the font and its metrics.
-- 2026-10-20: the Moog transistor ladder module's top feedback (`feedback_gain_at_full_emphasis` 4.2) is not the
-  circuit's: the sheets and the Model D service manual give k = 4 at Emphasis 7.5 of 10 and k(10) ~ 8.5 (4 to 15), with a
-  hyperbolic Emphasis law, while the module is linear in k (references/circuits/moog-transistor-ladder.md §2.4, §8).
-  Missing: the 50k REV AUD pot's taper curve (not on any sheet). Proper: a taper field on the character from that
-  curve (or a measured unit), the module's emphasis -> k through it.
+- 2026-10-20: the Moog transistor ladder module's Emphasis runs the circuit's law (k 4 at 7.5 by the Regen Cal) on an
+  UNVERIFIED pot curve: `emphasis_pot_audio_taper_at_half_rotation` 0.10, the common 10 %-at-half audio convention
+  mirrored (references/circuits/moog-transistor-ladder.md §7), not the 50k REV AUD part's (no datasheet, no measured
+  unit). It sets k(10) (7.76 here; 4 to 15 over all curves) and how fast k rises toward 7.5. Proper: the part's
+  datasheet or a measured unit's pot, the default from it.

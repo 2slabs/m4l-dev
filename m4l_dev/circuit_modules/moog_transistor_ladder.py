@@ -25,17 +25,23 @@ hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x
 doubled rate's Nyquist (the research's table, references/circuits/moog-transistor-ladder.md §6).
 
 Inputs (the circuit's): `input_volts` (the audio at the filter's input), `control_volts` (the sum at the control node,
-exponential: `volts_per_octave` a doubling of If), `emphasis` (the Emphasis / Regeneration pot, 0..1, linear in k up
-to the character's `feedback_gain_at_full_emphasis`). Outputs: `<name>_out` (volts: the output buffer's gain makes it
+exponential: `volts_per_octave` a doubling of If), `emphasis` (the Emphasis pot's rotation, 0..1, 0 to 10 on its
+dial). k from the rotation is the circuit's law (references/circuits/moog-transistor-ladder.md §2.4): the 50k
+reverse-audio pot divides the loop's tap (15.1 x the top stage's volts) with the REGEN CAL trim and R76,
+k = tap (R76 + w R73) / (R76 + R73 + Rtop(rotation)), hyperbolic in the pot's resistance above its wiper; the trim w is
+set as the service manual's calibration sets it, so the loop's gain is 4 (regeneration starts) at Emphasis 7.5 of 10
+(`feedback_gain_at_emphasis`, `regeneration_trim_wiper`). With the default taper: k 0.2 at 0, 4 at 7.5, 7.75 at 10. Outputs: `<name>_out` (volts: the output buffer's gain makes it
 the input at low frequencies for k = 0, patent col. 2 l. 6-9; then the output's coupling capacitor's high-pass),
 `<name>_cutoff_hz` (fc, as clamped), `<name>_feedback_gain` (k), `<name>_ladder_current_amps` (If).
-`reset_statements()` empties the ladder.
+`reset_statements()` empties the ladder. `response_script_code()`: the instance's small-signal response and its
+Emphasis law in ES5, for a display (templates/moog-transistor-ladder-response.template.js).
 
 The build character (`MoogTransistorLadderCharacter`): VT, C (the Minimoog's 0.068 uF), each stage's capacitor as a
 ratio (mismatch), the input pair's offset (even harmonics), the mixer's volts-at-the-bases per input volt (an input:
 one full-level mixer channel's source volts; how hot a given level drives it), the converter's reference current and
-volts per octave, the Emphasis pot's top k, and the output coupling corner. The UNVERIFIED defaults (the Emphasis top
-k) are marked; §7 of the reference says which.
+volts per octave, the Emphasis loop's parts (the tap's gain, R76, the REGEN CAL trim, the pot and its taper, the
+calibration's Emphasis) and the output coupling corner. The UNVERIFIED defaults (the pot's taper) are marked; §7 of the
+reference says which.
 """
 
 import dataclasses
@@ -53,6 +59,7 @@ LOWEST_CUTOFF_HZ = 5.0
 STAGES = 4
 OVERSAMPLINGS = (1, 2)                   # once a sample, or twice through the kit's halfband oversampler
 REFERENCE_CUTOFF_HZ = 261.6255653005986  # [DESIGN] 0 V at the control node is middle C
+REGENERATION_ONSET_FEEDBACK_GAIN = 4.0   # [VERIFIED] the ladder self-oscillates from k = 4 (Stinchcombe 2008 §2.5)
 
 
 def ladder_cutoff_hz(ladder_current_amps, ladder_capacitance_farads, thermal_voltage_volts):
@@ -78,7 +85,12 @@ class MoogTransistorLadderCharacter:
     ladder_current_at_zero_control_volts_amps: float = (
         REFERENCE_CUTOFF_HZ * 8 * math.pi * _TYPICAL_CAPACITANCE * _TYPICAL_THERMAL_VOLTAGE)   # [DESIGN] fc(0 V) = C4
     volts_per_octave: float = 1.0                   # the Scale trim's calibration (R49, Minimoog)
-    feedback_gain_at_full_emphasis: float = 4.2     # [UNVERIFIED] the Regen Cal trim's top: k at Emphasis 1
+    emphasis_tap_gain: float = 15.1                 # [DERIVED] ref §2.4: the R3 / R7 tap's volts per top-stage volt
+    regeneration_fixed_ohms: float = 330.0          # [VERIFIED] R76 (Minimoog fig. 9-11)
+    regeneration_trim_ohms: float = 1000.0          # [VERIFIED] R73, the REGEN CAL trimpot (fig. 9-11)
+    emphasis_pot_ohms: float = 50000.0              # [VERIFIED] R14 50k REV AUD (fig. 9-17)
+    emphasis_pot_audio_taper_at_half_rotation: float = 0.10   # [UNVERIFIED] ref §7: the reverse-audio taper's mirror
+    regeneration_onset_emphasis: float = 0.75       # [VERIFIED] Folkman Model D service manual p. 14: trimmed to start at 7.5
     output_coupling_corner_hz: float = 15.4         # [INFERENCE] C5 0.22 uF into R31 47 kOhm (Minimoog fig. 9-11)
 
 
@@ -87,21 +99,75 @@ def check_the_character(character, instance_name):
     positive_fields = ("thermal_voltage_volts", "ladder_capacitance_farads", "stage_1_capacitance_ratio",
                        "stage_2_capacitance_ratio", "stage_3_capacitance_ratio", "stage_4_capacitance_ratio",
                        "base_volts_per_input_volt", "ladder_current_at_zero_control_volts_amps", "volts_per_octave",
-                       "output_coupling_corner_hz")
+                       "output_coupling_corner_hz", "emphasis_tap_gain", "regeneration_fixed_ohms",
+                       "regeneration_trim_ohms", "emphasis_pot_ohms")
     for field_name in positive_fields:
         value = getattr(character, field_name)
         if not (isinstance(value, (int, float)) and math.isfinite(value) and value > 0):
             raise BuildError(f"MoogTransistorLadder {instance_name}: character {field_name} is {value!r}; it must be "
                              "a finite number above 0")
-    for field_name in ("feedback_gain_at_full_emphasis", "input_pair_offset_volts"):
-        value = getattr(character, field_name)
-        if not (isinstance(value, (int, float)) and math.isfinite(value)):
-            raise BuildError(f"MoogTransistorLadder {instance_name}: character {field_name} is {value!r}; it must be "
-                             "a finite number")
-    if character.feedback_gain_at_full_emphasis < 0:
-        raise BuildError(f"MoogTransistorLadder {instance_name}: feedback_gain_at_full_emphasis "
-                         f"{character.feedback_gain_at_full_emphasis} is negative (the loop's sign is fixed by the "
-                         "circuit; the solve's 1 - q4 >= 1 needs k >= 0)")
+    value = character.input_pair_offset_volts
+    if not (isinstance(value, (int, float)) and math.isfinite(value)):
+        raise BuildError(f"MoogTransistorLadder {instance_name}: character input_pair_offset_volts is {value!r}; it "
+                         "must be a finite number")
+    taper = character.emphasis_pot_audio_taper_at_half_rotation
+    if not (isinstance(taper, (int, float)) and 0 < taper < 0.5):
+        raise BuildError(f"MoogTransistorLadder {instance_name}: emphasis_pot_audio_taper_at_half_rotation is "
+                         f"{taper!r}; an audio taper's resistance at half rotation is a fraction in (0, 0.5)")
+    onset = character.regeneration_onset_emphasis
+    if not (isinstance(onset, (int, float)) and 0 <= onset <= 1):
+        raise BuildError(f"MoogTransistorLadder {instance_name}: regeneration_onset_emphasis is {onset!r}; it is a "
+                         "rotation in [0, 1]")
+    wiper = regeneration_trim_wiper(character)
+    if not 0 <= wiper <= 1:
+        raise BuildError(f"MoogTransistorLadder {instance_name}: no REGEN CAL setting starts regeneration at Emphasis "
+                         f"{onset}: the trim's wiper would have to be at {wiper:.3f} of its travel (0..1)")
+
+
+def emphasis_taper_base(character):
+    """b of the audio taper A(t) = (b^t - 1) / (b - 1) (A(0) 0, A(1) 1) with A(1/2) = m, the character's fraction at
+    half rotation: b = ((1 - m) / m)^2."""
+    fraction = character.emphasis_pot_audio_taper_at_half_rotation
+    return ((1 - fraction) / fraction) ** 2
+
+
+def emphasis_pot_ohms_above_wiper(emphasis, character):
+    """Rtop: the 50k reverse-audio pot's resistance from the tap's end (pin 7, the clockwise end) to its wiper at a
+    rotation 0..1 (clamped). A reverse-audio pot is the audio taper mirrored: its resistance from the clockwise end is
+    A(1 - rotation) of the whole."""
+    rotation = min(max(emphasis, 0.0), 1.0)
+    base = emphasis_taper_base(character)
+    return character.emphasis_pot_ohms * (base ** (1 - rotation) - 1) / (base - 1)
+
+
+def regeneration_numerator(character):
+    """tap x (R76 + w R73) with the trim w calibrated (k = 4 at the onset Emphasis): 4 (R76 + R73 + Rtop(onset))."""
+    return REGENERATION_ONSET_FEEDBACK_GAIN * (character.regeneration_fixed_ohms + character.regeneration_trim_ohms
+                                               + emphasis_pot_ohms_above_wiper(character.regeneration_onset_emphasis,
+                                                                               character))
+
+
+def regeneration_trim_wiper(character):
+    """Where the service manual's calibration leaves the REGEN CAL trim's wiper (0 at R76's end, 1 at the pot's)."""
+    return ((regeneration_numerator(character) / character.emphasis_tap_gain - character.regeneration_fixed_ohms)
+            / character.regeneration_trim_ohms)
+
+
+def feedback_gain_at_emphasis(emphasis, character):
+    """k at an Emphasis rotation 0..1 (clamped): the circuit's law, tap (R76 + w R73) / (R76 + R73 + Rtop)."""
+    return regeneration_numerator(character) / (character.regeneration_fixed_ohms + character.regeneration_trim_ohms
+                                                + emphasis_pot_ohms_above_wiper(emphasis, character))
+
+
+def emphasis_for_feedback_gain(feedback_gain, character):
+    """The rotation that gives `feedback_gain` (feedback_gain_at_emphasis's inverse; k(0) <= k <= k(1))."""
+    lowest, highest = feedback_gain_at_emphasis(0.0, character), feedback_gain_at_emphasis(1.0, character)
+    if not lowest <= feedback_gain <= highest:
+        raise BuildError(f"MoogTransistorLadder: the Emphasis reaches k {lowest:.4g} to {highest:.4g}, not {feedback_gain}")
+    ohms_above_wiper = (regeneration_numerator(character) / feedback_gain - character.regeneration_fixed_ohms
+                        - character.regeneration_trim_ohms)
+    base = emphasis_taper_base(character)
+    return min(max(1 - math.log(1 + max(ohms_above_wiper, 0.0) / character.emphasis_pot_ohms * (base - 1), base), 0.0), 1.0)
 
 
 def stage_capacitance_ratios(character):
@@ -227,7 +293,7 @@ ${p}_x4_step_${step} = ${p}_x4;
 ${p}_input = ${input_volts};
 ${p}_ladder_current_amps = ${current_at_zero} * pow(2, ${control_volts} / ${volts_per_octave});
 ${p}_cutoff_hz = clamp(${p}_ladder_current_amps / ${current_per_hz}, ${lowest}, samplerate * ${highest});
-${p}_feedback_gain = clamp(${emphasis}, 0, 1) * ${full_feedback};
+${p}_feedback_gain = ${numerator} / (${loop_ohms} + ${pot_ohms_per_taper_step} * (pow(${taper_base}, 1 - clamp(${emphasis}, 0, 1)) - 1));
 ${p}_warp = tan(pi * ${p}_cutoff_hz / (samplerate * ${steps}));
 ${p}_g1 = ${p}_warp / ${ratio1};
 ${p}_g2 = ${p}_warp / ${ratio2};
@@ -239,7 +305,10 @@ ${p}_offset_drive = ${offset_drive};
             volts_per_octave=character.volts_per_octave,
             current_per_hz=8 * math.pi * character.ladder_capacitance_farads * character.thermal_voltage_volts,
             lowest=LOWEST_CUTOFF_HZ, highest=HIGHEST_CUTOFF_OF_SAMPLE_RATE,
-            full_feedback=character.feedback_gain_at_full_emphasis, steps=str(self.oversampling),
+            numerator=regeneration_numerator(character),
+            loop_ohms=character.regeneration_fixed_ohms + character.regeneration_trim_ohms,
+            pot_ohms_per_taper_step=character.emphasis_pot_ohms / (emphasis_taper_base(character) - 1),
+            taper_base=emphasis_taper_base(character), steps=str(self.oversampling),
             ratio1=ratios[0], ratio2=ratios[1], ratio3=ratios[2], ratio4=ratios[3],
             drive_per_volt=character.base_volts_per_input_volt / (2 * character.thermal_voltage_volts),
             offset_drive=character.input_pair_offset_volts / (2 * character.thermal_voltage_volts))
@@ -260,3 +329,23 @@ ${p}_ladder_volts = ${p}_x4_out * ${volts_out_per_x4};
         return self.substituted("${p}_s1 = 0;\n${p}_s2 = 0;\n${p}_s3 = 0;\n${p}_s4 = 0;\n${p}_x1 = 0;\n${p}_x2 = 0;\n"
                                 "${p}_x3 = 0;\n${p}_x4 = 0;\n") + self.output_coupling.reset_statements() + "".join(
             "\n" + block.reset_statements() for block in (self.upsampler, self.downsampler) if block is not None)
+
+    def response_script_code(self):
+        """ES5 for a display: `<name>_feedback_gain(emphasis)` (k at a rotation 0..1, the circuit's law) and
+        `<name>_response(frequencyHz, cutoffHz, emphasis, sampleRate)`, |small_signal_response| of this instance (its
+        stages' capacitors, its oversampling and the halfband pair's response, its clamps), before the output coupling
+        (templates/moog-transistor-ladder-response.template.js)."""
+        from m4l_dev.generated_scripts import fill_template, kit_template_text
+        character = self.character
+        return fill_template(kit_template_text("moog-transistor-ladder-response.template.js"), {
+            "NAME": self.instance_name,
+            "REGENERATION_NUMERATOR": repr(regeneration_numerator(character)),
+            "LOOP_OHMS": repr(character.regeneration_fixed_ohms + character.regeneration_trim_ohms),
+            "POT_OHMS": repr(character.emphasis_pot_ohms),
+            "TAPER_BASE": repr(emphasis_taper_base(character)),
+            "LOWEST_CUTOFF_HZ": repr(LOWEST_CUTOFF_HZ),
+            "HIGHEST_CUTOFF_OF_SAMPLE_RATE": repr(HIGHEST_CUTOFF_OF_SAMPLE_RATE),
+            "OVERSAMPLING": str(self.oversampling),
+            "STAGE_CAPACITANCE_RATIOS": "[" + ", ".join(repr(float(r)) for r in stage_capacitance_ratios(character)) + "]",
+            "HALFBAND_COEFFICIENTS": "[" + ", ".join(repr(a) for a in halfband_coefficients()) + "]"},
+            "moog-transistor-ladder-response.template.js")

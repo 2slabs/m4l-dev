@@ -18,7 +18,8 @@ node's volts through the exponential converter and fc = If / (8 pi C VT) (§4), 
 the two steps between the kit's halfband oversampler's upsampler and downsampler (references/dsp.md),
 the output buffer's unity low-frequency gain and its coupling capacitors' 15.4 Hz high-pass (§2.2). Its character
 (§7): VT, C, each stage's capacitor ratio, the input pair's offset, the mixer's scale, the converter's
-reference current and volts per octave, the Emphasis pot's top k, the coupling corner.
+reference current and volts per octave, the Emphasis loop's parts (tap gain, R76, the REGEN CAL trim, the 50k pot and
+its taper, the calibration's Emphasis), the coupling corner.
 
 ## 1. The sources
 
@@ -186,7 +187,8 @@ RK4 at 64 x 44.1 kHz of §3's equations (`moog-research/ladder.c` mode 0 in the 
 settled, k / cents re fc / x4's peak: 4.05 / -5.1 / 0.057; 4.2 / -19.6 / 0.110; 4.5 / -42.8 / 0.164. The same at
 1 kHz, 8 kHz, 12 kHz, 16 kHz (to 0.02 cents): it scales with fc, as the model is scale-free in wc. Onset: exactly
 k = 4 (the linearisation). Whether a real Minimoog sings flat by this much at its top Emphasis is not checked
-against hardware [UNVERIFIED].
+against hardware [UNVERIFIED]. The module at the circuit's Emphasis 10 (k 7.76, §2.4 and §7's taper) [MEASURED, the
+module only, no RK4 run at that k]: 124 cents flat at 100 Hz to 3 kHz (119 at 8 kHz), x4's peak 0.286.
 
 ## 6. The solve (research 2026-10-20) [MEASURED]
 
@@ -233,14 +235,19 @@ against hardware [UNVERIFIED].
 | base_volts_per_input_volt | 0.014 | [DERIVED] §2.4: 470 / (470 + 33k), one full-level mixer channel's source volts to Q29's base (was 0.05, a guess; 2026-10-20 the drive per input volt fell 3.6x) |
 | ladder_current_at_zero_control_volts_amps | fc(0 V) = 261.63 Hz | [DESIGN] the RANGE / cutoff knob's offset is the instrument's |
 | volts_per_octave | 1.0 | [UNVERIFIED] §4 |
-| feedback_gain_at_full_emphasis | 4.2 | [UNVERIFIED] kept, though §2.4 says the circuit's k(10) is ~ 8.5 (4 to 15, the pot's taper unknown) with k = 4 at Emphasis 7.5: the module's Emphasis is linear in k, the circuit's hyperbolic, so no top k reproduces both; 4.2 sings (§5: -19.6 cents, x4 swing 0.11) |
+| emphasis_tap_gain | 15.1 | [DERIVED] §2.4: the R3 / R7 tap, 0.083 S x 180 ohm, per volt of the top stage |
+| regeneration_fixed_ohms | 330 | [VERIFIED] R76, fig. 9-11 (§2.4) |
+| regeneration_trim_ohms | 1000 | [VERIFIED] R73 REGEN CAL, fig. 9-11 (§2.4) |
+| emphasis_pot_ohms | 50000 | [VERIFIED] R14 50k REV AUD, fig. 9-17 (§2.4) |
+| emphasis_pot_audio_taper_at_half_rotation | 0.10 | [UNVERIFIED] the pot's curve: an audio taper as the exponential A(t) = (b^t - 1) / (b - 1) through 10 % of the track at half rotation (b = 81), the common "A" / 10 % log convention, mirrored for reverse audio (Rtop(x) = 50k A(1 - x)); no datasheet of this part or measurement of a unit is in references/. It gives Rtop(7.5) = 1.25k (2.5 %, §2.4's "~3 %"), the trim's wiper 0.353 and k(10) = 7.76 (k(0) 0.20) |
+| regeneration_onset_emphasis | 0.75 | [VERIFIED] Folkman p. 14 (§2.4): the trim is set so regeneration (k = 4) starts at Emphasis 7.5; the module computes the trim from it |
 | output_coupling_corner_hz | 15.4 | [DERIVED] §2.2 |
 
 ## 8. Open
 
-- The 50k REV AUD pot's resistance curve (Rtop at 7.5 of 10 sets the circuit's k(10), §2.4) and the module's linear
-  Emphasis -> k law against the circuit's hyperbolic one (oscillation at 7.5 of 10, k ~ 0.2 at 0): a taper field on
-  the character, if wanted; a measurement of one unit's pot or the part's datasheet settles the number.
+- The 50k REV AUD pot's resistance curve: the module runs the circuit's hyperbolic law (§2.4) on a conventional
+  10 %-at-half reverse-audio curve (§7, UNVERIFIED); a measurement of one unit's pot or the part's datasheet settles
+  the curve and with it k(10) (7.76 on the convention; 4 to 15 over all curves).
 - The real circuit's non-idealities the model leaves out (finite beta and base currents, which Stinchcombe §2.4
   blames for the SPICE cutoffs sitting slightly lower than the formula, and which load Q29's / Q30's bases, §2.4; the
   Early effect; the expo converter's temperature drift).
