@@ -22,7 +22,8 @@ over all of them at once in closed form (the input a straight line between sampl
 distance from its rest point (0, x), n ticks take e to A^n e, and A^n = r^(n-1) sin(n th)/sin th A - r^n sin((n-1)
 th)/sin th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the module keeps). The last tick is stepped
 explicitly, so the integrators' rails (a soft clip at full scale) act at the tick rate whenever there is at most one
-tick a sample. Above that the rails act once a host sample.
+tick a sample. Above that the rails act once a host sample: measured, a self-oscillating section is up to 1.9 dB loud
+and 41 cents sharp to 20 kHz and locks to the host rate's fractions (SHORTCUTS.md, 2026-10-19).
 
 What the chip makes and what the host rate would add (measured, research 2026-10-19, against a tick-exact model
 rendered at 32 x and decimated: chip_reference.py in the research's scratchpad):
@@ -35,10 +36,14 @@ rendered at 32 x and decimated: chip_reference.py in the research's scratchpad):
   the residual's fundamental leaves the band. Below 0.35 the output is the chip's staircase, band-limited; above 0.5
   it is the tick sequence, linearly interpolated (images sinc^2 down, -80 dB and lower).
 - Q enhancement: the chip's op amps add phase in the resonant loop, which "enhances the Q value at high clock
-  frequencies" (LTC1060 datasheet p. 8); the datasheet's one number: at 1.4 MHz clock, Q = 5 has "about 8% error".
-  Modelled as the excess-phase law Q' = Q / (1 - Q c f_clock), i.e. the damping q' = q - c f_clock, c fitted to that
-  point (c = 0.0741 / (5 x 1.4 MHz)): the character's `q_enhancement_per_clock_hz`. So a section set just short of oscillation sings at the top of its range
-  (the FB1: "only manages the mid/upper kHz range", SOS 1997).
+  frequencies" (LTC1060 datasheet p. 8). Modelled as a damping offset that does not depend on Q, growing as the op
+  amps settle less and less completely within a clock period: q' = q - A exp(-a / f_clock), A and a fitted to the
+  datasheet's Q-error-vs-clock graphs (3 and 4: mode 1; 16 and 17: mode 3), read out of the PDF's drawing by the figure
+  extractor and fitted per mode, supply and clock ratio (`Q_ENHANCEMENT_FITS`; references/circuits/ltc1060-mf10.md,
+  "Q enhancement"). The character's `chip_mode` and `supply_volts` pick the fit, with `clock_ratio`. The default,
+  mode 3 at +-5 V, fits its drawn curves (Q 5 to 50, to 1.405 MHz at 100:1) within 1.2 %-points of Q error rms, 12 kHz
+  of clock rms; above its highest drawn clock the law is extrapolated. So a section set just short of oscillation
+  sings at the top of its range (the FB1: "only manages the mid/upper kHz range", SOS 1997).
 - Clock feedthrough: the datasheets' 10 mV p-p (LTC1060 "fCLK <= 1MHz", MF10 "Q = 10, Mode 1"): a square at the
   clock, +-5 mV at `clock_feedthrough` 1, through the same band-limiting and fade (none above the host's Nyquist).
 - Rails: the integrators are linear to `rail_knee_of_full_scale` of the op amps' swing (`full_scale_volts`, +-4 V at
@@ -73,6 +78,24 @@ LOWEST_DAMPING = -0.2                # a section can be set past oscillation; th
 DAMPING_MARGIN = 0.05                # below 2 - F: the tick matrix keeps complex eigenvalues
 INPUT_PRE_EMPHASIS_LATENCY_SAMPLES = 1   # the symmetric 3-tap pre-emphasis on the input: its middle tap
 TICK_COUNT_WRAP = 10080              # 2^5 3^2 5 7: 2 x every Harmonics division of the Sherman divides it
+# The Q enhancement, q' = q - amplitude exp(-settling_clock_hz / f_clock), by (chip mode, supply volts (+-), clock
+# ratio): the LTC1060 datasheet's Q-error-vs-clock graphs read and fitted by
+# references/circuits/ltc1060-q-error-graphs/ (its q-error-graphs.json holds the curves, the fits and their errors).
+# Mode 3 at +-7.5 V is Graph 17's mode 3 with R2 = R4; Graph 16 (mode 3, +-2.5 / +-5 V) has a capacitor across R4.
+Q_ENHANCEMENT_FITS = {
+    (1, 2.5, 100): (5.916, 4.311e6),      # Graph 3
+    (1, 5.0, 100): (24.94, 1.056e7),      # Graph 3
+    (1, 2.5, 50): (2.066, 2.754e6),       # Graph 3
+    (1, 5.0, 50): (22.38, 8.962e6),       # Graph 3
+    (1, 7.5, 100): (16.03, 1.170e7),      # Graph 4
+    (1, 7.5, 50): (33.05, 1.119e7),       # Graph 4
+    (3, 2.5, 100): (0.9676, 3.001e6),     # Graph 16
+    (3, 5.0, 100): (3.530, 6.666e6),      # Graph 16
+    (3, 2.5, 50): (0.2833, 1.597e6),      # Graph 16
+    (3, 5.0, 50): (5.538, 5.828e6),       # Graph 16
+    (3, 7.5, 100): (10.06, 9.261e6),      # Graph 17
+    (3, 7.5, 50): (399.7, 1.197e7),       # Graph 17
+}
 
 FUNCTIONS = {
     "ltc1060_mf10_rail": """// an integrator's output against its op amp's rail: linear to the knee, then rounding off at full scale (1)
@@ -92,7 +115,10 @@ class Ltc1060Mf10Character:
     full_scale_volts: float = 4.0                  # the op amps' swing at +-5 V (MF10 p. 4: +-3.8 V min, +-4.25 V typ)
     rail_knee_of_full_scale: float = 0.8           # the integrators are linear to here, then round off into the rail
     clock_feedthrough_volts_peak_to_peak: float = 0.010   # LTC1060 p. 2 "fCLK <= 1MHz"; MF10 p. 4 "Q = 10, Mode 1"
-    q_enhancement_per_clock_hz: float = 0.0741 / (5 * 1.4e6)   # LTC1060 p. 8: Q = 5 "about 8% error" at 1.4 MHz
+    # the chip's configuration and supply, which pick its Q enhancement (Q_ENHANCEMENT_FITS): mode 3 is the one whose
+    # pins are this module's (HP, BP, LP: LTC1060 p. 13, Figure 11, "Mode 3: 2nd Order Filter Providing Highpass, Bandpass, Lowpass"); +-5 V the supply full_scale_volts is for
+    chip_mode: int = 3
+    supply_volts: float = 5.0
 
     @property
     def clock_feedthrough_of_full_scale(self):
@@ -128,6 +154,12 @@ class Ltc1060Mf10Section(CircuitModule):
                              f"got {clock_ratio!r}")
         self.clock_ratio = clock_ratio
         self.tick_coefficient = 2 * math.sin(math.pi / clock_ratio)
+        fit_key = (self.character.chip_mode, self.character.supply_volts, clock_ratio)
+        if fit_key not in Q_ENHANCEMENT_FITS:
+            raise BuildError(f"Ltc1060Mf10Section {instance_name}: the datasheet draws no Q error for mode "
+                             f"{fit_key[0]!r} at +-{fit_key[1]!r} V and {clock_ratio}:1; it draws "
+                             f"{sorted(Q_ENHANCEMENT_FITS)}")
+        self.q_enhancement_amplitude, self.q_enhancement_settling_clock_hz = Q_ENHANCEMENT_FITS[fit_key]
         self.divided_from = divided_from
         self.edges = BandLimitedEdges(f"{instance_name}_edges", naive=f"{instance_name}_naive", oversampling=1)
         self.latency_samples = INPUT_PRE_EMPHASIS_LATENCY_SAMPLES + self.edges.latency_samples
@@ -189,8 +221,10 @@ ${p}_tick_count = ${p}_tick_count + ${p}_ticks - ${wrap} * floor((${p}_tick_coun
 // (the phase kept a hair under 1: count + phase must not round up to the next tick's count before it happens)
 ${p}_tick_time = ${p}_tick_count + min(${p}_phase, 0.999999);
 ${p}_ticked = ${p}_ticks > 0;
-// the damping with the chip's Q enhancement, kept where the tick matrix's eigenvalues stay complex
-${p}_q = clamp(${damping} - ${enhancement} * ${p}_clock_hz, ${lowest_damping}, ${highest_damping});
+// the damping with the chip's Q enhancement (none while held: the clock floored at 1 Hz, where it is 0), kept where
+// the tick matrix's eigenvalues stay complex
+${p}_q_enhancement = ${enhancement_amplitude} * exp(0 - ${settling_clock_hz} / max(${p}_clock_hz, 1));
+${p}_q = clamp(${damping} - ${p}_q_enhancement, ${lowest_damping}, ${highest_damping});
 ${p}_a11 = 1 - ${F} * ${p}_q;
 ${p}_a22 = 1 - ${F} * ${F};
 ${p}_last_tick_time = 1;
@@ -248,7 +282,8 @@ ${p}_half_time = ${p}_half_crossed > 0 ? (${p}_half_index + 0.5 - ${p}_phase_bef
 ${p}_half_jump = -2 * ${p}_feedthrough_level;
 ${p}_naive = ${lowpass_gain} * ${p}_out_lp + ${bandpass_gain} * ${p}_out_bp + ${highpass_gain} * ${p}_out_hp + ${p}_feedthrough_level * (${p}_phase < 0.5 ? 1 : -1);
 ${p}_previous_tick_input = ${p}_tick_input;
-""", F=repr(F), wrap=TICK_COUNT_WRAP, enhancement=self.character.q_enhancement_per_clock_hz,
+""", F=repr(F), wrap=TICK_COUNT_WRAP, enhancement_amplitude=repr(self.q_enhancement_amplitude),
+            settling_clock_hz=repr(self.q_enhancement_settling_clock_hz),
             lowest_damping=LOWEST_DAMPING, highest_damping=highest_damping(self.clock_ratio), gone=RESIDUAL_GONE_AT,
             fade=RESIDUAL_GONE_AT - RESIDUAL_FULL_BELOW,
             feedthrough_amplitude=self.character.clock_feedthrough_of_full_scale,

@@ -3,6 +3,7 @@ our GenExpr renderer (ours, not Max's compiler), each on a small harness (tests/
 length that still tests it. The claims are stated in fractions of the chip's full scale: the harness feeds the section
 volts (in1 x full scale) and reads its output back in full scale. Standard library only."""
 import cmath
+import json
 import math
 import os
 import sys
@@ -12,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.ltc1060_mf10_section import (Ltc1060Mf10Character,  # noqa: E402
+from m4l_dev.circuit_modules.ltc1060_mf10_section import (Q_ENHANCEMENT_FITS, Ltc1060Mf10Character,  # noqa: E402
                                                           Ltc1060Mf10Section, response_script_code,
                                                           small_signal_response)
 from gen_block_harness import (amplitude_at, complex_amplitude_at, frequency_by_zero_crossings,  # noqa: E402
@@ -144,6 +145,35 @@ class Ltc1060Mf10SectionTests(unittest.TestCase):
         high = section("bandpass", cutoff=12000.0, damping=0.008).run(17640, [kicked(17640)])[0]
         self.assertGreater(rms(high[-2205:]), 0.3)
 
+    def test_the_q_enhancement_rings_down_at_the_fitted_laws_damping(self):
+        # a ring at 12 kHz (1.2 MHz clock) decays per tick by sqrt(1 - F q'), q' = q - A exp(-a / f_clock): measured
+        # over two 10 ms windows, against the law (and far from no enhancement: 7.5 and 18.9 nepers)
+        amplitude, settling_clock_hz = Q_ENHANCEMENT_FITS[(3, 5.0, 100)]
+        tick_coefficient = 2 * math.sin(math.pi / 100)
+        for damping, without_enhancement in ((0.02, 7.54), (0.05, 18.88)):
+            out = section("bandpass", cutoff=12000.0, damping=damping).run(2205, [kicked(2205)])[0]
+            nepers_per_10_ms = math.log(rms(out[441:882]) / rms(out[882:1323]))
+            enhanced = damping - amplitude * math.exp(-settling_clock_hz / 1.2e6)
+            predicted = -1.2e6 * 0.5 * math.log(1 - tick_coefficient * enhanced) * 0.01
+            self.assertAlmostEqual(nepers_per_10_ms, predicted, delta=0.01 * predicted)
+            self.assertLess(nepers_per_10_ms, 0.75 * without_enhancement)
+
+    def test_the_q_enhancement_fits_are_the_reference_readings(self):
+        # Q_ENHANCEMENT_FITS is references/circuits/ltc1060-q-error-graphs/q-error-graphs.json's fits, to 4 digits
+        reading = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "references", "circuits",
+                               "ltc1060-q-error-graphs", "q-error-graphs.json")
+        with open(reading) as handle:
+            graphs = json.load(handle)["graphs"]
+        fitted = {}
+        for graph in graphs:
+            for fit in graph["fits"]:
+                key = (int(graph["mode"][0]), float(fit["supply"].strip("±V")), fit["clock_ratio"])
+                fitted[key] = (fit["amplitude"], fit["settling_clock_hz"])
+        self.assertEqual(set(fitted), set(Q_ENHANCEMENT_FITS))
+        for key, (amplitude, settling_clock_hz) in fitted.items():
+            self.assertAlmostEqual(Q_ENHANCEMENT_FITS[key][0] / amplitude, 1, delta=5e-4, msg=str(key))
+            self.assertAlmostEqual(Q_ENHANCEMENT_FITS[key][1] / settling_clock_hz, 1, delta=5e-4, msg=str(key))
+
     def test_its_latency_is_the_input_and_the_edges_three_samples(self):
         # latency_samples: one for the input's pre-emphasis, two for the edges' look-ahead; rendered: a 100 Hz sine
         # through the lowpass at 15 kHz comes out that many samples late, past the response's own phase
@@ -190,6 +220,10 @@ class Ltc1060Mf10SectionTests(unittest.TestCase):
         with self.assertRaises(BuildError):
             Ltc1060Mf10Section("sc", input_volts="in1", clock_hz="100", damping="1", hold="0", clock_feedthrough="0",
                                lowpass_gain="1", bandpass_gain="0", highpass_gain="0", character=0.8)
+        with self.assertRaises(BuildError):
+            Ltc1060Mf10Section("sc", input_volts="in1", clock_hz="100", damping="1", hold="0", clock_feedthrough="0",
+                               lowpass_gain="1", bandpass_gain="0", highpass_gain="0",
+                               character=Ltc1060Mf10Character(supply_volts=6.0))
 
 
 if __name__ == "__main__":

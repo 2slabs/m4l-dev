@@ -1,0 +1,1067 @@
+{
+ "source": "LTC1060 datasheet rev. 1060fb, sha256 4114b99dbe5fef8ed1ef7520f69f27209bbbf7cae50a88ef507bd95fb960bf25",
+ "reader": "the monitoring repo's tools/figures/extract_vector_pdf_figures.py primitives, calibration tolerance 0.6 pt",
+ "law": "q' = q - amplitude * exp(-settling_clock_hz / f_clk)",
+ "graphs": [
+  {
+   "graph": "3",
+   "pdf_page": 4,
+   "mode": "1",
+   "calibration": {
+    "x_worst_residual_pt": 0.3941,
+    "y_worst_residual_pt": 0.063
+   },
+   "fits": [
+    {
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "amplitude": 5.915869287473451,
+     "settling_clock_hz": 4311312.87477343,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 820100.0,
+     "rms_deviation_error_percent_points": 1.6566098361892803,
+     "worst_deviation_error_percent_points": -2.5363987930666205,
+     "rms_clock_error_khz": 8.382872922632922,
+     "worst_clock_error_khz": 14.050457819030026,
+     "worst_deviation_at_drawn_knees_percent": 0.4933095880124141
+    },
+    {
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "amplitude": 24.942803389033152,
+     "settling_clock_hz": 10564275.590721413,
+     "fitted_vertices": 5,
+     "highest_drawn_clock_hz": 1602200.0,
+     "rms_deviation_error_percent_points": 2.080068345110697,
+     "worst_deviation_error_percent_points": -3.585627994002735,
+     "rms_clock_error_khz": 15.802674412369182,
+     "worst_clock_error_khz": 27.29489378513228,
+     "worst_deviation_at_drawn_knees_percent": 6.768450558357951
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "amplitude": 2.0664220979483656,
+     "settling_clock_hz": 2754096.4800315285,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 663500.0,
+     "rms_deviation_error_percent_points": 0.5304983258443742,
+     "worst_deviation_error_percent_points": 0.60539878588785,
+     "rms_clock_error_khz": 2.6731522667448107,
+     "worst_clock_error_khz": 4.0423399958451345,
+     "worst_deviation_at_drawn_knees_percent": 0.39764159281750894
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "amplitude": 22.376078959627105,
+     "settling_clock_hz": 8961755.198496992,
+     "fitted_vertices": 5,
+     "highest_drawn_clock_hz": 1397400.0,
+     "rms_deviation_error_percent_points": 1.8828374218585262,
+     "worst_deviation_error_percent_points": -3.0859593769651745,
+     "rms_clock_error_khz": 14.562440987467356,
+     "worst_clock_error_khz": 23.86667160568323,
+     "worst_deviation_at_drawn_knees_percent": 2.16344876122017
+    }
+   ],
+   "curves": [
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.3536,
+       0.268
+      ],
+      [
+       0.5685,
+       15.834
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.4268,
+       0.268
+      ],
+      [
+       0.6234,
+       15.834
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.4588,
+       0.268
+      ],
+      [
+       0.7286,
+       17.97
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.4817,
+       0.268
+      ],
+      [
+       0.8201,
+       17.97
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 100,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9985,
+       0.268
+      ],
+      [
+       1.0671,
+       12.782
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9985,
+       0.268
+      ],
+      [
+       1.1769,
+       19.802
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0717,
+       0.268
+      ],
+      [
+       1.2912,
+       19.802
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.09,
+       0.268
+      ],
+      [
+       1.4604,
+       19.802
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.1403,
+       0.268
+      ],
+      [
+       1.6022,
+       19.802
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.2534,
+       0.191
+      ],
+      [
+       0.4225,
+       18.41
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.2857,
+       0.191
+      ],
+      [
+       0.5017,
+       19.975
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.3177,
+       0.191
+      ],
+      [
+       0.5736,
+       19.975
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.3501,
+       0.191
+      ],
+      [
+       0.6635,
+       20.031
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 100,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.7747,
+       0.191
+      ],
+      [
+       0.9226,
+       14.679
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8055,
+       0.191
+      ],
+      [
+       1.0125,
+       19.919
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8515,
+       0.191
+      ],
+      [
+       1.1384,
+       19.975
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8893,
+       0.191
+      ],
+      [
+       1.2211,
+       20.095
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9441,
+       0.191
+      ],
+      [
+       1.3974,
+       19.975
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "graph": "4",
+   "pdf_page": 4,
+   "mode": "1",
+   "calibration": {
+    "x_worst_residual_pt": 0.3951,
+    "y_worst_residual_pt": 0.2805
+   },
+   "fits": [
+    {
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "amplitude": 16.030145870603484,
+     "settling_clock_hz": 11695449.89195845,
+     "fitted_vertices": 7,
+     "highest_drawn_clock_hz": 1993700.0,
+     "rms_deviation_error_percent_points": 7.674101574613041,
+     "worst_deviation_error_percent_points": 11.988517361883023,
+     "rms_clock_error_khz": 76.78324062509965,
+     "worst_clock_error_khz": -135.26535669585127,
+     "worst_deviation_at_drawn_knees_percent": 3.7174396407016856
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "amplitude": 33.04895933142869,
+     "settling_clock_hz": 11188338.343098463,
+     "fitted_vertices": 7,
+     "highest_drawn_clock_hz": 1708500.0,
+     "rms_deviation_error_percent_points": 4.823618948536752,
+     "worst_deviation_error_percent_points": 9.633860456876572,
+     "rms_clock_error_khz": 45.33672015042011,
+     "worst_clock_error_khz": 93.53716177346926,
+     "worst_deviation_at_drawn_knees_percent": 3.185163575597216
+    }
+   ],
+   "curves": [
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 400,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.967,
+       0.166
+      ],
+      [
+       1.0843,
+       10.357
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 200,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0095,
+       0.166
+      ],
+      [
+       1.1489,
+       13.508
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 100,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0543,
+       0.193
+      ],
+      [
+       1.2015,
+       17.799
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.1409,
+       0.166
+      ],
+      [
+       1.444,
+       20.749
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.1995,
+       0.22
+      ],
+      [
+       1.636,
+       20.749
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.1712,
+       0.22
+      ],
+      [
+       1.6966,
+       13.307
+      ],
+      [
+       1.9937,
+       17.397
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 400,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8628,
+       0.341
+      ],
+      [
+       0.9657,
+       12.845
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 200,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8829,
+       0.136
+      ],
+      [
+       1.0444,
+       14.691
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 100,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9152,
+       0.204
+      ],
+      [
+       1.1211,
+       17.423
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9495,
+       0.273
+      ],
+      [
+       1.2543,
+       18.722
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0393,
+       0.273
+      ],
+      [
+       1.4481,
+       20.02
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0646,
+       0.395
+      ],
+      [
+       1.22,
+       3.416
+      ],
+      [
+       1.7085,
+       23.915
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "graph": "16",
+   "pdf_page": 5,
+   "mode": "3",
+   "calibration": {
+    "x_worst_residual_pt": 0.3532,
+    "y_worst_residual_pt": 0.236
+   },
+   "fits": [
+    {
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "amplitude": 0.967621488769288,
+     "settling_clock_hz": 3000867.394766769,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 823400.0,
+     "rms_deviation_error_percent_points": 5.597268347418678,
+     "worst_deviation_error_percent_points": 9.828179014443776,
+     "rms_clock_error_khz": 39.89241246784549,
+     "worst_clock_error_khz": 64.61872113430478,
+     "worst_deviation_at_drawn_knees_percent": 8.363570567648082
+    },
+    {
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "amplitude": 3.5296860025571415,
+     "settling_clock_hz": 6666200.158206347,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 1405300.0,
+     "rms_deviation_error_percent_points": 1.242651839878065,
+     "worst_deviation_error_percent_points": -1.879943919760926,
+     "rms_clock_error_khz": 11.964135355153966,
+     "worst_clock_error_khz": 19.1522012555152,
+     "worst_deviation_at_drawn_knees_percent": 2.332218524372963
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "amplitude": 0.28330986445260764,
+     "settling_clock_hz": 1596587.2271614305,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 639900.0,
+     "rms_deviation_error_percent_points": 7.683123427790936,
+     "worst_deviation_error_percent_points": 13.722157804297218,
+     "rms_clock_error_khz": 61.94946340999152,
+     "worst_clock_error_khz": 105.52063239946973,
+     "worst_deviation_at_drawn_knees_percent": 3.4948508787404418
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "amplitude": 5.5379121525627735,
+     "settling_clock_hz": 5827764.49702235,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 1124600.0,
+     "rms_deviation_error_percent_points": 3.3081545144076725,
+     "worst_deviation_error_percent_points": 6.085957611773271,
+     "rms_clock_error_khz": 18.725097931085667,
+     "worst_clock_error_khz": -30.89934263296412,
+     "worst_deviation_at_drawn_knees_percent": 2.9514723422955687
+    }
+   ],
+   "curves": [
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.4132,
+       0.271
+      ],
+      [
+       0.4518,
+       7.418
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.5432,
+       0.271
+      ],
+      [
+       0.676,
+       19.785
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.578,
+       0.271
+      ],
+      [
+       0.7425,
+       19.738
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±2.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.6167,
+       0.271
+      ],
+      [
+       0.8234,
+       19.738
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.6669,
+       0.271
+      ],
+      [
+       0.9549,
+       19.785
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8293,
+       0.271
+      ],
+      [
+       1.1115,
+       19.797
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.868,
+       0.271
+      ],
+      [
+       1.2236,
+       19.797
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9685,
+       0.271
+      ],
+      [
+       1.4053,
+       17.5
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.2223,
+       0.163
+      ],
+      [
+       0.319,
+       12.064
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.2726,
+       0.163
+      ],
+      [
+       0.5046,
+       17.756
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.3074,
+       0.163
+      ],
+      [
+       0.5664,
+       19.955
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±2.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.4273,
+       0.163
+      ],
+      [
+       0.6399,
+       19.955
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.5394,
+       0.163
+      ],
+      [
+       0.7497,
+       14.309
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 20,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.7056,
+       0.163
+      ],
+      [
+       0.9274,
+       19.965
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.7365,
+       0.163
+      ],
+      [
+       0.991,
+       20.013
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.8254,
+       0.225
+      ],
+      [
+       1.1246,
+       20.006
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "graph": "17",
+   "pdf_page": 5,
+   "mode": "3 (R2 = R4)",
+   "calibration": {
+    "x_worst_residual_pt": 0.3532,
+    "y_worst_residual_pt": 0.236
+   },
+   "fits": [
+    {
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "amplitude": 10.05523135944036,
+     "settling_clock_hz": 9260923.147393372,
+     "fitted_vertices": 4,
+     "highest_drawn_clock_hz": 1597700.0,
+     "rms_deviation_error_percent_points": 4.557645245884009,
+     "worst_deviation_error_percent_points": 8.844908052684172,
+     "rms_clock_error_khz": 32.902242129557045,
+     "worst_clock_error_khz": -44.771871419784226,
+     "worst_deviation_at_drawn_knees_percent": 2.2772983392128485
+    },
+    {
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "amplitude": 399.74010249659904,
+     "settling_clock_hz": 11971007.75486855,
+     "fitted_vertices": 5,
+     "highest_drawn_clock_hz": 1275100.0,
+     "rms_deviation_error_percent_points": 1.3461653176608082,
+     "worst_deviation_error_percent_points": 2.3326858689883174,
+     "rms_clock_error_khz": 15.812718927197343,
+     "worst_clock_error_khz": 30.552164111839918,
+     "worst_deviation_at_drawn_knees_percent": 0.9905825601196931
+    }
+   ],
+   "curves": [
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9238,
+       0.099
+      ],
+      [
+       1.1988,
+       19.691
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0437,
+       0.292
+      ],
+      [
+       1.4566,
+       19.801
+      ]
+     ]
+    },
+    {
+     "half": "upper",
+     "clock_ratio": 100,
+     "supply": "±7.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       1.0192,
+       0.158
+      ],
+      [
+       1.1595,
+       2.307
+      ],
+      [
+       1.5977,
+       19.715
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 50,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.7802,
+       0.286
+      ],
+      [
+       0.9254,
+       4.108
+      ],
+      [
+       1.0315,
+       19.948
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 10,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.9267,
+       0.317
+      ],
+      [
+       1.1941,
+       19.949
+      ]
+     ]
+    },
+    {
+     "half": "lower",
+     "clock_ratio": 50,
+     "supply": "±7.5V",
+     "q": 5,
+     "points_fclk_mhz_deviation_percent": [
+      [
+       0.7662,
+       0.274
+      ],
+      [
+       0.9947,
+       1.727
+      ],
+      [
+       1.2751,
+       19.949
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}

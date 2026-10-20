@@ -26,12 +26,17 @@ Things done the quick way, to come back to. Each with when it was taken.
   mirrored (references/circuits/moog-transistor-ladder.md §7), not the 50k REV AUD part's (no datasheet, no measured
   unit). It sets k(10) (7.76 here; 4 to 15 over all curves) and how fast k rises toward 7.5. Proper: the part's
   datasheet or a measured unit's pot, the default from it.
-- 2026-10-19: the LTC1060 / MF10 section's Q enhancement (`m4l_dev/circuit_modules/ltc1060_mf10_section.py`) is fitted
-  to the LTC1060 datasheet's one stated number (50:1, mode 1, +-7.5 V, 1.4 MHz: Q 5 about 8 % high) with an
-  excess-phase law; the Sherman's mode (probably 3, "slower") at 100:1 is unmeasured, and the datasheet's graphs (Q
-  error vs clock) aren't read. Proper: read the graphs through an extractor, or measure a chip. Moved here from 2sl
-  filter.
 - 2026-10-19: above one clock tick a host sample (centres over 441 Hz at 44.1 kHz, 100:1) the LTC1060 / MF10 section's
-  rails act once a host sample, not once a tick (the block steps the ticks in closed form). Only matters in
-  self-oscillation at high cutoffs (its level, a little). Proper, if it matters: GenExpr loops (Max has them; the kit
-  renderer doesn't). Moved here from 2sl filter.
+  rails act once a host sample, not once a tick (the block steps the ticks in closed form). Moved here from 2sl filter.
+  2026-10-20, measured: IT MATTERS. Self-oscillation from a kick, BP pin, damping -0.08 (2sl filter's filter 2 at full
+  Reso), -0.2 (the floor) and 0.008 (its filter 1, oscillating above ~11 kHz), the module at 44.1 / 48 kHz against
+  itself at 64 x 44.1 kHz, where each tick has its own sample (converged: 128 x reads the same to 0.01 dB, 0.1 cent).
+  The reference sits at -0.6 to -0.9 dB of full scale at every centre; the host-rate section is louder, more so as
+  the centre rises: +0.25 dB at 1 kHz, +0.5 at 2 kHz, +0.75 to +0.85 at 4 kHz, +1.1 to +1.2 at 8 kHz, +1.3 to +1.9 at
+  16 to 20 kHz, +5.9 at 22 kHz; and sharp: 4 to 17 cents at 4 kHz, 9 to 41 at 8 kHz. Worse, it LOCKS to the host
+  rate's fractions: at 48 kHz every centre from 11.7 to 12.3 kHz oscillates at exactly 12 kHz (fs / 4), 3.3 to 3.6 dB
+  loud, up to 57 cents off (a self-oscillating sweep stalls there); at 44.1 kHz the centres near 22 kHz sit at
+  22.05 kHz. The harmonics' shape holds (the 3rd within 0.6 dB; even harmonics -55 dB and lower where the reference
+  has none). A loud input driven into the rails is the same mechanism, not measured. Proper: step each tick with its
+  rails in a GenExpr loop (Max's gen~ has for / while; the kit's renderer, m4l_dev/genexpr.py, must learn them
+  first), at least while the section is near or past oscillation.
