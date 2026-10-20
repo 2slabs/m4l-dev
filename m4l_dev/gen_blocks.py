@@ -90,12 +90,17 @@ class CircuitModule(GenBlock):
     techniques. Its inputs are the real circuit's controls and CV in the circuit's units (volts at its pins, its clock
     in Hz); its build character (rails, trims, tolerances, a unit's leakage) is `character`, an instance of the
     module's `character_type` (a frozen dataclass of numbers whose defaults are the datasheet's typical unit), so two
-    instances can be two different units. Subclasses set `references_entry` to the circuit's own file in
+    instances can be two different units. An instrument that exposes a unit's character (2sl phaser's Cells page) moves
+    some fields at run time: `character_inputs` {field: GenExpr expression}, only the module's
+    `runtime_character_fields`; `character` still holds the numbers (its Python model, the parts it keeps fixed). Subclasses set `references_entry` to the circuit's own file in
     references/circuits/ (schematic, datasheet: quoted, with pages) and `character_type`."""
 
     character_type = None
+    # The character fields an instrument may move at run time (`character_inputs`); a module lists the ones its code
+    # reads through `character_term` and whose run-time motion it keeps sound.
+    runtime_character_fields = ()
 
-    def __init__(self, instance_name, character=None, **input_expressions):
+    def __init__(self, instance_name, character=None, character_inputs=None, **input_expressions):
         super().__init__(instance_name, **input_expressions)
         if character is None:
             character = self.character_type()
@@ -103,6 +108,22 @@ class CircuitModule(GenBlock):
             raise BuildError(f"{type(self).__name__} {instance_name}: its character must be a "
                              f"{self.character_type.__name__}, got {character!r}")
         self.character = character
+        self.character_inputs = {}
+        for field_name, expression in (character_inputs or {}).items():
+            if field_name not in self.runtime_character_fields:
+                raise BuildError(f"{type(self).__name__} {instance_name}: character_inputs names {field_name!r}, "
+                                 f"which is not one of its run-time character fields {list(self.runtime_character_fields)}")
+            if not isinstance(expression, str) or not expression.strip():
+                raise BuildError(f"{type(self).__name__} {instance_name}: character input {field_name} must be a "
+                                 f"GenExpr expression, got {expression!r}")
+            self.character_inputs[field_name] = f"({expression})"
+
+    def character_term(self, field_name):
+        """A character field as the module's code reads it: the instrument's GenExpr expression when it moves the field
+        at run time (`character_inputs`), else the build's number."""
+        if field_name in self.character_inputs:
+            return self.character_inputs[field_name]
+        return getattr(self.character, field_name)
 
 
 def gen_code_with_blocks(template_text, blocks, template_name, other_replacements=None):

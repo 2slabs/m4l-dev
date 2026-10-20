@@ -34,6 +34,11 @@ others are warped (at 44.1 kHz the top notch of a 1.8 kHz corner sits 6.5 % low)
 What no source gives is the character (`MutronBiPhaseCharacter`), each default labelled UNVERIFIED there: the cells'
 law and times (a VTL5C3/2-like LED + CdS cell stands in), the LED driver's current span and curve (log-linear: equal
 sweep steps equal octaves, the gate's practice), the sweep's shape, the feedback pot's taper, R123's setting, the rails.
+The unknowns that shape the sweep can be moved at run time (`character_inputs`, RUNTIME_CHARACTER_FIELDS: the sweep
+cells' law, the LED's dark and full currents, the cells' times, the stages' spread, the sine's roundness, the feedback
+pot's taper), so an instrument can hunt the unit by ear (2sl phaser's Cells page). They move the twelve sweep cells
+only: the bypass cell PM1 is another part (PE613-12), trimmed by R123 against its own law, so it stays at the
+character's numbers (the dry / wet balance does not follow the hunt).
 
 Inputs, all GenExpr expressions in the circuit's units: `input_a_volts`, `input_b_volts`; `rate_1_hz`, `rate_2_hz`
 (held to 0.1-18 Hz: the manual's range; the pot's law is unknown, so the rate itself); `shape_1`, `shape_2` (> 0.5:
@@ -75,6 +80,9 @@ PEDAL_FULL_SCALE_VOLTS = 5.0             # the C-100 "puts out 0-5 volts" (Muzin
 SLOWEST_SWEEP_HZ, FASTEST_SWEEP_HZ = 0.1, 18.0   # the manual: "from 0.1Hz ... to 18Hz"
 # A fixed pattern for the six parts' spread (each phasor its own), scaled by the character's stage_corner_spread
 STAGE_SPREAD_PATTERN = {"a": (0.62, -0.91, 0.18, 1.0, -0.37, -0.52), "b": (-0.44, 0.83, -1.0, 0.29, 0.71, -0.08)}
+RUNTIME_CHARACTER_FIELDS = ("cell_law_scale_ohms", "cell_law_exponent", "cell_law_floor_ohms", "led_current_dark_amps",
+                            "led_current_full_amps", "cell_attack_ms", "cell_release_ms", "stage_corner_spread",
+                            "sweep_sine_roundness", "feedback_pot_taper_exponent")
 if STAGES_PER_PHASOR % 2 or any(len(pattern) != STAGES_PER_PHASOR for pattern in STAGE_SPREAD_PATTERN.values()):
     # the circuit's stage is -(the technique's section): only an even count of them keeps the sign
     raise BuildError("mutron_bi_phase.py: each phasor is an even number of stages, one spread ratio each")
@@ -184,35 +192,58 @@ def phasor_small_signal_response(frequency_hz, sweep_cell_ohms, feedback_rotatio
     return 1 + alpha * one_pole_response(frequency_hz, mix_corner, sample_rate)["highpass"] * (wet - 1)
 
 
+def _expression(term):
+    """A character term (a number or a run-time expression) as GenExpr text."""
+    return term if isinstance(term, str) else repr(float(term))
+
+
+def _ratio(numerator, denominator):
+    """numerator / denominator, folded to a number when both are numbers."""
+    if isinstance(numerator, str) or isinstance(denominator, str):
+        return f"{_expression(numerator)} / {_expression(denominator)}"
+    return numerator / denominator
+
+
 class MutronBiPhase(CircuitModule):
     """`<name>_out_a`, `<name>_out_b` (volts): the Bi-Phase's two outputs (see the module docstring for the inputs);
     `<name>_corner_a_hz`, `<name>_corner_b_hz`, `<name>_sweep_a`, `<name>_sweep_b`."""
 
     references_entry = "references/circuits/mutron-bi-phase.md"
     character_type = MutronBiPhaseCharacter
+    runtime_character_fields = RUNTIME_CHARACTER_FIELDS
 
     def __init__(self, instance_name, *, input_a_volts, input_b_volts, rate_1_hz, rate_2_hz, shape_1, shape_2,
                  depth_a, depth_b, feedback_a, feedback_b, sweep_a_source, sweep_b_source, sweep_sync,
-                 phasor_b_input, foot_switch_a, foot_switch_b, pedal_volts, character=None):
-        super().__init__(instance_name, character=character, input_a_volts=input_a_volts,
+                 phasor_b_input, foot_switch_a, foot_switch_b, pedal_volts, character=None, character_inputs=None):
+        super().__init__(instance_name, character=character, character_inputs=character_inputs,
+                         input_a_volts=input_a_volts,
                          input_b_volts=input_b_volts, rate_1_hz=rate_1_hz, rate_2_hz=rate_2_hz, shape_1=shape_1,
                          shape_2=shape_2, depth_a=depth_a, depth_b=depth_b, feedback_a=feedback_a,
                          feedback_b=feedback_b, sweep_a_source=sweep_a_source, sweep_b_source=sweep_b_source,
                          sweep_sync=sweep_sync, phasor_b_input=phasor_b_input, foot_switch_a=foot_switch_a,
                          foot_switch_b=foot_switch_b, pedal_volts=pedal_volts)
-        p, c = instance_name, self.character
-        cell_law = dict(law_scale_ohms=c.cell_law_scale_ohms, law_exponent=c.cell_law_exponent,
-                        law_floor_ohms=c.cell_law_floor_ohms, darkest_current_amps=c.led_current_dark_amps,
-                        release_from_amps=c.led_current_full_amps, release_to_amps=c.led_current_dark_amps)
+        p, c, term = instance_name, self.character, self.character_term
+        sweep_cell_law = dict(law_scale_ohms=term("cell_law_scale_ohms"), law_exponent=term("cell_law_exponent"),
+                              law_floor_ohms=term("cell_law_floor_ohms"),
+                              darkest_current_amps=term("led_current_dark_amps"),
+                              release_from_amps=term("led_current_full_amps"),
+                              release_to_amps=term("led_current_dark_amps"))
+        # PM1 at the character's numbers always (the module docstring: the hunt moves the sweep cells only)
+        bypass_cell_law = dict(law_scale_ohms=c.cell_law_scale_ohms, law_exponent=c.cell_law_exponent,
+                               law_floor_ohms=c.cell_law_floor_ohms, darkest_current_amps=c.led_current_dark_amps,
+                               release_from_amps=c.led_current_full_amps, release_to_amps=c.led_current_dark_amps)
+        spread = term("stage_corner_spread")
         self.parts = {}
         for side in ("a", "b"):
             sweep_cell = LedDrivenPhotocell(f"{p}_sweep_cell_{side}", drive_current_amps=f"{p}_led_current_{side}",
-                                            attack_ms=repr(c.cell_attack_ms), release_ms=repr(c.cell_release_ms),
-                                            **cell_law)
+                                            attack_ms=_expression(term("cell_attack_ms")),
+                                            release_ms=_expression(term("cell_release_ms")), **sweep_cell_law)
             bypass_cell = LedDrivenPhotocell(f"{p}_bypass_cell_{side}", drive_current_amps=f"{p}_bypass_led_{side}",
                                              attack_ms=repr(c.cell_attack_ms), release_ms=repr(c.cell_release_ms),
-                                             **cell_law)
-            stages = [FirstOrderAllpassStage(f"{p}_corner_{side}_hz * {1 + c.stage_corner_spread * ratio!r}")
+                                             **bypass_cell_law)
+            stages = [FirstOrderAllpassStage(f"{p}_corner_{side}_hz * {1 + spread * ratio!r}"
+                                             if not isinstance(spread, str)
+                                             else f"{p}_corner_{side}_hz * (1 + {spread} * {ratio!r})")
                       for ratio in STAGE_SPREAD_PATTERN[side]]
             phasor = ZeroDelayAllpassCascade(f"{p}_phasor_{side}", input=f"0 - {p}_dry_{side}", stages=stages,
                                              feedback=f"{p}_feedback_gain_{side}", prewarp_hz=f"{p}_corner_{side}_hz",
@@ -246,19 +277,20 @@ ${p}_gen_${n}_square = (${p}_gen_${n}_phase >= 0.25 && ${p}_gen_${n}_phase < 0.7
 ${p}_gen_${n} = ${shape} > 0.5 ? ${p}_gen_${n}_square : ${p}_gen_${n}_round;""",
                                 n=str(number), rate=self.input_expressions[f"rate_{number}_hz"],
                                 shape=self.input_expressions[f"shape_{number}"], slowest=SLOWEST_SWEEP_HZ,
-                                fastest=FASTEST_SWEEP_HZ, roundness=self.character.sweep_sine_roundness)
+                                fastest=FASTEST_SWEEP_HZ, roundness=self.character_term("sweep_sine_roundness"))
 
     def _phasor_statements(self, side):
         c = self.character
         sweep_cell, bypass_cell, phasor, mix = self.parts[side]
-        position = f"pow(clamp(${{feedback_{side}}}, 0, 1), {c.feedback_pot_taper_exponent!r})"
+        position = f"pow(clamp(${{feedback_{side}}}, 0, 1), {_expression(self.character_term('feedback_pot_taper_exponent'))})"
         return self.substituted(f"""// ---- Phasor {side.upper()} ----
 // the LED driver: the sweep through Depth (the pot over R96), log-linear from the dark current to the full one
 ${{p}}_led_current_{side} = ${{dark}} * pow(${{span}}, ${{p}}_sweep_{side} * (${{depth_floor}} + ${{depth_rest}} * clamp(${{depth_{side}}}, 0, 1)));
-${{p}}_bypass_led_{side} = ${{foot_switch_{side}}} > 0.5 ? ${{bypass}} : ${{dark}};
-""", dark=c.led_current_dark_amps, span=c.led_current_full_amps / c.led_current_dark_amps,
+${{p}}_bypass_led_{side} = ${{foot_switch_{side}}} > 0.5 ? ${{bypass}} : ${{bypass_dark}};
+""", dark=self.character_term("led_current_dark_amps"), span=_ratio(self.character_term("led_current_full_amps"),
+                                                                    self.character_term("led_current_dark_amps")),
                                 depth_floor=DEPTH_FLOOR, depth_rest=1 - DEPTH_FLOOR,
-                                bypass=c.bypass_led_current_amps) \
+                                bypass=c.bypass_led_current_amps, bypass_dark=c.led_current_dark_amps) \
             + sweep_cell.statements() + "\n" + bypass_cell.statements() + "\n" + self.substituted(f"""
 // the stage corner, 1 / (2 pi (R_cell || 220k) 6.8 nF); the feedback pot and what it loads
 ${{p}}_corner_{side}_hz = (1 / ${{p}}_sweep_cell_{side}_resistance + ${{shunt_conductance}}) * ${{per_farad}};

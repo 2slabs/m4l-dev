@@ -267,6 +267,12 @@ A's whole output into B); the Depth pots R131 / R138 10k over R96 / R105 560 Ω;
 | `bypass_led_current_amps` | 10 mA | PM1 (PE613-12) lit by the foot switch; its law taken as the sweep cells' |
 | `rail_volts` | 13 V | the op amps' swing at ±15 V (the op amp part not legible) |
 
+**Movable at run time** (2026-10-20, for 2sl phaser's Cells page, "I can then try to find the water in it by playing
+with parameters", user): every field above but `wet_trim_ohms`, `bypass_led_current_amps` and `rail_volts` can be a
+run-time input (`character_inputs`); they move the twelve sweep cells only. PM1 stays at the character's numbers: it
+is another part, trimmed by R123 against its own law, so the hunt never unbalances the dry / wet mix or opens the
+bypass.
+
 **Left out:** the input coupling (C1 0.047 µF into 390k: 8.7 Hz) and the RF filter; the 34 kHz roll-offs of C9 / C13
 across R5 / R27; C15; the output's 560 Ω and C16; Gen 1's rate from the pedal (S2 "Ped"); the LED drivers' exact
 network and trims; any signal dependence of the cells' resistance; noise. The sweep generators are modelled from the

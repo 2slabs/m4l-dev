@@ -18,7 +18,11 @@ end of the law), while I itself goes on falling undriven (the cell keeps darkeni
   VTL5C3/2); `law_scale_ohms` A (Ohm A^p), `law_exponent` p, `law_floor_ohms` B.
 
 The drive, the attack and the release time are GenExpr inputs (a caller may move them: a hit's strength, a Decay
-knob); the law and the release span are numbers fixed at build. Outputs: `<name>_current` (A), `<name>_resistance`
+knob). The law (`law_scale_ohms`, `law_exponent`, `law_floor_ohms`), `darkest_current_amps` and the release span
+(`release_from_amps`, `release_to_amps`) are each a number, fixed at build and checked, or a GenExpr expression (a
+str), read every sample: an instrument exploring a cell's law (2sl phaser's Cells page) keeps them in range (scale,
+exponent and currents above 0, the floor >= 0, release_to below release_from). With an expression for the darkest
+current the cell is set to it on its first sample (a History starts at a number). Outputs: `<name>_current` (A), `<name>_resistance`
 (Ohm). The Buchla 292 module's vactrol and the Mu-Tron Bi-Phase's cells are this block, each with its own constants.
 """
 from m4l_dev.build_error import BuildError
@@ -31,35 +35,65 @@ def _positive_number(instance_name, name, value):
     return float(value)
 
 
+def _run_time(instance_name, name, value):
+    """A law constant given as a GenExpr expression: `(expression)`; None for a number."""
+    if not isinstance(value, str):
+        return None
+    if not value.strip():
+        raise BuildError(f"LedDrivenPhotocell {instance_name}: {name} is an empty expression")
+    return f"({value})"
+
+
 class LedDrivenPhotocell(Technique):
     """`<name>_current`, `<name>_resistance`: the cell lit by `drive_current_amps`, rising with `attack_ms`, falling
     with `release_ms` (from `release_from_amps` to `release_to_amps`, no drive); R = law_scale_ohms I^-law_exponent
-    + law_floor_ohms; I never below `darkest_current_amps`."""
+    + law_floor_ohms; I never below `darkest_current_amps`. Each law constant a number or a GenExpr expression."""
 
     def __init__(self, instance_name, *, drive_current_amps, attack_ms, release_ms, law_scale_ohms, law_exponent,
                  law_floor_ohms, darkest_current_amps, release_from_amps, release_to_amps):
         super().__init__(instance_name, drive_current_amps=drive_current_amps, attack_ms=attack_ms,
                          release_ms=release_ms)
-        self.law_scale_ohms = _positive_number(instance_name, "law_scale_ohms", law_scale_ohms)
-        self.law_exponent = _positive_number(instance_name, "law_exponent", law_exponent)
-        if isinstance(law_floor_ohms, bool) or not isinstance(law_floor_ohms, (int, float)) or law_floor_ohms < 0:
-            raise BuildError(f"LedDrivenPhotocell {instance_name}: law_floor_ohms must be a number >= 0, "
-                             f"got {law_floor_ohms!r}")
-        self.law_floor_ohms = float(law_floor_ohms)
-        self.darkest_current_amps = _positive_number(instance_name, "darkest_current_amps", darkest_current_amps)
-        release_from_amps = _positive_number(instance_name, "release_from_amps", release_from_amps)
-        release_to_amps = _positive_number(instance_name, "release_to_amps", release_to_amps)
-        if not release_to_amps < release_from_amps:
-            raise BuildError(f"LedDrivenPhotocell {instance_name}: the release span runs from a brighter current to a "
-                             f"darker one, got {release_from_amps!r} A to {release_to_amps!r} A")
-        self.release_span = 1 / release_to_amps - 1 / release_from_amps
+        self.law_scale_ohms = (_run_time(instance_name, "law_scale_ohms", law_scale_ohms)
+                               or _positive_number(instance_name, "law_scale_ohms", law_scale_ohms))
+        self.law_exponent = (_run_time(instance_name, "law_exponent", law_exponent)
+                             or _positive_number(instance_name, "law_exponent", law_exponent))
+        self.law_floor_ohms = _run_time(instance_name, "law_floor_ohms", law_floor_ohms)
+        if self.law_floor_ohms is None:
+            if isinstance(law_floor_ohms, bool) or not isinstance(law_floor_ohms, (int, float)) or law_floor_ohms < 0:
+                raise BuildError(f"LedDrivenPhotocell {instance_name}: law_floor_ohms must be a number >= 0, "
+                                 f"got {law_floor_ohms!r}")
+            self.law_floor_ohms = float(law_floor_ohms)
+        self.darkest_current_amps = (_run_time(instance_name, "darkest_current_amps", darkest_current_amps)
+                                     or _positive_number(instance_name, "darkest_current_amps", darkest_current_amps))
+        release_from = _run_time(instance_name, "release_from_amps", release_from_amps)
+        release_to = _run_time(instance_name, "release_to_amps", release_to_amps)
+        if release_from is None and release_to is None:
+            release_from_amps = _positive_number(instance_name, "release_from_amps", release_from_amps)
+            release_to_amps = _positive_number(instance_name, "release_to_amps", release_to_amps)
+            if not release_to_amps < release_from_amps:
+                raise BuildError(f"LedDrivenPhotocell {instance_name}: the release span runs from a brighter current to "
+                                 f"a darker one, got {release_from_amps!r} A to {release_to_amps!r} A")
+            self.release_span = 1 / release_to_amps - 1 / release_from_amps
+        else:
+            release_from = release_from or repr(_positive_number(instance_name, "release_from_amps", release_from_amps))
+            release_to = release_to or repr(_positive_number(instance_name, "release_to_amps", release_to_amps))
+            self.release_span = f"(1 / {release_to} - 1 / {release_from})"
+
+    def _numbers_only(self, what):
+        run_time = [name for name in ("law_scale_ohms", "law_exponent", "law_floor_ohms", "darkest_current_amps",
+                                      "release_span") if isinstance(getattr(self, name), str)]
+        if run_time:
+            raise BuildError(f"LedDrivenPhotocell {self.instance_name}: {what} needs the law as numbers, but "
+                             f"{run_time} are run-time expressions")
 
     def declarations(self):
+        if isinstance(self.darkest_current_amps, str):
+            return self.substituted("History ${p}_current(0), ${p}_started(0);")
         return self.substituted("History ${p}_current(${dark});", dark=self.darkest_current_amps)
 
     def statements(self):
         return self.substituted("""// ${p}: LED-driven photocell (kit technique: LED-driven photocell)
-${p}_drive = ${drive_current_amps};
+${starting}${p}_drive = ${drive_current_amps};
 // its effective LED current, toward the drive (turn-on) or recombining (turn-off)
 if (${p}_drive > ${p}_current) {
 	${p}_current = ${p}_current + (${p}_drive - ${p}_current) * smoothing_coefficient(${attack_ms}, samplerate);
@@ -69,6 +103,11 @@ if (${p}_drive > ${p}_current) {
 	${p}_current = (${p}_current + ${p}_release_step * ${p}_drive * ${p}_drive) / (1 + ${p}_release_step * ${p}_current);
 }
 ${p}_resistance = ${scale} * pow(max(${p}_current, ${dark}), -${exponent}) + ${floor};""",
+                                starting=self.substituted("""if (${p}_started == 0) {
+	${p}_current = ${dark};
+	${p}_started = 1;
+}
+""", dark=self.darkest_current_amps) if isinstance(self.darkest_current_amps, str) else "",
                                 dark=self.darkest_current_amps, span=self.release_span, scale=self.law_scale_ohms,
                                 exponent=self.law_exponent, floor=self.law_floor_ohms)
 
@@ -77,6 +116,7 @@ ${p}_resistance = ${scale} * pow(max(${p}_current, ${dark}), -${exponent}) + ${f
         return self.substituted("${p}_current = ${dark};\n", dark=self.darkest_current_amps)
 
     def resistance_at(self, current_amps):
-        """The steady resistance (Ohm) at a constant drive."""
+        """The steady resistance (Ohm) at a constant drive (a law of numbers only)."""
+        self._numbers_only("resistance_at")
         return self.law_scale_ohms * max(current_amps, self.darkest_current_amps) ** -self.law_exponent \
             + self.law_floor_ohms

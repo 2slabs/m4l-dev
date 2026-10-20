@@ -770,9 +770,25 @@ class LedDrivenPhotocellTests(unittest.TestCase):
         halfway = current[round(25e-3 * self.SAMPLERATE) - 1]
         self.assertAlmostEqual(1 / halfway, 0.5 * (1 / 10e-3 + 1 / 10e-6), delta=0.02 / 10e-6)
 
+    def test_a_law_given_as_expressions_runs_as_the_same_law(self):
+        # every law constant a run-time expression (here Params holding the numbers) renders what the numbers render
+        block, program = self.cell()
+        run_time = LedDrivenPhotocell("cell", drive_current_amps="in1", attack_ms="3.0", release_ms="50.0",
+                                      **{name: name for name in self.LAW})
+        moved = harness([run_time], dict(self.LAW), ["cell_current", "cell_resistance"], samplerate=self.SAMPLERATE)
+        drive = [10e-3] * 1000 + [0.0] * 2000 + [1e-3] * 1000
+        fixed_out, moved_out = program.run(len(drive), [drive]), moved.run(len(drive), [drive])
+        for n in range(2):
+            self.assertLess(max(abs(x - y) / abs(x) for x, y in zip(fixed_out[n][1:], moved_out[n][1:])), 1e-9)
+        with self.assertRaises(BuildError):
+            run_time.resistance_at(1e-3)
+        moved.set_param("law_exponent", 1.0)
+        settled = moved.run(4410, [[1e-3] * 4410])[1][-1]
+        self.assertAlmostEqual(settled, 3.464 * 1e-3 ** -1.0 + 1136.212, delta=1e-6)
+
     def test_it_says_what_it_is_given_wrong(self):
         for name, bad in (("law_exponent", 0), ("darkest_current_amps", -1e-6), ("release_to_amps", 0.02),
-                          ("law_floor_ohms", -1.0)):
+                          ("law_floor_ohms", -1.0), ("law_scale_ohms", " ")):
             law = dict(self.LAW, **{name: bad})
             with self.subTest(name=name), self.assertRaises(BuildError):
                 LedDrivenPhotocell("cell", drive_current_amps="in1", attack_ms="3", release_ms="50", **law)

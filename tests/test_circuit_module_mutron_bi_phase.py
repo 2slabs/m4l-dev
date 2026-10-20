@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
-                                                     feedback_gain, phasor_small_signal_response, stage_corner_hz)
+                                                     RUNTIME_CHARACTER_FIELDS, cell_ohms, feedback_gain,
+                                                     phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
 
 SAMPLERATE = 44100.0
@@ -171,12 +172,45 @@ class MutronBiPhaseTests(unittest.TestCase):
         level = responses(program, [stage_corner_hz(cell)])[0][0]
         self.assertAlmostEqual(db(level), 0.0, delta=0.1)
 
+    def test_the_sweep_character_moves_at_run_time(self):
+        # every run-time field given as a Param at its default renders the numbers' unit; moving one moves the sweep:
+        # the dark current puts the sweep's bottom where the cells' law says
+        fields = {name: getattr(MutronBiPhaseCharacter(), name) for name in RUNTIME_CHARACTER_FIELDS}
+        made = MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="rate_1", rate_2_hz="rate_2",
+                             shape_1="shape_1", shape_2="shape_2", depth_a="depth_a", depth_b="depth_b",
+                             feedback_a="feedback_a", feedback_b="feedback_b", sweep_a_source="sweep_a_source",
+                             sweep_b_source="sweep_b_source", sweep_sync="sweep_sync", phasor_b_input="phasor_b_input",
+                             foot_switch_a="foot_switch_a", foot_switch_b="foot_switch_b", pedal_volts="pedal",
+                             character_inputs={name: name for name in fields})
+        settings = dict(sweep_a_source=0.0, sweep_b_source=1.0, feedback_a=0.7, rate_1=3.0, rate_2=0.7)
+        moved = harness([made], dict(PANEL, **settings, **fields), OUTPUTS, samplerate=SAMPLERATE)
+        fixed = unit(character=MutronBiPhaseCharacter(), **settings)
+        music = sine(220.0, 22050, 2.0)
+        for fixed_out, moved_out in zip(fixed.run(22050, [music]), moved.run(22050, [music])):
+            self.assertLess(max(abs(x - y) for x, y in zip(fixed_out, moved_out)), 1e-6)
+        moved.set_param("led_current_dark_amps", 400e-6)
+        moved.set_param("sweep_a_source", 1.0)
+        moved.set_param("pedal", 0.0)
+        bottom = moved.run(44100, [[0.0] * 44100])[2][-1]
+        dark_law = MutronBiPhaseCharacter(led_current_dark_amps=400e-6)
+        self.assertAlmostEqual(bottom / stage_corner_hz(cell_ohms(400e-6, dark_law)), 1.0, delta=1e-3)
+        # the bypass cell keeps the character's numbers: with the law moved, the foot switch off is still dry
+        moved.set_param("cell_law_exponent", 2.0)
+        moved.set_param("foot_switch_a", 0.0)
+        moved.run(44100, [[0.0] * 44100])
+        self.assertAlmostEqual(db(responses(moved, [1000.0])[0][0]), 0.0, delta=0.1)
+
     def test_it_says_what_it_is_given_wrong(self):
         with self.assertRaises(BuildError):
             MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="1", rate_2_hz="1", shape_1="0",
                           shape_2="0", depth_a="1", depth_b="1", feedback_a="0", feedback_b="0", sweep_a_source="0",
                           sweep_b_source="0", sweep_sync="0", phasor_b_input="0", foot_switch_a="1",
                           foot_switch_b="1", pedal_volts="0", character=dataclasses.asdict(MATCHED))
+        with self.assertRaises(BuildError):        # the rails are not a run-time field
+            MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="1", rate_2_hz="1", shape_1="0",
+                          shape_2="0", depth_a="1", depth_b="1", feedback_a="0", feedback_b="0", sweep_a_source="0",
+                          sweep_b_source="0", sweep_sync="0", phasor_b_input="0", foot_switch_a="1",
+                          foot_switch_b="1", pedal_volts="0", character_inputs={"rail_volts": "13"})
         with self.assertRaises(BuildError):
             MutronBiPhase("unit", input_a_volts="in1", input_b_volts="", rate_1_hz="1", rate_2_hz="1", shape_1="0",
                           shape_2="0", depth_a="1", depth_b="1", feedback_a="0", feedback_b="0", sweep_a_source="0",
