@@ -149,14 +149,14 @@ class LargeSignalTests(unittest.TestCase):
         # at the character's k 4.2 the model's oscillation sits 19.6 cents under fc at every cutoff (its stages'
         # tanh lower their gain on the swing: RK4 at 64x, the research table in the reference §6); the module within
         # 0.5 cents of that from 100 Hz to 3 kHz, 1.5 at 8 kHz, 2.5 at 12 kHz (the trapezoid's error on the swing),
-        # its swing 0.115 V at the output's scale
+        # its swing 0.11 of a drive unit (x4's peak: 0.11 x 2 VT / base_volts_per_input_volt volts at the output's scale)
         program = ladder_program()
         for cutoff, tolerance in ((100.0, 0.5), (300.0, 0.5), (1000.0, 0.5), (3000.0, 0.5), (8000.0, 1.5),
                                   (12000.0, 2.5)):
             set_ladder(program, cutoff, TYPICAL.feedback_gain_at_full_emphasis)
             frequency, peak = oscillation(program)
             self.assertAlmostEqual(cents(frequency, cutoff), -19.6, delta=tolerance, msg=cutoff)
-            self.assertAlmostEqual(peak, 0.115, delta=0.015, msg=cutoff)
+            self.assertAlmostEqual(peak, 0.11 * VOLTS_PER_UNIT_DRIVE, delta=0.015 * VOLTS_PER_UNIT_DRIVE, msg=cutoff)
 
     def test_two_newton_iterations_are_the_solved_loop(self):
         # a hot saw-like drive at fc 6 kHz, k 3.9: the output with NEWTON_ITERATIONS = 2 against 8, within 1e-3 of

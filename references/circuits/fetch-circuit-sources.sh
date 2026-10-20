@@ -48,6 +48,9 @@ sources=(
   # moog-transistor-ladder.md (2026-10-20)
   "moog-patent-us3475623.pdf|https://patentimages.storage.googleapis.com/ea/a3/6e/d3c9ff36d3e14a/US3475623.pdf|464ba3222f40e8430281388b06085177702331b2d87c9ec9361c929f48480905"
   "minimoog-vcf-schematic.gif|http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/911-filt-print-circ-schem.gif|ea509b37b3a6aa3a9af9ca7bd7a774483cd48f0565a6219399ce851c125984c1"
+  "minimoog-osc-schematic.gif|http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/903-osc-print-schem-below.gif|6ddf35aab7fa79659bdcda739020a327fda34eb397f14cf56d27775caeaa01d7"
+  "minimoog-interconnect-wiring.gif|http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/917-interconnect-wiring.gif|c878204534c5b03789c7a0cded95587ad3834c6ee3e6fa16fb502ab5adad59e3"
+  "minimoog-model-d-service-manual-folkman.pdf|https://www.vintagesynthparts.com/wp-content/uploads/2016/08/MINIMOOG-D_SERVICE_MANUAL.pdf|914e3e7007ee8a5e80d1145ebabc53c2500f91f3a7b5df212a3543518391ee9d"
   "moog-904a-schematic.jpg|$wayback/20070623230759id_/http://www.hylander.com/images/schematics/904a.jpg|63a56d80d69a7cf429e0804b0aadb17d4b181075b325a6e6ead36373f74a2855"
   "stinchcombe-moog-ladder-tf.pdf|https://www.timstinchcombe.co.uk/synth/Moog_ladder_tf.pdf|34d93147b915db0e5d757d3dd3b4888e986f5fa345c56ed110e22c7dd1e9fd78"
   "huovilainen-dafx04.pdf|https://dafx.de/paper-archive/2004/P_061.PDF|d8bee4101c859f3eb8f0ccc0d08d6a3af09745ccce4c6549e46dd27138a30d67"

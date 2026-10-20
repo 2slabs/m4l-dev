@@ -17,7 +17,7 @@ of it with the loop solved by Newton's method (§6), two steps a host sample by 
 node's volts through the exponential converter and fc = If / (8 pi C VT) (§4), the Emphasis pot as the loop's gain k,
 the two steps between the kit's halfband oversampler's upsampler and downsampler (references/dsp.md),
 the output buffer's unity low-frequency gain and its coupling capacitors' 15.4 Hz high-pass (§2.2). Its character
-(§7): VT, C, each stage's capacitor ratio, the input pair's offset, the input buffer's scale, the converter's
+(§7): VT, C, each stage's capacitor ratio, the input pair's offset, the mixer's scale, the converter's
 reference current and volts per octave, the Emphasis pot's top k, the coupling corner.
 
 ## 1. The sources
@@ -26,6 +26,9 @@ reference current and volts per octave, the Emphasis pot's top k, the coupling c
 |---|---|---|
 | moog-patent-us3475623.pdf | R. A. Moog, US 3,475,623, "Electronic high-pass and low-pass filters employing the base to emitter diode resistance of bipolar transistors", filed 10 Oct 1966, granted 28 Oct 1969 (9 pages: 4 drawing sheets, text) | https://patentimages.storage.googleapis.com/ea/a3/6e/d3c9ff36d3e14a/US3475623.pdf |
 | minimoog-vcf-schematic.gif | Minimoog service manual, "Figure 9-11 Filter printed circuit board no. 4 schematic diagram", circuit no. 6 Voltage Controlled Filter (scan by fantasyjackpalance.com) | http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/911-filt-print-circ-schem.gif |
+| minimoog-osc-schematic.gif | Minimoog service manual fig. 9-3, oscillator board no. 1 (serial below 10175): the waveform levels | http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/903-osc-print-schem-below.gif |
+| minimoog-interconnect-wiring.gif | Minimoog service manual fig. 9-17, interconnecting wiring diagram: the mixer (level pots, 33k resistors, switches, bus to filter pin 4) and the Emphasis pot | http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/917-interconnect-wiring.gif |
+| minimoog-model-d-service-manual-folkman.pdf | R. J. Folkman, "The Minimoog Model D Technical Service Manual" (24 pp.): p. 14 "Regeneration Cal." | https://www.vintagesynthparts.com/wp-content/uploads/2016/08/MINIMOOG-D_SERVICE_MANUAL.pdf |
 | moog-904a-schematic.jpg | R. A. Moog Co., "904-A Voltage Controlled Low Pass Filter" schematic, drawing 1149, dated 7-25-67, rev. C 11/10/70 (hylander.com scan, via the Wayback Machine 2007-06-23) | https://web.archive.org/web/20070623230759id_/http://www.hylander.com/images/schematics/904a.jpg |
 | stinchcombe-moog-ladder-tf.pdf | T. E. Stinchcombe, "Analysis of the Moog Transistor Ladder and Derivative Filters", 25 Oct 2008 | https://www.timstinchcombe.co.uk/synth/Moog_ladder_tf.pdf |
 | huovilainen-dafx04.pdf | A. Huovilainen, "Non-linear digital implementation of the Moog ladder filter", DAFx-04, Naples, pp. 61-64 | https://dafx.de/paper-archive/2004/P_061.PDF |
@@ -87,6 +90,55 @@ Moog Ladder Filter: Part II - Explicit Nonlinear Model through a Novel Delay-Fre
   ALL PNP 2N4058".
 - [DERIVED] The three ranges are 16x and 4x apart (1.2 / 0.075, 0.3 / 0.075): a range switch is a capacitor, i.e.
   the character's `ladder_capacitance_farads` (the module's default is the Minimoog's 0.068 uF).
+
+### 2.4 The mixer into the filter, and the loop's gain (traced 2026-10-20)
+Sources, fetched by the same script: Minimoog service manual figs. 9-3 (oscillator board), 9-11 (filter board), 9-17
+(interconnecting wiring diagram, the mixer: it is not on a board, it is front-panel wiring), and the Folkman Model D
+Technical Service Manual (vintagesynthparts.com; only the fantasyjackpalance scans are in the fetch script so far).
+
+- The mixer [VERIFIED, fig. 9-17]: each channel (OSC 1/2/3, Noise, Ext In) is a level pot to ground (25k; Noise 25k with
+  11k; Ext In 33k) from the source, then a **33k** series resistor (noise **11k**), then the channel's switch onto
+  one common bus, which goes to the filter board's pin 4 (audio input). It is **passive**: no summing amplifier.
+  Oscillator outputs: triangle / sawtooth "+1.7 to -1.7 V" (fig. 9-3) [VERIFIED labels].
+- The input network [VERIFIED reading, fig. 9-11 zoomed]: pin 4 -> C27 10 uF -> Q29's base directly; **R54 470 ohm**
+  from Q29's base to the bias node (the bottom of the R4 / R16 / R32 / R41 / R52 chain, bypassed to ground by **C24
+  220 uF** with R67 200). R54 is therefore the bus's only AC load (Q29's base current is small next to it: r_pi
+  ~ 1.2k at the top of the cutoff range [DERIVED], parallel with 470). Q30's base is AC grounded (through R76 330 and
+  R73 1k to the bypassed node) when the Emphasis is 0.
+- [DERIVED] One channel at full level (pot wiper at the top, 33k): Q29's base = Vsource x 470 / (470 + 33k) =
+  **0.0140 V a V** (three channels at full: 0.0136 each; at the top cutoff, with Q29/Q30's r_pi in parallel with R54:
+  ~ 0.012). A full triangle (+-1.7 V) is +-24 mV = 0.46 x 2 VT at the bases: near the linear range (+-20 mV,
+  Stinchcombe p. 7); three full channels +-71 mV = 1.4 x 2 VT, tanh(1.4 / 2) = hard compression, which is
+  the mixer overdrive (the manual: "by increasing the External Input volume far enough, the Mixer can overload";
+  the lamp lights) [SECONDARY, the Model D user manual and Moog forum posts; no circuit-level source found, Stinchcombe
+  2008 does not treat the mixer]. The module's `base_volts_per_input_volt` is this 0.014, the input one channel's
+  source volts at full level (a channel at less than full: its volts x the pot's fraction, the caller's).
+- The output stage and the loop's tap [VERIFIED reading, fig. 9-11]: the top stage's two ends -> C5 / C1 0.22 -> Q8 / Q6
+  followers -> pair Q7 / Q5, tail R26 1k to -10 V. Q7's collector load: R3 1k + R7 180 to a +10 V bypassed by C9 100 uF;
+  the filter's output to the VCA is Q7's collector, **the Emphasis tap is the R3 / R7 junction through C10 10 uF** (pin 7).
+  [DERIVED] Tail current (10 V - 2 Vbe) / 1k ~ 8.6 mA; differential gain from the top stage's voltage V4 to Q7's
+  collector current = Itail / (4 VT) = 0.083 S: the output = 0.083 x 1180 = **99 x V4**; the tap = 0.083 x 180 =
+  **15.1 x V4**. Check: output / source at k = 0 = 0.014 x 99 = 1.4, against the patent's "unity" (col. 2) within 40 %
+  (Vbe, the mixer's loading and beta: the topology holds).
+- The Emphasis pot [VERIFIED, fig. 9-17]: R14 50k "REV AUD" (reverse audio taper) from pin 7 (the tap) to ground, its
+  wiper to pin 6 -> the end of R73 (REGEN CAL, 1k trimpot) opposite R76; R76 330 to the bypassed node; **Q30's base is
+  R73's wiper**. So Q30's base = V7 x (R76 + w R73) / (Rtop + R76 + R73) (w: the trim's wiper, 0 at R76's end, 1 at pin
+  6's end; Rtop the 50k pot's resistance from pin 7 to its wiper; the pot's lower part and the 1.33k chain in parallel
+  barely matter), so [DERIVED]
+      k = 15.1 x (330 + 1000 w) / (1330 + Rtop)
+  The trim alone spans 3.7 to 15.1 at Rtop = 0 (Emphasis 10): the trim cannot set k below ~3.7, and a pot's
+  Rtop at 10 is ~ 0.
+- The calibration [VERIFIED, Folkman Model D service manual p. 14, "Regeneration Cal."]: "Turn all MIXER switches off.
+  ... Set CUTOFF FREQUENCY control to -1 ... Rotate EMPHASIS control clockwise. Regeneration should start when the
+  EMPHASIS control is between 7 and 8. If it does not, set EMPHASIS control to 7.5 and rotate the Regeneration Cal.
+  trimpot ... slowly clockwise until regeneration starts." Oscillation starts at k = 4 (Stinchcombe §2.5): so
+  **k(Emphasis 7.5 of 10) = 4**, and k(10) = 4 x (1330 + Rtop(7.5)) / 1330.
+- [DERIVED, on an UNVERIFIED taper] A linear taper cannot do it (Rtop(7.5) = 12.5k gives k <= 1.45 at the trim's top); a
+  reverse-audio pot with ~3 % of 50k at 75 % of travel (Rtop ~ 1.5k; the taper curve is not on the sheet) gives w = 0.42
+  (a trim near mid-travel, as a designer would centre it), **k(10) ~ 8.5**; the bounds: Rtop(7.5) = 0 gives k(10) = 4,
+  the trim's end (Rtop 3.7k) gives 15. The law is hyperbolic in Rtop: k(x) / k(10) = 1330 / (1330 + Rtop(x)), ~ 0.5 at
+  7.5, ~ 0.2 at 5, ~ 0.03 at 0 (k ~ 0.2 at Emphasis 0 [UNVERIFIED taper]). Not modelled: finite beta loading Q30's
+  base (r_pi ~ 1.2-2.4k at the top cutoff against 250 ohm: the loop gain falls 10-17 % at high cutoff).
 
 ## 3. The large-signal model [VERIFIED]
 
@@ -178,17 +230,18 @@ against hardware [UNVERIFIED].
 | ladder_capacitance_farads | 0.068e-6 | [VERIFIED] Minimoog C3/C7/C11/C16 (§2.2); 904A ranges 1.2 / 0.3 / 0.075 uF (§2.3) |
 | stage_n_capacitance_ratio | 1.0 | [DESIGN] matched; set a spread for one unit's capacitor tolerances (the sheet gives none) |
 | input_pair_offset_volts | 0.0 | [DESIGN] the Minimoog marks Q29/Q30 matched (§2.2); an offset makes even harmonics |
-| base_volts_per_input_volt | 0.05 | [UNVERIFIED] the input buffer / mixer's level at the input pair's bases was not traced: 1 V in = 50 mV = ~1 x 2VT, so a 1 V peak is the knee |
+| base_volts_per_input_volt | 0.014 | [DERIVED] §2.4: 470 / (470 + 33k), one full-level mixer channel's source volts to Q29's base (was 0.05, a guess; 2026-10-20 the drive per input volt fell 3.6x) |
 | ladder_current_at_zero_control_volts_amps | fc(0 V) = 261.63 Hz | [DESIGN] the RANGE / cutoff knob's offset is the instrument's |
 | volts_per_octave | 1.0 | [UNVERIFIED] §4 |
-| feedback_gain_at_full_emphasis | 4.2 | [UNVERIFIED] the REGEN CAL trim's setting is not on the sheet; 4.2 sings (§5: -19.6 cents, x4 swing 0.11) |
+| feedback_gain_at_full_emphasis | 4.2 | [UNVERIFIED] kept, though §2.4 says the circuit's k(10) is ~ 8.5 (4 to 15, the pot's taper unknown) with k = 4 at Emphasis 7.5: the module's Emphasis is linear in k, the circuit's hyperbolic, so no top k reproduces both; 4.2 sings (§5: -19.6 cents, x4 swing 0.11) |
 | output_coupling_corner_hz | 15.4 | [DERIVED] §2.2 |
 
 ## 8. Open
 
-- The input level at the Minimoog's ladder (the mixer's gain into pin 4, the overdrive point players use) and the
-  REGEN CAL trim's k: both need the mixer sheet traced or a measurement of a unit.
+- The 50k REV AUD pot's resistance curve (Rtop at 7.5 of 10 sets the circuit's k(10), §2.4) and the module's linear
+  Emphasis -> k law against the circuit's hyperbolic one (oscillation at 7.5 of 10, k ~ 0.2 at 0): a taper field on
+  the character, if wanted; a measurement of one unit's pot or the part's datasheet settles the number.
 - The real circuit's non-idealities the model leaves out (finite beta and base currents, which Stinchcombe §2.4
-  blames for the SPICE cutoffs sitting slightly lower than the formula; the Early effect; the expo converter's
-  temperature drift).
+  blames for the SPICE cutoffs sitting slightly lower than the formula, and which load Q29's / Q30's bases, §2.4; the
+  Early effect; the expo converter's temperature drift).
 - Whether hardware sings flat at high Emphasis as §5's model does.

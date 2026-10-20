@@ -32,10 +32,11 @@ the input at low frequencies for k = 0, patent col. 2 l. 6-9; then the output's 
 `reset_statements()` empties the ladder.
 
 The build character (`MoogTransistorLadderCharacter`): VT, C (the Minimoog's 0.068 uF), each stage's capacitor as a
-ratio (mismatch), the input pair's offset (even harmonics), the input buffer's volts-at-the-bases per input volt (how
-hot a given level drives it), the converter's reference current and volts per octave, the Emphasis pot's top k, and
-the output coupling corner. The UNVERIFIED defaults are marked; §7 of the reference says which.
-"""
+ratio (mismatch), the input pair's offset (even harmonics), the mixer's volts-at-the-bases per input volt (an input:
+one full-level mixer channel's source volts; how hot a given level drives it), the converter's reference current and
+volts per octave, the Emphasis pot's top k, and the output coupling corner. The UNVERIFIED defaults (the Emphasis top
+k) are marked; §7 of the reference says which.
+
 import dataclasses
 import math
 
@@ -72,7 +73,7 @@ class MoogTransistorLadderCharacter:
     stage_3_capacitance_ratio: float = 1.0
     stage_4_capacitance_ratio: float = 1.0
     input_pair_offset_volts: float = 0.0            # base-to-base offset of the input pair (Minimoog: matched pairs)
-    base_volts_per_input_volt: float = 0.05         # [UNVERIFIED] the input buffer: 1 V in = 50 mV at the bases
+    base_volts_per_input_volt: float = 0.014        # [DERIVED] one full-level mixer channel: 470 / (470 + 33k), ref §2.4
     ladder_current_at_zero_control_volts_amps: float = (
         REFERENCE_CUTOFF_HZ * 8 * math.pi * _TYPICAL_CAPACITANCE * _TYPICAL_THERMAL_VOLTAGE)   # [DESIGN] fc(0 V) = C4
     volts_per_octave: float = 1.0                   # the Scale trim's calibration (R49, Minimoog)
