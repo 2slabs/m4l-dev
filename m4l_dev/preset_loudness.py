@@ -21,7 +21,9 @@ kick; EFFECT_INPUT_SECONDS each (or the `seconds` and `names` a test asks for) a
 every preset on all of it in worker processes (effect_measures_by_preset, with the device's own render), and reads each preset's gain on
 each input (the loudest moment out minus the loudest moment in), their median (what the preset's output level sets
 to 0 dB) and the worst miss from that median (information: an effect whose gain depends on its input, a
-self-oscillating filter, triggers, can't match bypass on everything).
+self-oscillating filter, triggers, can't match bypass on everything). An effect's peaks are judged against bypass's
+on the same input, not a fixed ceiling (effect_presets_clipping_beyond_dry): it may raise the crest factor, as its
+circuit does; it fails when its level drives the output stage into the clip.
 """
 import concurrent.futures
 import functools
@@ -306,22 +308,28 @@ def effect_inputs(rate=EFFECT_SAMPLE_RATE, seconds=EFFECT_INPUT_SECONDS, names=E
 
 
 @functools.lru_cache(maxsize=8)
-def _effect_input_loudest_moments(rate, seconds, names):
-    """{name: the effect input's max momentary loudness}, the input on both channels."""
-    return {name: bs1770.max_momentary_loudness([list(mono), list(mono)], rate)
+def _effect_input_measures(rate, seconds, names):
+    """{name: (the effect input's max momentary loudness, its sample peak dBFS)}, the input on both channels: what
+    bypass gives."""
+    return {name: phrase_measures([list(mono), list(mono)], rate)
             for name, mono in effect_inputs(rate, seconds, names).items()}
 
 
 class EffectMeasures:
-    """A preset's measures on the effect inputs: gain_db_by_input (the loudest moment out minus in, LU, per input),
-    median_gain_db, worst_miss_db (the largest distance of an input's gain from the median) and peak_db (the sample
-    peak over all the inputs)."""
+    """A preset's measures on the effect inputs, each by input name: gain_db_by_input (the loudest moment out minus
+    in, LU), peak_db_by_input (the render's sample peak, dBFS) and dry_peak_db_by_input (the input's own, bypass's);
+    median_gain_db, worst_miss_db (the largest distance of an input's gain from the median) and peak_db (the highest
+    of the render's peaks)."""
 
-    def __init__(self, gain_db_by_input, peak_db):
+    def __init__(self, gain_db_by_input, peak_db_by_input, dry_peak_db_by_input):
         self.gain_db_by_input = dict(gain_db_by_input)
+        self.peak_db_by_input = dict(peak_db_by_input)
+        self.dry_peak_db_by_input = dict(dry_peak_db_by_input)
+        if not set(self.gain_db_by_input) == set(self.peak_db_by_input) == set(self.dry_peak_db_by_input):
+            raise BuildError("preset_loudness: an effect's gains, peaks and dry peaks must name the same inputs")
         self.median_gain_db = statistics.median(self.gain_db_by_input.values())
         self.worst_miss_db = max(abs(gain - self.median_gain_db) for gain in self.gain_db_by_input.values())
-        self.peak_db = peak_db
+        self.peak_db = max(self.peak_db_by_input.values())
 
     def __repr__(self):
         return (f"EffectMeasures(median {self.median_gain_db:+.2f} LU, worst miss {self.worst_miss_db:.2f} LU, "
@@ -331,14 +339,15 @@ class EffectMeasures:
 def effect_measures(render, messages, rate=EFFECT_SAMPLE_RATE, seconds=EFFECT_INPUT_SECONDS, names=EFFECT_INPUT_NAMES):
     """EffectMeasures of one preset: render(messages, mono input, rate) -> (left, right) plays the preset (its
     messages, as the device's DSP gets them) on each effect input (`seconds` and `names` as in `effect_inputs`)."""
-    gains, peak = {}, -math.inf
+    gains, peaks = {}, {}
+    dry = _effect_input_measures(rate, seconds, names)
     for name, mono in effect_inputs(rate, seconds, names).items():
         channels = [list(channel) for channel in render(messages, list(mono), rate)]
         if len(channels) != 2 or any(len(channel) != len(mono) for channel in channels):
             raise BuildError(f"preset_loudness: the render of {name!r} isn't two channels of {len(mono)} samples")
-        gains[name] = bs1770.max_momentary_loudness(channels, rate) - _effect_input_loudest_moments(rate, seconds, names)[name]
-        peak = max(peak, bs1770.sample_peak_db(channels))
-    return EffectMeasures(gains, peak)
+        gains[name] = bs1770.max_momentary_loudness(channels, rate) - dry[name][0]
+        peaks[name] = bs1770.sample_peak_db(channels)
+    return EffectMeasures(gains, peaks, {name: peak for name, (_, peak) in dry.items()})
 
 
 def _worker_starts(search_path):
@@ -355,7 +364,7 @@ def effect_measures_by_preset(render, messages_by_preset, rate=EFFECT_SAMPLE_RAT
     """{preset: EffectMeasures} of every preset ({name: messages}), in worker processes, one per CPU. `render` is a
     module-level function (it is sent to the workers by name, and they get this process's sys.path).
     `seconds` and `names` as in `effect_inputs`."""
-    _effect_input_loudest_moments(rate, seconds, names)    # made once here: workers forked from this process inherit them
+    _effect_input_measures(rate, seconds, names)    # made once here: workers forked from this process inherit them
     with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count(), initializer=_worker_starts,
                                                 initargs=(list(sys.path),)) as pool:
         return dict(pool.map(functools.partial(_measures_of_one, render, rate, seconds, names), messages_by_preset.items()))
@@ -366,3 +375,23 @@ def presets_off_bypass(measures_by_preset, tolerance_lu=EFFECT_LOUDNESS_TOLERANC
     0 dB (bypass): empty when every preset is levelled."""
     return {name: round(measures.median_gain_db, 2) for name, measures in measures_by_preset.items()
             if abs(measures.median_gain_db) > tolerance_lu}
+
+
+def effect_presets_clipping_beyond_dry(measures_by_preset, clip_knee_db, rate=EFFECT_SAMPLE_RATE):
+    """{preset: {input: (its peak, the dry's peak at its level), dBFS, 2 decimals}} of every effect preset whose level
+    drives the device's output stage into its clip (architecture/presets.md, "Peaks against bypass's"): on an input,
+    the preset's peak is over `clip_knee_db` and so is the dry input's own peak moved by the preset's level (its
+    median gain). A preset over the knee only by what it does to that input (the crest factor it adds, its gain there
+    away from its median: the effect) passes. FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB is allowed on both at
+    FAST_SAMPLE_RATE. Empty when every preset passes."""
+    ceiling = clip_knee_db + (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB if rate == FAST_SAMPLE_RATE else 0.0)
+    failing = {}
+    for name, measures in measures_by_preset.items():
+        dry_at_level = {input_name: dry_peak + measures.median_gain_db
+                        for input_name, dry_peak in measures.dry_peak_db_by_input.items()}
+        inputs = {input_name: (round(peak, 2), round(dry_at_level[input_name], 2))
+                  for input_name, peak in measures.peak_db_by_input.items()
+                  if peak > ceiling and dry_at_level[input_name] > ceiling}
+        if inputs:
+            failing[name] = inputs
+    return failing

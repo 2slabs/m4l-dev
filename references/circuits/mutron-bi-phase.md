@@ -250,6 +250,22 @@ A's whole output into B); the Depth pots R131 / R138 10k over R96 / R105 560 Ω;
 - The mix node, exactly (C15 left out): `out = dry + α · HP(wet − dry)`, `α = R31/(R31 + Rw)`,
   `Rw = R29 + R123 + R_PM1`, HP a one-pole at `1/(2π (R31 + Rw) C14)` (44 Hz when α = 0.5). Notches are deepest at
   α = 0.5, i.e. Rw = 12 kΩ.
+- **Level with the phasors in, against the manual's "Insertion Loss: Less than 1db"** (2026-10-20). The manual gives
+  the figure in its spec list beside "Frequency Response (Bypass)" and names no settings, signal or load. What the
+  drawing gives: bypass (PM1 dark) is Z8A's follower through R31 into Z9A's "+" (a follower), 0 dB but for the dark
+  cell's leak (−0.03 dB with PM1 at 3.6 MΩ), then R32 560 Ω (the "600 ohms" output) into the load: −0.5 dB into
+  10 kΩ, which may be the spec's loss. With a phasor in, the wet equals the dry wherever the six stages total 0°/360°
+  (above the notches, and between them at the peaks): 0 dB there too, so a tone at a peak or above the sweep meets the
+  spec. On music it does not, and cannot: (1) the equal sum `(1 − α) dry + α wet` with an all-pass wet averages
+  `(1 − α)² + α²` in power over the swept band, −3 dB at α = 0.5 and −2.8 dB at α 0.4 or 0.6 (R123's
+  range); (2) C12 0.47 µF into R26 4.7 kΩ (Z9B's virtual ground) ∥ the feedback pot (re-read on sheets 1 and
+  2 this session: Z3B pin 7 → C12 → J1-1 → R26 and R133) cuts the wet below 106–137 Hz while C14's mix high-pass
+  passes it from 44 Hz, so from ~44 to ~110 Hz the output is `(1 − α) dry`, −6 dB at α = 0.5. On the kit's effect
+  inputs (drums, bass, pad, a full mix, chords and a kick; m4l_dev/preset_loudness.py) 2sl phaser's presets, Output
+  0 dB, lose 2.0–2.8 dB (median of the five) at low and moderate feedback (high feedback's peaks give some back:
+  −0.9 dB with both at 80 in series; full feedback with an 18 Hz square sweep is +1.1 dB), of which C12 is ~1.4 dB on the classic setting (Init: −2.21 dB as
+  drawn, −0.78 dB with C12 made huge) and the notches the rest; R123 moves it by under 0.2 dB (α 0.4: −2.18, α 0.6:
+  −2.04) [DERIVED, measured on the module]. So the module's level loss is the drawing's, not a model error.
 - Depth: the pot over 560 Ω passes `560/10560 + (1 − 560/10560) · rotation` of the sweep: Depth 0 still sweeps 5.3 %.
 - Six stages of the circuit, (sRC − 1)/(sRC + 1), equal six of the technique's (1 − s)/(1 + s): an even count.
 

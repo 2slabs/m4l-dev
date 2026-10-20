@@ -57,10 +57,37 @@ three, and the chord phrase as saws every bar with a kick on every beat, EFFECT_
 Live stopped) each at −18 LUFS integrated, generated from seeds (no samples), at EFFECT_SAMPLE_RATE (44.1 kHz: an
 effect's peaks depend on the input's top octave, so no fast rate). `effect_inputs` and `effect_measures_by_preset` take `seconds` and `names` (defaults: all five, EFFECT_INPUT_SECONDS) so a device's quick test asks for fewer, shorter inputs. A device's suite
 holds every preset's median within `EFFECT_LOUDNESS_TOLERANCE_LU` (±1.5) of 0 dB (`presets_off_bypass`) and every
-peak under its clip (`presets_over_the_clip`, at the same rate, so no allowance). Each preset's **worst miss** (its
-largest distance from the median over the inputs) is reported, not tested: an effect whose gain depends on the input
-by nature (a self-oscillating filter, triggers, a gate) can't match bypass on everything, and its level is a
-compromise.
+preset to the peak rule below. Each preset's **worst miss** (its largest distance from the median over the inputs) is
+reported, not tested: an effect whose gain depends on the input by nature (a self-oscillating filter, triggers, a
+gate) can't match bypass on everything, and its level is a compromise.
+
+**A circuit whose own level is not bypass's.** Some effects lose or add level as the circuit does, on every setting:
+a phaser's passive dry / wet sum notches the music and its coupling capacitors cut the wet's bass (2sl phaser: the
+Mu-Tron Bi-Phase loses 2-3 dB on the effect inputs with the phasors in, at moderate feedback, references/circuits/mutron-bi-phase.md §8).
+Making that up with each preset's output level is gain the circuit doesn't have. Such a device says so in its
+architecture, never raises a preset's output level, reports each preset's median against bypass as the circuit's,
+and its suite holds the presets about as loud as each other instead: every median within
+`EFFECT_LOUDNESS_TOLERANCE_LU` of Init's (`presets_off_init` over the medians). The output level stays at 0 dB but
+where the circuit makes a preset louder than that (full feedback's resonance): there it is turned down, to Init's
+level, and the cut is reported.
+
+### Peaks against bypass's
+
+An effect's peaks are judged against the dry input's, not against a fixed ceiling (`effect_presets_clipping_beyond_dry`,
+`EffectMeasures.peak_db_by_input` and `dry_peak_db_by_input`). An effect may raise the crest factor, as its circuit does
+(a phaser's resonant peaks, a square sweep throwing the notches across a drum hit): that is the sound, and the kit's
+inputs already sit near the clip (the drums peak at −1.4 dBFS at −18 LUFS), so a fixed ceiling punished the input's
+crest as much as the effect's. What the rule catches is a preset whose **level** drives the device's output stage into
+its clip: on some input, the preset's sample peak is over the clip's knee **and** the dry input's own peak, moved by the
+preset's level (its median gain against bypass), is over it as well: the dry at the preset's level would clip there
+too. What the preset does to one input (its crest factor, its gain there away from its median: a resonance on the
+kick) is the effect, and passes. Precisely, a preset fails on input i when
+
+    peak_i > knee_db  and  dry_peak_i + median_gain > knee_db
+
+(`FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB` added to the knee at FAST_SAMPLE_RATE). A preset under the knee always passes, so
+every preset the old ceiling passed passes this. Each preset's peak against bypass's (peak_i − dry_peak_i) is reported
+by the device's player, not tested. No limiter is added to make a preset pass: a preset that fails is too loud.
 
 The device gives a module-level render (its preset's messages and a mono input, played on both channels, to its
 left and right); `effect_measures_by_preset` plays every preset on every input in worker processes, one per CPU.

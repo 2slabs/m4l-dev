@@ -121,8 +121,44 @@ class EffectTests(unittest.TestCase):
                          {"halved": -6.02})
 
     def test_the_median_and_the_worst_miss(self):
-        measures = preset_loudness.EffectMeasures({"a": -1.0, "b": 0.5, "c": 3.0}, -6.0)
-        self.assertEqual((measures.median_gain_db, measures.worst_miss_db), (0.5, 2.5))
+        measures = preset_loudness.EffectMeasures({"a": -1.0, "b": 0.5, "c": 3.0}, {"a": -6.0, "b": -7.0, "c": -2.0},
+                                                  {"a": -5.0, "b": -7.0, "c": -4.0})
+        self.assertEqual((measures.median_gain_db, measures.worst_miss_db, measures.peak_db), (0.5, 2.5, -2.0))
+
+    def test_gains_peaks_and_dry_peaks_name_the_same_inputs(self):
+        with self.assertRaisesRegex(BuildError, "same inputs"):
+            preset_loudness.EffectMeasures({"a": 0.0}, {"a": -6.0, "b": -6.0}, {"a": -6.0})
+
+    def test_an_effects_peaks_are_its_own_and_the_dry_inputs(self):
+        names = ("drums", "pad")
+        measures = preset_loudness.effect_measures(identity_render, {"gain": 0.5}, self.rate, 2.0, names)
+        for name, mono in preset_loudness.effect_inputs(self.rate, 2.0, names).items():
+            dry_peak = bs1770.sample_peak_db([list(mono), list(mono)])
+            self.assertAlmostEqual(measures.dry_peak_db_by_input[name], dry_peak, places=9)
+            self.assertAlmostEqual(measures.peak_db_by_input[name], dry_peak + 20 * math.log10(0.5), places=6)
+
+    def test_an_effect_fails_the_peak_rule_only_when_its_level_drives_the_clip(self):
+        knee = -0.45
+        dry = {"drums": -1.4, "pad": -8.0, "bass": -7.0}
+        measures = {
+            # under the knee everywhere: passes, whatever its gain
+            "clean": preset_loudness.EffectMeasures({"drums": 0.5, "pad": 0.0, "bass": 0.0},
+                                                    {"drums": -0.9, "pad": -8.0, "bass": -7.0}, dry),
+            # in the clip by the crest factor it adds (the dry at its level, -1.4, stays under): the effect, passes
+            "crest": preset_loudness.EffectMeasures({"drums": 0.2, "pad": 0.0, "bass": 0.0},
+                                                    {"drums": 0.0, "pad": -5.0, "bass": 0.0}, dry),
+            # in the clip on the drums, louder there than its level (+1.7 against a median of -1.2): the effect, passes
+            "resonant": preset_loudness.EffectMeasures({"drums": 1.7, "pad": -1.2, "bass": -2.4},
+                                                       {"drums": -0.3, "pad": -9.0, "bass": 0.0}, dry),
+            # in the clip and its level alone would put the dry there (-1.4 + 1.2 = -0.2): fails on the drums only
+            "hot": preset_loudness.EffectMeasures({"drums": 1.2, "pad": 1.2, "bass": 1.0},
+                                                  {"drums": 0.0, "pad": -6.0, "bass": 0.0}, dry),
+        }
+        self.assertEqual(preset_loudness.effect_presets_clipping_beyond_dry(measures, knee),
+                         {"hot": {"drums": (0.0, -0.2)}})
+        # the fast rate's peak allowance lifts the ceiling for both
+        self.assertEqual(preset_loudness.effect_presets_clipping_beyond_dry(measures, knee,
+                                                                             preset_loudness.FAST_SAMPLE_RATE), {})
 
     def test_presets_are_measured_in_worker_processes(self):
         measures = preset_loudness.effect_measures_by_preset(identity_render, {"one": {"gain": 1.0},
