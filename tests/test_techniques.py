@@ -1801,23 +1801,23 @@ class DefinedLatencyPadTests(unittest.TestCase):
         self.assertFalse(poles_inside_the_unit_circle((1.0, 1.2)), "a pole at -1.2: the stability test can fail")
         for bad in (-1, float("nan"), True, "0.5"):
             with self.assertRaises(BuildError, msg=bad):
-                DefinedLatencyPad("pad", input="in1", pad_samples=bad)
+                DefinedLatencyPad("pad", input="in1", pad_samples=bad, oversampling=1)
 
     def test_a_whole_pad_is_the_input_exactly_that_many_samples_late(self):
         generator = random.Random(7)
         signal = [generator.uniform(-1, 1) for _ in range(200)]
         for pad_samples in (0, 1, 3, 5.0, 2.0000000000000004):
-            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples)
+            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples, oversampling=1)
             whole = round(pad_samples)
             self.assertEqual((pad.latency_samples, pad.thiran_order), (whole, 0))
             out = harness([pad], {}, ["pad_out"], samplerate=self.SAMPLERATE).run(200, [signal])[0]
             self.assertEqual(out, [0.0] * whole + signal[:200 - whole], pad_samples)
-        self.assertEqual(DefinedLatencyPad("pad", input="in1", pad_samples=0).declarations(), "", "no state at 0")
+        self.assertEqual(DefinedLatencyPad("pad", input="in1", pad_samples=0, oversampling=1).declarations(), "", "no state at 0")
 
     def test_a_fractional_pad_is_a_thiran_allpass_rendered_as_its_python_response(self):
         for pad_samples, order, whole in ((0.5, 1, 0), (0.97, 1, 0), (0.03, 1, 0), (1.25, 2, 0), (3.97, 4, 0),
                                           (25.03, 4, 22)):
-            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples)
+            pad = DefinedLatencyPad("pad", input="in1", pad_samples=pad_samples, oversampling=1)
             self.assertEqual((pad.thiran_order, pad.whole_samples, pad.latency_samples), (order, whole, pad_samples))
             self.assertAlmostEqual(pad.whole_samples + pad.thiran_delay_samples, pad_samples, places=12)
             rendered = self.impulse_response([pad], "pad_out")
@@ -1838,7 +1838,7 @@ class DefinedLatencyPadTests(unittest.TestCase):
                     pad_samples = order - 1 + hundredths / 100
                     pads = [pad_samples] + ([pad_samples + 7] if order == THIRAN_MAXIMUM_ORDER else [])
                     for samples in pads:
-                        pad = DefinedLatencyPad("pad", input="in1", pad_samples=samples)
+                        pad = DefinedLatencyPad("pad", input="in1", pad_samples=samples, oversampling=1)
                         self.assertEqual(pad.thiran_order, order, samples)
                         self.assertTrue(poles_inside_the_unit_circle(pad.thiran_coefficients), samples)
                         for step in range(1, 401):

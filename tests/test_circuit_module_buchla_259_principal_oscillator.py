@@ -129,8 +129,9 @@ class PhaseTests(unittest.TestCase):
         program = oscillator_program(reset="time > 99.5 && time < 100.5")
         sine, sine_phase, phase = run(program, 120)
         step = 440 / SAMPLERATE
-        self.assertAlmostEqual(phase[100], step, places=12)                 # reset, then one step
-        self.assertAlmostEqual(sine_phase[100 + SINE_LATENCY_STEPS], step, places=12)
+        self.assertEqual(phase[100], 0.0)          # the reset's step is the cycle's start (the sample's own time)
+        self.assertAlmostEqual(phase[101], step, places=12)
+        self.assertEqual(sine_phase[100 + SINE_LATENCY_STEPS], 0.0)
         self.assertGreater(sine_phase[100 + SINE_LATENCY_STEPS - 1], 0.5)       # the old cycle until then
         for i in range(100 + SINE_LATENCY_STEPS + 2, 120):                       # past the jump's band-limiting
             self.assertAlmostEqual(sine[i], shaped_sine(sine_phase[i], Buchla259PrincipalOscillatorCharacter()),

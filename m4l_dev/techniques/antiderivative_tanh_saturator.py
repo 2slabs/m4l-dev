@@ -41,8 +41,10 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
-from m4l_dev.techniques.halfband_oversampler import (HalfbandLinearPhaseDownsampler, HalfbandUpsampler,
+from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandLinearPhaseDownsampler,
+                                                     HalfbandUpsampler,
                                                      halfband_coefficients, halfband_response)
 
 # Below this input step the quotient loses digits (F1's rounding over the step, about |x| 2e-16 / step); above it the
@@ -73,7 +75,11 @@ class AntiderivativeTanhSaturator(Technique):
 
     With `bias` (a GenExpr expression), `<name>_out` = tanh(input + bias) - tanh(bias): the curve slid along itself,
     asymmetric (even harmonics: a tube-ish clip), still 0 at 0 and slope sech^2(bias) there. The mean is taken
-    along input + bias, the bias held over the step."""
+    along input + bias, the bias held over the step at its own mean over the step (the mean of its value at this step
+    and the last: the input's mean is half a step late, so is the bias). At 2x the bias reaches each step through
+    `ControlsAtTheUpsampledSteps` (the upsampler's latency, step 2 half a sample less), so it meets the audio it was
+    sent with: tests/test_oversampled_section_latency.py (read as it was now, held, it led the audio by 1.78 samples
+    at 2x, 0.5 at 1x)."""
 
     def __init__(self, instance_name, *, input, oversampling, bias=None):
         inputs = dict(input=input) if bias is None else dict(input=input, bias=bias)
@@ -86,12 +92,19 @@ class AntiderivativeTanhSaturator(Technique):
         self.oversampling = oversampling
         self.equaliser = AntiderivativeAntialiasingEqualiser(f"{instance_name}_equaliser", raw_mean=f"{instance_name}_mean",
                                                              order=1, oversampling=oversampling, who=who)
-        self.upsampler = self.downsampler = None
+        self.upsampler = self.downsampler = self.controls_at_the_steps = self.bias_starts = None
         if oversampling == 2:
             self.upsampler = HalfbandUpsampler(f"{instance_name}_up", input=f"{instance_name}_input")
+            if self.biased:
+                self.controls_at_the_steps = ControlsAtTheUpsampledSteps(
+                    f"{instance_name}_controls", upsampler=self.upsampler, controls={"bias": f"{instance_name}_bias"})
             self.downsampler = HalfbandLinearPhaseDownsampler(f"{instance_name}_down",
                                                               first=f"{instance_name}_step_1_out",
                                                               second=f"{instance_name}_step_2_out")
+        if self.biased:
+            # the last step's bias starts at the first step's (nothing slides on the first sample)
+            self.bias_starts = HistoriesStartAtTheirTargets(f"{instance_name}_bias_starts", targets={
+                f"{instance_name}_previous_bias": self._step_biases()[0]})
         self.output_bound_per_unit_mean = self._output_bound_per_unit_mean()
         # its blocks' summed: at 1x the mean's half step (exactly 0.5), at 2x the mean and the equaliser (1.25), the
         # elliptic upsampler's phase delay at 100 Hz (1.78) and the linear-phase downsampler's K - 1 (20); = the
@@ -132,25 +145,41 @@ class AntiderivativeTanhSaturator(Technique):
         declarations = [f"History {self.instance_name}_previous_input(0);", self.equaliser.declarations()]
         if self.oversampling == 2:
             declarations += [self.upsampler.declarations(), self.downsampler.declarations()]
+            if self.controls_at_the_steps is not None:
+                declarations.append(self.controls_at_the_steps.declarations())
+        if self.biased:
+            declarations += [f"History {self.instance_name}_previous_bias(0);", self.bias_starts.declarations()]
         return "\n".join(declaration for declaration in declarations if declaration)
 
-    def _mean_expression(self, step_input):
-        """GenExpr: the transfer's first-order ADAA over the step from the last input to `step_input`."""
+    def _mean_expression(self, step_input, step_bias):
+        """GenExpr: the transfer's first-order ADAA over the step from the last input to `step_input`, slid by
+        `step_bias` (the bias at this step) when biased."""
         p = self.instance_name
         if self.biased:
-            return f"tanh_antialiased({step_input} + {p}_bias, {p}_previous_input + {p}_bias) - tanh({p}_bias)"
+            return f"tanh_antialiased({step_input} + {step_bias}, {p}_previous_input + {step_bias}) - tanh({step_bias})"
         return f"tanh_antialiased({step_input}, {p}_previous_input)"
 
     def _transfer_description(self):
         return "tanh(x + bias) - tanh(bias)" if self.biased else "tanh"
 
-    def _step_statements(self, step_input, step_output):
+    def _step_biases(self):
+        """GenExpr: the bias as each step reads it (1x: now; 2x: through ControlsAtTheUpsampledSteps)."""
+        p = self.instance_name
+        if self.oversampling == 1:
+            return (f"{p}_bias",)
+        return (f"{p}_controls_bias_step_1", f"{p}_controls_bias_step_2")
+
+    def _step_statements(self, step_input, step_output, step_bias):
         """One step at the rate it runs at: the mean from the last step's input to `step_input`, both slid by this
         step's bias (taken as held over the step), less tanh(bias), then the equaliser, leaving `step_output`. Every
         kept value is 0 for silence, so silence is 0 from the first step, before and after the half-band pair."""
         p = self.instance_name
-        return (f"{p}_mean = {self._mean_expression(step_input)};\n{self.equaliser.statements()}\n"
-                f"{step_output} = {p}_equaliser_out;\n{p}_previous_input = {step_input};")
+        lines = []
+        if self.biased:
+            lines += [f"{p}_step_bias = 0.5 * ({step_bias} + {p}_previous_bias);", f"{p}_previous_bias = {step_bias};"]
+        lines += [f"{p}_mean = {self._mean_expression(step_input, f'{p}_step_bias')};", self.equaliser.statements(),
+                  f"{step_output} = {p}_equaliser_out;", f"{p}_previous_input = {step_input};"]
+        return "\n".join(lines)
 
     def statements(self):
         p = self.instance_name
@@ -159,12 +188,17 @@ class AntiderivativeTanhSaturator(Technique):
                  self.substituted("${p}_input = ${input};")]
         if self.biased:
             lines.append(self.substituted("${p}_bias = ${bias};"))
+        step_biases = self._step_biases()
         if self.oversampling == 1:
-            lines += [self._step_statements(f"{p}_input", f"{p}_out")]
+            if self.biased:
+                lines.append(self.bias_starts.statements())
+            lines += [self._step_statements(f"{p}_input", f"{p}_out", step_biases[0])]
         else:
-            lines += [self.upsampler.statements(),
-                      self._step_statements(f"{p}_up_first", f"{p}_step_1_out"),
-                      self._step_statements(f"{p}_up_second", f"{p}_step_2_out"),
+            lines.append(self.upsampler.statements())
+            if self.controls_at_the_steps is not None:
+                lines += [self.controls_at_the_steps.statements(), self.bias_starts.statements()]
+            lines += [self._step_statements(f"{p}_up_first", f"{p}_step_1_out", step_biases[0]),
+                      self._step_statements(f"{p}_up_second", f"{p}_step_2_out", step_biases[1]),
                       self.downsampler.statements(),
                       f"{p}_out = {p}_down_out;"]
         return "\n".join(lines)
@@ -192,7 +226,7 @@ class AntiderivativeTanhSaturatorLinearTwin(AntiderivativeTanhSaturator):
     def __init__(self, instance_name, *, input, oversampling):
         super().__init__(instance_name, input=input, oversampling=oversampling)
 
-    def _mean_expression(self, step_input):
+    def _mean_expression(self, step_input, step_bias):
         return f"0.5 * ({step_input} + {self.instance_name}_previous_input)"
 
     def _transfer_description(self):

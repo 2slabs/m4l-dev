@@ -25,6 +25,10 @@ The pad (`DefinedLatencyPad`): a fixed delay of `pad_samples` (>= 0, fractional 
   order 4 (pads of 3 or more): 1e-4 to 2 kHz, 0.0023 to 10 kHz, 0.14 to 18 kHz, 0.30 to 20 kHz
   (orders 2 and 3 between: THIRAN_PHASE_DELAY_ERROR_BOUNDS). A pad lines a path up where it matters (a voice's
   attack, a switched path's timing); in the top octave its phase is the all-pass's.
+- Inside a section run `oversampling` steps a host sample (a 2x section, its marker in each step: architecture/
+  dsp-blocks.md, "Latency is always said"), the pad is `pad_samples` host samples, `pad_samples x oversampling`
+  steps (`latency_steps`), the ring and the all-pass counting steps; `latency_samples` stays host samples. The
+  bounds above are then in steps, at the step rate.
 """
 import math
 
@@ -73,27 +77,38 @@ def thiran_allpass_coefficients(order, delay_samples):
 
 
 class DefinedLatencyPad(Technique):
-    """`<name>_out` = `input` `pad_samples` late (see the module's docstring). `latency_samples` is the pad."""
+    """`<name>_out` = `input` `pad_samples` (host samples) late (see the module's docstring). `oversampling`
+    (required): the steps the instrument runs it a host sample (1 for a host-rate path). `latency_samples` is the pad
+    in host samples, `latency_steps` in its steps."""
 
-    def __init__(self, instance_name, *, input, pad_samples):
+    def __init__(self, instance_name, *, input, pad_samples, oversampling):
         super().__init__(instance_name, input=input)
+        if isinstance(oversampling, bool) or not isinstance(oversampling, int) or oversampling < 1:
+            raise BuildError(f"DefinedLatencyPad {instance_name}: oversampling (required: the steps the instrument "
+                             f"runs it a host sample, 1 at the host rate) is a whole number >= 1, got {oversampling!r}")
         pad_samples = whole_if_within_a_crumb(_checked_latency(f"DefinedLatencyPad {instance_name}", "pad_samples",
                                                                pad_samples))
+        self.oversampling = oversampling
         self.latency_samples = pad_samples
-        if isinstance(pad_samples, int):
+        # the ring and the all-pass count steps
+        pad_steps = whole_if_within_a_crumb(pad_samples * oversampling)
+        self.latency_steps = pad_steps
+        if isinstance(pad_steps, int):
             self.thiran_order, self.thiran_delay_samples, self.thiran_coefficients = 0, 0.0, ()
-            self.whole_samples = pad_samples
+            self.whole_samples = pad_steps
         else:
-            whole, fraction = divmod(pad_samples, 1.0)
-            self.thiran_order = min(math.ceil(pad_samples), THIRAN_MAXIMUM_ORDER)
+            whole, fraction = divmod(pad_steps, 1.0)
+            self.thiran_order = min(math.ceil(pad_steps), THIRAN_MAXIMUM_ORDER)
             self.thiran_delay_samples = self.thiran_order - 1 + fraction
             self.thiran_coefficients = thiran_allpass_coefficients(self.thiran_order, self.thiran_delay_samples)
             self.whole_samples = int(whole) - (self.thiran_order - 1)
 
     def response(self, frequency_hz, sample_rate):
-        """The pad's complex response (the whole samples and the all-pass)."""
-        z_inverse = complex(math.cos(2 * math.pi * frequency_hz / sample_rate),
-                            -math.sin(2 * math.pi * frequency_hz / sample_rate))
+        """The pad's complex response (the whole steps and the all-pass, at the step rate: `sample_rate` x
+        `oversampling`)."""
+        step_rate = sample_rate * self.oversampling
+        z_inverse = complex(math.cos(2 * math.pi * frequency_hz / step_rate),
+                            -math.sin(2 * math.pi * frequency_hz / step_rate))
         response = z_inverse ** self.whole_samples
         if self.thiran_order:
             a, order = self.thiran_coefficients, self.thiran_order
@@ -111,7 +126,8 @@ class DefinedLatencyPad(Technique):
 
     def statements(self):
         p, order, a = self.instance_name, self.thiran_order, self.thiran_coefficients
-        lines = [f"// {p}: defined-latency pad, {self.latency_samples!r} samples: {self.whole_samples} whole"
+        lines = [f"// {p}: defined-latency pad, {self.latency_samples!r} samples ({self.oversampling} steps a sample): "
+                 f"{self.whole_samples} whole steps"
                  + (f" + a Thiran all-pass of order {order} at {self.thiran_delay_samples!r}" if order else "")
                  + " (kit technique: defined-latency pad)",
                  f"{p}_x_0 = {self.input_expressions['input']};"]
@@ -164,7 +180,8 @@ class DefinedLatency:
             raise BuildError(f"{self.device_name}: DefinedLatency has no path {path!r} (its paths: "
                              f"{sorted(self.pad_samples)})")
         self.padded_paths.add(path)
-        return DefinedLatencyPad(instance_name, input=input, pad_samples=self.pad_samples[path])
+        return DefinedLatencyPad(instance_name, input=input, pad_samples=self.pad_samples[path],
+                                 oversampling=1)
 
     def unpadded_paths(self):
         return sorted(set(self.pad_samples) - self.padded_paths)

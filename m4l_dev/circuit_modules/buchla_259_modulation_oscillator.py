@@ -92,7 +92,7 @@ class Buchla259ModulationOscillator(CircuitModule):
         return dict(FUNCTIONS, **self.edges.functions())
 
     def declarations(self):
-        return self.substituted("History ${p}_phase(0), ${p}_lead_phase(0);\n") + self.edges.declarations()
+        return self.substituted("History ${p}_phase(0), ${p}_lead_phase(0), ${p}_reset_pending(0);\n") + self.edges.declarations()
 
     def wave_at(self, phase):
         """GenExpr: the trivial wave at `phase` (0..1)."""
@@ -109,7 +109,9 @@ class Buchla259ModulationOscillator(CircuitModule):
         p = self.instance_name
         return (self.substituted("""// ${p}: the Buchla 259's modulation oscillator, one step (kit circuit module: Buchla 259 modulation oscillator)
 ${p}_step = """) + self._step_expression() + self.substituted(""";
-${p}_phase = ${p}_phase + ${p}_step - floor(${p}_phase + ${p}_step);
+// a reset's step is the cycle's start: it stands at phase 0 and advances nothing
+${p}_phase = ${p}_reset_pending > 0 ? 0 : ${p}_phase + ${p}_step - floor(${p}_phase + ${p}_step);
+${p}_reset_pending = 0;
 // the trivial wave runs LOOK_AHEAD steps ahead of the phase, so the band-limited wave (that many steps late) is now
 ${p}_lead_before = ${p}_lead_phase;
 ${p}_lead_phase = wrap(${p}_phase + ${look_ahead} * ${p}_step, 0, 1);
@@ -119,11 +121,12 @@ ${p}_lead_halfway = ${p}_lead_before < 0.5 && ${p}_lead_phase >= 0.5;
 """) + self.edges.statements() + f"\n{p}_out = {p}_edges_out;")
 
     def reset_statements(self):
-        """The cycle restarted (run before this sample's steps): the phase at 0, the band-limited ring holding the
-        restarted wave's next values, nothing of the old wave after it."""
+        """The cycle restarted (run before this sample's steps): the next step stands at phase 0 (the host sample's
+        own time, its first step: architecture/dsp-blocks.md, "Latency is always said"), the band-limited ring
+        holding the restarted wave's values from phase 0, nothing of the old wave after it."""
         p = self.instance_name
         step = f"{p}_reset_step"
         return (f"{step} = {self._step_expression()};\n{p}_phase = 0;\n"
-                f"{p}_lead_phase = {LOOK_AHEAD_STEPS} * {step};\n"
+                f"{p}_reset_pending = 1;\n{p}_lead_phase = {LOOK_AHEAD_STEPS - 1} * {step};\n"
                 + self.edges.restart_statements([self.wave_at(f"{ahead} * {step}")
-                                                 for ahead in range(1, LOOK_AHEAD_STEPS + 1)]))
+                                                 for ahead in range(LOOK_AHEAD_STEPS)]))

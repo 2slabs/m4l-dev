@@ -55,9 +55,9 @@ class ModulationOscillatorTests(unittest.TestCase):
     def test_a_reset_restarts_the_cycle_with_nothing_of_the_old_wave(self):
         out, phase, _, _ = oscillator_program(2, 1000.0, reset="time > 99.5 && time < 100.5").run(110, [[0.0] * 110])
         step = 1000.0 / SAMPLERATE
-        self.assertAlmostEqual(phase[100], step, places=12)
-        for i in range(100, 105):          # the saw from its start, exactly (no edge falls in the first steps)
-            self.assertAlmostEqual(out[i], 2 * ((i - 99) * step) - 1, places=9, msg=i)
+        self.assertEqual(phase[100], 0.0)  # the reset's step is the cycle's start: the host sample's own time
+        for i in range(100, 105):          # the saw from its start at the reset's sample, exactly (no edge falls here)
+            self.assertAlmostEqual(out[i], 2 * ((i - 100) * step) - 1, places=9, msg=i)
 
     def test_the_integral_is_the_waves_running_integral(self):
         for wave in range(len(WAVES)):

@@ -95,10 +95,11 @@ class Buchla259PrincipalOscillator(CircuitModule):
         self.latency_steps = self.edges.latency_steps
         self.latency_samples = self.edges.latency_samples
         # the triangle's peak (phase 1/4) turns the slope down, its trough (3/4) up; a reset jumps to the cycle's
-        # start (the sine's 0) one step before this one
+        # start (the sine's 0) at this very step (fraction 0): a host sample's reset acts at its first step's time,
+        # the sample's own (architecture/dsp-blocks.md, "Latency is always said")
         self.edges.add_corner(f"{p}_peak_crossed", f"{p}_peak_fraction", f"-{p}_corner_size")
         self.edges.add_corner(f"{p}_trough_crossed", f"{p}_trough_fraction", f"{p}_corner_size")
-        self.edges.add_jump(f"{p}_reset_pending", "1", f"-{p}_naive_before")
+        self.edges.add_jump(f"{p}_reset_pending", "0", f"-{p}_naive_before")
 
     def _half_pi_drive_term(self):
         """GenExpr: the shaper's K = drive x pi / 2: the build's number, or the run-time drive's expression in the
@@ -141,7 +142,8 @@ class Buchla259PrincipalOscillator(CircuitModule):
         return (self.substituted("""// ${p}: the Buchla 259's principal oscillator, one step (kit circuit module: Buchla 259 principal oscillator)
 ${p}_half_pi_drive = """) + self._half_pi_drive_term() + ";\n" + f"{p}_normalisation = " + self._normalisation_term()
                 + ";\n" + self.substituted("""${p}_phase_before = ${p}_phase;
-${p}_phase_step = (${frequency_hz} + ${frequency_modulation_hz}) / (samplerate * ${oversampling});
+// a reset's step is the cycle's start: it stands at phase 0 and advances nothing
+${p}_phase_step = ${p}_reset_pending > 0 ? 0 : (${frequency_hz} + ${frequency_modulation_hz}) / (samplerate * ${oversampling});
 ${p}_phase_unwrapped = ${p}_phase + ${p}_phase_step;
 ${p}_phase = ${p}_phase_unwrapped - floor(${p}_phase_unwrapped);
 ${p}_naive = buchla_259_principal_sine(${p}_phase, ${p}_half_pi_drive, ${p}_normalisation);
@@ -159,6 +161,7 @@ ${p}_sine = ${p}_edges_out;
 """) + self._phase_quartet_ring_statements())
 
     def reset_statements(self):
-        """The phase back to the cycle's start (run before this sample's steps); its jump, from the wave's last
-        value to 0, is band-limited by the next step."""
+        """The phase back to the cycle's start (run before this sample's steps): the next step stands at phase 0
+        (the host sample's own time, its first step), its jump, from the wave's last value to 0, band-limited there;
+        it reaches `<name>_sine` `latency_steps` steps later."""
         return self.substituted("${p}_phase = 0;\n${p}_reset_pending = 1;")
