@@ -45,3 +45,27 @@ The truth scores clearly better than its neighbours: at 0.05 unit off on any one
 problem; the score cannot see the parameter.
 
 ## Results
+
+### Interim (2026-10-20, before H5): H2 and a basin measurement point at the pitch term
+
+- H2 (1-D slices, 8 targets x 31 parameters x 101 points): local minima (0.25 deep) per slice: the toy voice 1.1
+  (70 / 64), the drums voice 2.1 (515 / 248), concentrated in tone_pitch_hz (2-9 a slice), pitch_sweep_semitones /
+  _ms (1-10), pitch_mod_semitones / _rate_hz, fold_volts / _symmetry, noise_pattern (8-12 when metal is audible).
+  By term: envelope 467, pitch 250, spectral 282 minima on the drums voice; on the toy 10, 9, 63. My prediction
+  (only pattern / tune / mod rate / pitch rugged, the rest <= 2) is wrong: sweep and fold are rugged too, and the
+  pitch and envelope terms are rugged where the toy's are not.
+- Basin shape (not planned; the measure that decided where to look): the score at RMS distance r from the truth
+  along 16 random directions in all 31 dimensions. Toy voice, median: r 0.005 -> 1.0-3.3, 0.02 -> 2.6-5.9, 0.1 ->
+  8.7-16: a funnel. Drums voice: r 0.005 -> 3.2-15.8, 0.02 -> 10.8-18.4: a needle. One parameter at a time (+-0.0025
+  .. 0.01, 8 targets): the jump is tone_pitch_hz (+3.9 at 0.0025 = 0.25 semitone), pitch_mod_rate_hz (+4.4),
+  pitch_mod_semitones (+1.9), noise_pattern (+2.5, one step); the rest < 0.5. Decomposed: the pitch term is the jump
+  (target 0: 0.1 % of the pitch axis moves pitch 0 -> 2.35, spectral 0.33 -> 2.53; at 0.5 % pitch hits its 12
+  semitone cap). YIN's per-frame period on the drums voice's tones (folded, square / triangle pitch modulation at
+  audio rate, tones above PITCH_HIGHEST_HZ 2 kHz, metal noise in the mix) flips between dips under tiny changes, and
+  each flip costs up to 12. With PITCH_WEIGHT 0 the drums voice's r 0.005 median falls to 2.4-4.7 (toy 0.8-3.2).
+
+## H5. The pitch term is the root cause
+
+Prediction: PITCH_WEIGHT 0 (nothing else changed), the default search, drums targets 0-7: recovery rises from 0 / 8
+(the baseline on these eight: 0 / 4 measured before stopping it) to >= 3 / 8; the toy voice stays >= 75 % (its pitch
+slices were unimodal in the spectral term alone: 9 minima over 8 targets).
