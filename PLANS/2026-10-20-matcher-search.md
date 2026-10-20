@@ -138,3 +138,23 @@ continuous remainder (23 parameters need ~4000+ renders from 0.02 away, the toy'
 The default search (6 x 2000), no pitch term, the five discrete parameters and the three chaotic tone parameters
 held at the truth (23 searched), targets 0-7. Prediction: >= 4 / 8 recovered. If so, the hostile parameters are the
 cause to fix in the search (sweep them on their own axes); if not, the continuous remainder's global search is.
+
+### H8 result: refuted; the continuous remainder is slow, not trapped
+
+Hostile parameters held at the truth (23 searched, default 6 x 2000, no pitch term): 0 / 4, best 2.2-3.2. A single
+local CMA-ES over those 23 from r 0.1 is still improving at 8000 renders (0.35-1.64, from ~2.6 at 1000); from r 0.25
+0.72-3.3. The default search gives each strand 1000 refinement renders: the H8 results are where the r 0.1 runs stood
+at 1000. Probed by finite differences, the 23 are a cone whose slopes differ ~100x between parameters (pitch sweep
+0.13 per 1e-3 of the unit axis, click noise 0.0004): an ill-conditioned problem CMA-ES learns in O(n^2) generations.
+Not cheaper by Levenberg-Marquardt on the feature residuals (a prototype jumped off and stuck: the floored dB
+residuals are not smooth enough for a forward-difference Jacobian). The renderer is built at -O0: -O2 renders the
+drums voice in 19 ms instead of 34.5, the same samples.
+
+## H9. Refinement: the tutorial's CMA-ES (active, negative weights) and a scaled start
+
+The kit's CMA-ES has positive weights only; Hansen's tutorial (references/sound-matching.md, cma-es, Table 1 and eq.
+(46)-(47), the default since 2016) uses negative weights (active CMA, Jastrebski & Arnold), and allows different
+initial scales per variable as C's diagonal (Fig. 6 footnote: "should not disagree by several orders of magnitude").
+Test, r 0.1, the 23 benign parameters, no pitch term, 3000 renders, targets 0-3: V1 active weights; V2 V1 + C's
+diagonal from a central-difference probe (2n renders; per-axis scale ~ 1 / slope, clipped to a 100x span).
+Prediction: V1 at 3000 renders reaches what the current CMA-ES reached at 8000 (median ~0.8); V2 better than V1.
