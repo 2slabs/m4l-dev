@@ -19,7 +19,8 @@ sys.path[:0] = [KIT_DIRECTORY, TESTS_DIRECTORY]
 from fixture_drum_voice import FIXTURE_DRUM_VOICE  # noqa: E402
 from m4l_dev import bs1770  # noqa: E402
 from m4l_dev import patch_match_score  # noqa: E402
-from m4l_dev.patch_match_score import MatchTarget, PatchMatchError  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
                                         match_patch, symmetric_eigendecomposition)
 from m4l_dev.patch_match_voice import MatchedParameter  # noqa: E402
@@ -90,11 +91,11 @@ class ScoreTests(unittest.TestCase):
 
     def test_silence_and_broken_hits(self):
         self.assertEqual(self.kick_target.score([0.0] * RATE), patch_match_score.SILENT_CANDIDATE_SCORE)
-        with self.assertRaisesRegex(PatchMatchError, "NaN"):
+        with self.assertRaisesRegex(BuildError, "NaN"):
             self.kick_target.score([0.1, float("nan")] + [0.0] * 100)
-        with self.assertRaisesRegex(PatchMatchError, "silent"):
+        with self.assertRaisesRegex(BuildError, "silent"):
             MatchTarget([0.0] * RATE, RATE)
-        with self.assertRaisesRegex(PatchMatchError, "too short"):
+        with self.assertRaisesRegex(BuildError, "too short"):
             MatchTarget([0.0] * 100 + [0.5] * 50, RATE)
 
     def test_the_target_is_cut_to_two_seconds_and_the_segment_is_what_was_compared(self):
@@ -119,17 +120,17 @@ class VoiceTests(unittest.TestCase):
         self.assertAlmostEqual(mode.unit_of_value(1), 0.5)
 
     def test_a_bad_spec_fails_loudly(self):
-        with self.assertRaisesRegex(PatchMatchError, "positive minimum"):
+        with self.assertRaisesRegex(BuildError, "positive minimum"):
             MatchedParameter.continuous("decay_ms", 0, 10, "log")
-        with self.assertRaisesRegex(PatchMatchError, "not under"):
+        with self.assertRaisesRegex(BuildError, "not under"):
             MatchedParameter.continuous("x", 1, 1)
-        with self.assertRaisesRegex(PatchMatchError, "does not declare"):
+        with self.assertRaisesRegex(BuildError, "does not declare"):
             dataclasses.replace(FIXTURE_DRUM_VOICE, parameters=(MatchedParameter.continuous("cutoff", 1, 2),))
-        with self.assertRaisesRegex(PatchMatchError, "outside its Param"):
+        with self.assertRaisesRegex(BuildError, "outside its Param"):
             dataclasses.replace(FIXTURE_DRUM_VOICE, parameters=(MatchedParameter.continuous("drive", 0.5, 2),))
-        with self.assertRaisesRegex(PatchMatchError, "both fixed and searched"):
+        with self.assertRaisesRegex(BuildError, "both fixed and searched"):
             dataclasses.replace(FIXTURE_DRUM_VOICE, fixed_values=(("drive", 2.0),))
-        with self.assertRaisesRegex(PatchMatchError, "not one of its choices"):
+        with self.assertRaisesRegex(BuildError, "not one of its choices"):
             MatchedParameter.enum("mode", (0, 1)).unit_of_value(3)
 
     def test_a_render_has_no_memory_of_the_one_before(self):

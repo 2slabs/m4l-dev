@@ -21,7 +21,8 @@ KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if KIT_DIRECTORY not in sys.path:
     sys.path.insert(0, KIT_DIRECTORY)
 
-from m4l_dev.patch_match_score import MatchTarget, PatchMatchError  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import SearchSettings, match_patch  # noqa: E402
 from m4l_dev.patch_match_voice import MatchedVoice  # noqa: E402
 from m4l_dev.wave_files import WaveFileError, read_wave_file, write_wave_file  # noqa: E402
@@ -29,24 +30,24 @@ from m4l_dev.wave_files import WaveFileError, read_wave_file, write_wave_file  #
 
 def load_voice(reference):
     if ":" not in reference:
-        raise PatchMatchError(f"--voice '{reference}': expected MODULE:NAME or path/to/file.py:NAME")
+        raise BuildError(f"--voice '{reference}': expected MODULE:NAME or path/to/file.py:NAME")
     location, name = reference.rsplit(":", 1)
     if location.endswith(".py"):
         path = os.path.abspath(location)
         if not os.path.isfile(path):
-            raise PatchMatchError(f"--voice: no file {path}")
+            raise BuildError(f"--voice: no file {path}")
         sys.path.insert(0, os.path.dirname(path))   # the voice module's own imports, and the worker processes'
         module = importlib.import_module(os.path.splitext(os.path.basename(path))[0])
     else:
         sys.path.insert(0, os.getcwd())
         module = importlib.import_module(location)
     if not hasattr(module, name):
-        raise PatchMatchError(f"--voice: {location} has no '{name}'")
+        raise BuildError(f"--voice: {location} has no '{name}'")
     voice = getattr(module, name)
     if callable(voice) and not isinstance(voice, MatchedVoice):
         voice = voice()
     if not isinstance(voice, MatchedVoice):
-        raise PatchMatchError(f"--voice: {reference} is a {type(voice).__name__}, not a MatchedVoice")
+        raise BuildError(f"--voice: {reference} is a {type(voice).__name__}, not a MatchedVoice")
     return voice
 
 
@@ -55,7 +56,7 @@ def target_channel(channels, choice, path):
         return [sum(frame) / len(channels) for frame in zip(*channels)]
     index = int(choice) - 1
     if not 0 <= index < len(channels):
-        raise PatchMatchError(f"{path}: --channel {choice}, the file has {len(channels)}")
+        raise BuildError(f"{path}: --channel {choice}, the file has {len(channels)}")
     return channels[index]
 
 
@@ -95,7 +96,7 @@ def main(argv):
         with open(arguments.out, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
             handle.write("\n")
-    except (PatchMatchError, WaveFileError, OSError, ImportError) as problem:
+    except (BuildError, WaveFileError, OSError, ImportError) as problem:
         print(f"match_patch: {problem}", file=sys.stderr)
         return 1
     print(f"score {result.best_score:.3f} ({result.best_components['spectral_db']:.2f} dB spectral, "

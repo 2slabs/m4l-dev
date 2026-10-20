@@ -24,7 +24,8 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 
-from m4l_dev.patch_match_score import MatchTarget, PatchMatchError
+from m4l_dev.build_error import BuildError
+from m4l_dev.patch_match_score import MatchTarget
 
 GLOBAL_STEP = 0.3
 REFINEMENT_STEP = 0.05
@@ -48,13 +49,13 @@ class SearchSettings:
 
     def __post_init__(self):
         if self.strands < 1:
-            raise PatchMatchError(f"strands must be at least 1, not {self.strands}")
+            raise BuildError(f"strands must be at least 1, not {self.strands}")
         if self.evaluations_per_strand < 20:
-            raise PatchMatchError(f"evaluations_per_strand {self.evaluations_per_strand} is too few to search")
+            raise BuildError(f"evaluations_per_strand {self.evaluations_per_strand} is too few to search")
         if not 0.0 <= self.refinement_fraction < 1.0:
-            raise PatchMatchError(f"refinement_fraction must be in [0, 1), not {self.refinement_fraction}")
+            raise BuildError(f"refinement_fraction must be in [0, 1), not {self.refinement_fraction}")
         if self.workers < 0:
-            raise PatchMatchError(f"workers must be >= 0, not {self.workers}")
+            raise BuildError(f"workers must be >= 0, not {self.workers}")
 
 
 def fold_onto_unit_interval(value):
@@ -95,7 +96,7 @@ def symmetric_eigendecomposition(matrix):
                     vectors[k][p] = c * vkp - s * vkq
                     vectors[k][q] = s * vkp + c * vkq
     else:
-        raise PatchMatchError("the covariance's eigendecomposition did not converge in 100 sweeps")
+        raise BuildError("the covariance's eigendecomposition did not converge in 100 sweeps")
     return [a[index][index] for index in range(size)], vectors
 
 
@@ -147,7 +148,7 @@ class CovarianceMatrixAdaptation:
 
     def tell(self, scores):
         if self._last_steps is None or len(scores) != self.population:
-            raise PatchMatchError("CMA-ES: tell() needs one score per candidate of the last ask()")
+            raise BuildError("CMA-ES: tell() needs one score per candidate of the last ask()")
         n = self.dimension
         order = sorted(range(self.population), key=lambda index: scores[index])
         selected = [self._last_steps[index] for index in order[:self.parents]]
@@ -180,7 +181,7 @@ class CovarianceMatrixAdaptation:
         if self.generation - self._decomposed_at_generation > 1 / (self.c_1 + self.c_mu) / n / 10:
             eigenvalues, self.basis = symmetric_eigendecomposition(self.covariance)
             if min(eigenvalues) <= 0:
-                raise PatchMatchError(f"CMA-ES: the covariance lost positive definiteness (eigenvalue "
+                raise BuildError(f"CMA-ES: the covariance lost positive definiteness (eigenvalue "
                                       f"{min(eigenvalues):.3g}) at generation {self.generation}")
             self.scales = [math.sqrt(value) for value in eigenvalues]
             self._decomposed_at_generation = self.generation
@@ -250,7 +251,7 @@ def run_strand(voice, target_samples, rate, settings, strand):
     population = None
     restarts = -1
     if CovarianceMatrixAdaptation([0.5] * voice.dimension, GLOBAL_STEP, random_source).population > global_budget:
-        raise PatchMatchError(f"{global_budget} global evaluations per strand are under one CMA-ES population for "
+        raise BuildError(f"{global_budget} global evaluations per strand are under one CMA-ES population for "
                               f"{voice.dimension} parameters: give more evaluations")
     while objective.evaluations < global_budget:
         restarts += 1

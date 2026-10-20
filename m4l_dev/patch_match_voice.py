@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 
 from m4l_dev.genexpr import GenProgram, analyze
-from m4l_dev.patch_match_score import PatchMatchError
+from m4l_dev.build_error import BuildError
 
 SCALES = ("linear", "log")
 KINDS = ("continuous", "integer", "enum")
@@ -38,26 +38,26 @@ class MatchedParameter:
     def enum(cls, name, choices):
         choices = tuple(float(choice) for choice in choices)
         if not choices:
-            raise PatchMatchError(f"parameter '{name}': an enum needs at least one choice")
+            raise BuildError(f"parameter '{name}': an enum needs at least one choice")
         return cls(name, min(choices), max(choices), "linear", "enum", choices)
 
     def __post_init__(self):
         where = f"parameter '{self.name}'"
         if self.scale not in SCALES:
-            raise PatchMatchError(f"{where}: scale '{self.scale}' is not one of {SCALES}")
+            raise BuildError(f"{where}: scale '{self.scale}' is not one of {SCALES}")
         if self.kind not in KINDS:
-            raise PatchMatchError(f"{where}: kind '{self.kind}' is not one of {KINDS}")
+            raise BuildError(f"{where}: kind '{self.kind}' is not one of {KINDS}")
         if not (math.isfinite(self.minimum) and math.isfinite(self.maximum)):
-            raise PatchMatchError(f"{where}: the range [{self.minimum}, {self.maximum}] is not finite")
+            raise BuildError(f"{where}: the range [{self.minimum}, {self.maximum}] is not finite")
         if self.kind != "enum" and not self.minimum < self.maximum:
-            raise PatchMatchError(f"{where}: minimum {self.minimum} is not under maximum {self.maximum}")
+            raise BuildError(f"{where}: minimum {self.minimum} is not under maximum {self.maximum}")
         if self.scale == "log" and self.minimum <= 0:
-            raise PatchMatchError(f"{where}: a log scale needs a positive minimum, not {self.minimum}")
+            raise BuildError(f"{where}: a log scale needs a positive minimum, not {self.minimum}")
         if self.kind == "integer" and (self.minimum != int(self.minimum) or self.maximum != int(self.maximum)):
-            raise PatchMatchError(f"{where}: an integer range needs integer ends, not [{self.minimum}, "
+            raise BuildError(f"{where}: an integer range needs integer ends, not [{self.minimum}, "
                                   f"{self.maximum}]")
         if self.kind == "enum" and len(set(self.choices)) != len(self.choices):
-            raise PatchMatchError(f"{where}: the enum's choices repeat: {self.choices}")
+            raise BuildError(f"{where}: the enum's choices repeat: {self.choices}")
 
     def value_of_unit(self, unit):
         """The Param value at `unit` in [0, 1] (clamped): linear or log between the ends; an integer rounds; an enum
@@ -79,10 +79,10 @@ class MatchedParameter:
         value = float(value)
         if self.kind == "enum":
             if value not in self.choices:
-                raise PatchMatchError(f"parameter '{self.name}': {value} is not one of its choices {self.choices}")
+                raise BuildError(f"parameter '{self.name}': {value} is not one of its choices {self.choices}")
             return (self.choices.index(value) + 0.5) / len(self.choices)
         if not self.minimum <= value <= self.maximum:
-            raise PatchMatchError(f"parameter '{self.name}': {value} is outside [{self.minimum}, {self.maximum}]")
+            raise BuildError(f"parameter '{self.name}': {value} is outside [{self.minimum}, {self.maximum}]")
         if self.scale == "log":
             return math.log(value / self.minimum) / math.log(self.maximum / self.minimum)
         return (value - self.minimum) / (self.maximum - self.minimum)
@@ -114,31 +114,31 @@ class MatchedVoice:
     def __post_init__(self):
         where = f"voice '{self.name}'"
         if not self.parameters:
-            raise PatchMatchError(f"{where}: no parameters to search")
+            raise BuildError(f"{where}: no parameters to search")
         names = [parameter.name for parameter in self.parameters]
         if len(set(names)) != len(names):
-            raise PatchMatchError(f"{where}: a parameter is searched twice: {names}")
+            raise BuildError(f"{where}: a parameter is searched twice: {names}")
         _, info = analyze(self.gen_code, self.num_inputs, self.num_outputs)
         for parameter in self.parameters:
             if parameter.name not in info.params:
-                raise PatchMatchError(f"{where}: searches '{parameter.name}', which the code does not declare as a "
+                raise BuildError(f"{where}: searches '{parameter.name}', which the code does not declare as a "
                                       f"Param (it declares: {', '.join(info.params) or 'none'})")
             declared = info.params[parameter.name]
             if ((declared.minimum is not None and parameter.minimum < declared.minimum)
                     or (declared.maximum is not None and parameter.maximum > declared.maximum)):
-                raise PatchMatchError(f"{where}: '{parameter.name}' is searched over [{parameter.minimum}, "
+                raise BuildError(f"{where}: '{parameter.name}' is searched over [{parameter.minimum}, "
                                       f"{parameter.maximum}], outside its Param's [{declared.minimum}, "
                                       f"{declared.maximum}]: the renderer would clamp it")
         for fixed_name, _ in self.fixed_values:
             if fixed_name not in info.params:
-                raise PatchMatchError(f"{where}: fixes '{fixed_name}', which the code does not declare as a Param")
+                raise BuildError(f"{where}: fixes '{fixed_name}', which the code does not declare as a Param")
             if fixed_name in names:
-                raise PatchMatchError(f"{where}: '{fixed_name}' is both fixed and searched")
+                raise BuildError(f"{where}: '{fixed_name}' is both fixed and searched")
         if not 1 <= self.trigger.input_number <= self.num_inputs:
-            raise PatchMatchError(f"{where}: the trigger is on input {self.trigger.input_number}, the voice has "
+            raise BuildError(f"{where}: the trigger is on input {self.trigger.input_number}, the voice has "
                                   f"{self.num_inputs}")
         if not 1 <= self.audio_output <= self.num_outputs:
-            raise PatchMatchError(f"{where}: audio output {self.audio_output}, the voice has {self.num_outputs}")
+            raise BuildError(f"{where}: audio output {self.audio_output}, the voice has {self.num_outputs}")
 
     @property
     def dimension(self):
@@ -146,13 +146,13 @@ class MatchedVoice:
 
     def values_of_units(self, units):
         if len(units) != self.dimension:
-            raise PatchMatchError(f"voice '{self.name}': {len(units)} unit values for {self.dimension} parameters")
+            raise BuildError(f"voice '{self.name}': {len(units)} unit values for {self.dimension} parameters")
         return {parameter.name: parameter.value_of_unit(unit) for parameter, unit in zip(self.parameters, units)}
 
     def units_of_values(self, values_by_name):
         missing = [parameter.name for parameter in self.parameters if parameter.name not in values_by_name]
         if missing:
-            raise PatchMatchError(f"voice '{self.name}': no value for {missing}")
+            raise BuildError(f"voice '{self.name}': no value for {missing}")
         return [parameter.unit_of_value(values_by_name[parameter.name]) for parameter in self.parameters]
 
     def render(self, values_by_name, num_samples, rate):
@@ -162,7 +162,7 @@ class MatchedVoice:
             program.set_param(fixed_name, fixed_value)
         for parameter in self.parameters:
             if parameter.name not in values_by_name:
-                raise PatchMatchError(f"voice '{self.name}': no value for '{parameter.name}'")
+                raise BuildError(f"voice '{self.name}': no value for '{parameter.name}'")
             program.set_param(parameter.name, values_by_name[parameter.name])
         held_samples = max(1, int(round(self.trigger.held_seconds * rate)))
         trigger_samples = [self.trigger.value] * min(held_samples, num_samples) + [0.0] * max(0, num_samples - held_samples)

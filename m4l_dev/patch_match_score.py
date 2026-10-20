@@ -30,6 +30,7 @@ import os
 from dataclasses import dataclass
 
 from m4l_dev import bs1770
+from m4l_dev.build_error import BuildError
 from m4l_dev.c_library_cache import load_c_library
 
 ONSET_THRESHOLD_DB = -40.0
@@ -46,10 +47,6 @@ FEATURES_COMPILER_FLAGS = ("-O2", "-std=c99", "-fPIC", "-shared", "-fno-fast-mat
 MATCH_OK, MATCH_SILENT, MATCH_NOT_FINITE, MATCH_OUT_OF_MEMORY, MATCH_BAD_ARGUMENT = range(5)
 STATUS_NAMES = {MATCH_SILENT: "silent", MATCH_NOT_FINITE: "holds a NaN or infinity",
                 MATCH_OUT_OF_MEMORY: "out of memory", MATCH_BAD_ARGUMENT: "bad argument"}
-
-
-class PatchMatchError(RuntimeError):
-    """A target or a candidate that cannot be scored, or a matcher that cannot run: says which and why."""
 
 
 _features_library = None
@@ -148,16 +145,16 @@ class MatchTarget:
         self.description = description
         signal = _as_double_array(samples)
         if len(signal) == 0:
-            raise PatchMatchError(f"{description}: no samples")
+            raise BuildError(f"{description}: no samples")
         onset = onset_index(signal)
         if onset is None:
-            raise PatchMatchError(f"{description}: silent, nothing to match")
+            raise BuildError(f"{description}: silent, nothing to match")
         self.preroll = int(round(PREROLL_SECONDS * self.rate))
         self.onset = onset
         self.analysis_length = min(int(round(ANALYSIS_SECONDS_LIMIT * self.rate)),
                                    len(signal) - onset + min(self.preroll, onset))
         if self.analysis_length < int(0.01 * self.rate):
-            raise PatchMatchError(f"{description}: under 10 ms after its onset ({self.analysis_length} samples): "
+            raise BuildError(f"{description}: under 10 ms after its onset ({self.analysis_length} samples): "
                                   "too short to match")
         self.candidate_length = self.analysis_length + int(round(self.CANDIDATE_LATENCY_SECONDS * self.rate))
         self.features, self.gain = self._analyse(signal, description)
@@ -168,7 +165,7 @@ class MatchTarget:
         library = features_library()
         size = library.match_feature_size(self.analysis_length, self.rate)
         if size <= 0:
-            raise PatchMatchError(f"{description}: no feature layout for {self.analysis_length} samples at "
+            raise BuildError(f"{description}: no feature layout for {self.analysis_length} samples at "
                                   f"{self.rate} Hz")
         features = into if into is not None else array.array("d", bytes(8 * size))
         gain = ctypes.c_double(0.0)
@@ -178,20 +175,20 @@ class MatchTarget:
         if status == MATCH_SILENT:
             return None, None
         if status != MATCH_OK:
-            raise PatchMatchError(f"{description}: the analysis failed: {STATUS_NAMES.get(status, status)}")
+            raise BuildError(f"{description}: the analysis failed: {STATUS_NAMES.get(status, status)}")
         return features, gain.value
 
     def components(self, candidate_samples, description="candidate"):
         signal = _as_double_array(candidate_samples)
         if len(signal) == 0:
-            raise PatchMatchError(f"{description}: no samples")
+            raise BuildError(f"{description}: no samples")
         features, _ = self._analyse(signal, description, into=self._scratch)
         if features is None:
             return ScoreComponents(0.0, 0.0, 0.0, 0.0, silent=True)
         status = features_library().match_distance(_address(self.features), _address(features), self.analysis_length,
                                                    self.rate, _address(self._components))
         if status != MATCH_OK:
-            raise PatchMatchError(f"{description}: the distance failed: {STATUS_NAMES.get(status, status)}")
+            raise BuildError(f"{description}: the distance failed: {STATUS_NAMES.get(status, status)}")
         return ScoreComponents(*self._components)
 
     def score(self, candidate_samples, description="candidate"):
@@ -204,7 +201,7 @@ class MatchTarget:
         onset = onset_index(signal)
         _, gain = self._analyse(signal, description, into=array.array("d", bytes(8 * len(self.features))))
         if onset is None or gain is None:
-            raise PatchMatchError(f"{description}: silent, no segment to compare")
+            raise BuildError(f"{description}: silent, no segment to compare")
         first = onset - self.preroll
         return [gain * signal[index] if 0 <= index < len(signal) else 0.0
                 for index in range(first, first + self.analysis_length)]
