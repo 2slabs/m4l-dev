@@ -35,6 +35,17 @@ from m4l_dev.techniques.zero_delay_one_pole_filter import \
     small_signal_response as one_pole_small_signal_response  # noqa: E402
 from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
                                                                  ring_time_constant_seconds, small_signal_response)
+from m4l_dev.techniques import drum_envelope  # noqa: E402
+from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
+from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
+from m4l_dev.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
+from m4l_dev.techniques.halfband_oversampler import (HALFBAND_ROUND_TRIP_LATENCY_SAMPLES,  # noqa: E402
+                                                     HalfbandDownsampler, HalfbandUpsampler,
+                                                     halfband_attenuation_db, halfband_coefficients, halfband_response)
+from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetallicNoise, lfsr_cycle  # noqa: E402
+from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
+from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
+from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
 from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, folded,  # noqa: E402
                                frequency_by_zero_crossings, harness, phase_degrees, worst_alias_db)
 
@@ -792,6 +803,408 @@ class LedDrivenPhotocellTests(unittest.TestCase):
             law = dict(self.LAW, **{name: bad})
             with self.subTest(name=name), self.assertRaises(BuildError):
                 LedDrivenPhotocell("cell", drive_current_amps="in1", attack_ms="3", release_ms="50", **law)
+
+
+class DrumEnvelopeTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+
+    def envelope(self, mode, attack_ms, decay_ms, burst_count=1, burst_spacing_ms=10.0):
+        block = DrumEnvelope("env", hit="in1", mode="mode", attack_ms="attack", decay_ms="decay",
+                             clap_burst_count="count", clap_burst_spacing_ms="spacing")
+        program = harness([block], {"mode": mode, "attack": attack_ms, "decay": decay_ms, "count": burst_count,
+                                    "spacing": burst_spacing_ms}, ["env_level", "env_stage"],
+                          samplerate=self.SAMPLERATE)
+        return program
+
+    def run_hits(self, program, hits_at, samples):
+        hits = [1.0 if n in hits_at else 0.0 for n in range(samples)]
+        return program.run(samples, [hits])
+
+    def samples(self, ms):
+        return ms * self.SAMPLERATE / 1000
+
+    def test_the_exponential_decay_falls_60_db_over_the_decay_time_then_ends(self):
+        level, stage = self.run_hits(self.envelope(0, 0.0, 100.0), {0}, 4000)
+        self.assertEqual(level[0], 1.0)                                  # attack 0: full force at the hit
+        at_decay_time = level[round(self.samples(100.0))]
+        self.assertAlmostEqual(20 * math.log10(at_decay_time), -drum_envelope.DECAY_SPAN_DB, delta=0.01)
+        for n in range(1, 1500):                                         # a true exponential: a constant ratio
+            self.assertAlmostEqual(level[n] / level[n - 1],
+                                   drum_envelope.exponential_decay_factor_per_sample(100.0, self.SAMPLERATE),
+                                   delta=1e-12)
+        self.assertEqual(level[-1], 0.0)
+        self.assertEqual(stage[-1], drum_envelope.STAGE_IDLE)
+
+    def test_the_exponential_attack_is_the_decay_reversed_and_reaches_1_at_the_attack_time(self):
+        level, _ = self.run_hits(self.envelope(0, 50.0, 100.0), {0}, 1000)
+        attack_samples = self.samples(50.0)
+        for n in range(round(attack_samples)):
+            self.assertAlmostEqual(level[n], drum_envelope.exponential_rise(n / attack_samples), delta=1e-9, msg=n)
+        self.assertAlmostEqual(level[round(attack_samples)], 1.0, delta=1e-12)
+        self.assertLess(level[round(attack_samples / 2)], 0.05)          # slow first: reversed in time
+        self.assertLess(level[round(attack_samples) + 1], 1.0)           # then the decay
+
+    def test_the_linear_mode_is_straight_both_ways(self):
+        level, stage = self.run_hits(self.envelope(1, 10.0, 50.0), {0}, 600)
+        attack, decay = round(self.samples(10.0)), round(self.samples(50.0))
+        for n in range(attack + 1):
+            self.assertAlmostEqual(level[n], n / attack, delta=1e-12, msg=n)
+        for n in range(decay):
+            self.assertAlmostEqual(level[attack + n], 1 - n / decay, delta=1e-9, msg=n)
+        self.assertEqual(level[attack + decay + 1], 0.0)
+        self.assertEqual(stage[attack + decay + 1], drum_envelope.STAGE_IDLE)
+
+    def test_a_restart_starts_the_attack_where_the_level_is(self):
+        # a second hit mid-decay: the level at the hit is the level before it, and no step is bigger than the
+        # attack's own steepest (exponential: its slope at the top, a / attack samples; linear: 1 / attack samples)
+        for mode, steepest in ((0, drum_envelope.ATTACK_CURVATURE / (1 - math.exp(-drum_envelope.ATTACK_CURVATURE))),
+                               (1, 1.0)):
+            with self.subTest(mode=mode):
+                level, _ = self.run_hits(self.envelope(mode, 5.0, 40.0), {0, 200}, 600)
+                self.assertGreater(level[199], 0.01)
+                # the hit's sample gives the level the decay had reached: no step
+                self.assertLess(abs(level[200] - level[199]), 0.01)
+                n = 201
+                while level[n - 1] < 1.0:                                       # the attack, to its top
+                    self.assertGreaterEqual(level[n] + 1e-12, level[n - 1], n)    # never drops after the hit
+                    self.assertLess(level[n] - level[n - 1], 1.0001 * steepest / self.samples(5.0) + 1e-12, n)
+                    n += 1
+                self.assertLess(n, 200 + self.samples(5.0) + 2)
+                self.assertEqual(max(level[200:300]), 1.0)
+
+    def test_the_clap_burst_retriggers_count_times_then_decays(self):
+        level, _ = self.run_hits(self.envelope(2, 0.0, 100.0, burst_count=4, burst_spacing_ms=10.0), {0}, 2000)
+        spacing = round(self.samples(10.0))
+        pulses = [n for n in range(2000) if level[n] == 1.0]
+        self.assertEqual(pulses, [0, spacing, 2 * spacing, 3 * spacing])
+        # between pulses each falls 60 dB over one spacing; after the last, 60 dB over the decay time
+        self.assertAlmostEqual(20 * math.log10(level[spacing - 1]), -60.0 * (spacing - 1) / spacing, delta=0.01)
+        after_last = level[3 * spacing + round(self.samples(100.0))]
+        self.assertAlmostEqual(20 * math.log10(after_last), -drum_envelope.DECAY_SPAN_DB, delta=0.01)
+        # a count of 1 is one pulse: the exponential envelope with attack 0
+        single, _ = self.run_hits(self.envelope(2, 0.0, 100.0, burst_count=1), {0}, 2000)
+        plain, _ = self.run_hits(self.envelope(0, 0.0, 100.0), {0}, 2000)
+        self.assertEqual(single, plain)
+
+    def test_the_mode_is_held_from_the_hit(self):
+        program = self.envelope(1, 0.0, 50.0)
+        level = self.run_hits(program, {0}, 100)[0]
+        program.set_param("mode", 0)                                      # turned mid-note: still linear
+        rest = program.run(100, [[0.0] * 100])[0]
+        self.assertAlmostEqual(level[-1] - rest[0], 1 / self.samples(50.0), delta=1e-12)
+
+
+class PitchModulatorTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+
+    def modulator(self, shape, amount=12.0, decay_ms=50.0, rate_hz=100.0, seed=12345.0, samplerate=None):
+        block = PitchModulator("mod", hit="in1", shape="shape", amount="amount", decay_ms="decay", rate_hz="rate",
+                               seed="seed")
+        return harness([block], {"shape": shape, "amount": amount, "decay": decay_ms, "rate": rate_hz, "seed": seed},
+                       ["mod_offset", "mod_frequency_ratio"], samplerate=samplerate or self.SAMPLERATE)
+
+    @staticmethod
+    def run_hits(program, hits_at, samples):
+        return program.run(samples, [[1.0 if n in hits_at else 0.0 for n in range(samples)]])
+
+    def test_the_decay_starts_at_the_amount_and_reaches_0_at_the_decay_time(self):
+        offset, ratio = self.run_hits(self.modulator(SHAPES["decay"], amount=24.0, decay_ms=50.0), {0}, 800)
+        decay_samples = 50.0 * self.SAMPLERATE / 1000
+        for n in range(500):
+            expected = 24.0 * exponential_rise(1 - n / decay_samples)
+            self.assertAlmostEqual(offset[n], expected, delta=1e-9, msg=n)
+            self.assertAlmostEqual(ratio[n], 2 ** (offset[n] / 12), delta=1e-12)
+        self.assertEqual(offset[0], 24.0)
+        self.assertEqual(offset[round(decay_samples) + 3], 0.0)
+
+    def test_the_cyclic_shapes_are_their_waves_from_the_hit_and_restart_on_the_next(self):
+        rate = 100.0
+        step = rate / self.SAMPLERATE
+        for name in ("sine", "triangle", "square", "saw_down"):
+            with self.subTest(shape=name):
+                offset, _ = self.run_hits(self.modulator(SHAPES[name], amount=5.0, rate_hz=rate), {0, 300}, 600)
+                for start in (0, 300):
+                    for n in range(start, start + 300):
+                        phase = ((n - start) * step) % 1.0
+                        near_an_edge = min(abs(phase - 0.5), phase, 1 - phase) < 3 * step
+                        if name == "sine" or not near_an_edge:
+                            self.assertAlmostEqual(offset[n], 5.0 * pitch_modulator_wave(SHAPES[name], phase),
+                                                   delta=1e-9, msg=(start, n))
+                self.assertAlmostEqual(offset[0], 5.0, delta=1e-12)
+                self.assertAlmostEqual(offset[300], 5.0, delta=1e-12)
+
+    def test_rate_0_holds_the_initial_offset(self):
+        for name in ("sine", "triangle", "square", "saw_down"):
+            offset, _ = self.run_hits(self.modulator(SHAPES[name], amount=-7.0, rate_hz=0.0), {0}, 200)
+            self.assertTrue(all(abs(value + 7.0) < 1e-12 for value in offset), name)
+
+    def test_audio_rate_square_and_saw_are_band_limited(self):
+        # an ER-1-speed modulator (C7, 2093 Hz) at 44.1 kHz: the worst alias below 10 kHz re the fundamental, the
+        # block's against the trivial wave's
+        samplerate, fundamental = 44100.0, 2093.0
+        for name, harmonics in (("square", range(3, 60, 2)), ("saw_down", range(2, 60))):
+            with self.subTest(shape=name):
+                offset, _ = self.run_hits(self.modulator(SHAPES[name], amount=1.0, rate_hz=fundamental,
+                                                         samplerate=samplerate), {0}, 4096 + 1000)
+                trivial = [pitch_modulator_wave(SHAPES[name], (n * fundamental / samplerate) % 1.0)
+                           for n in range(4096 + 1000)]
+                band_limited = worst_alias_db(offset[1000:], fundamental, harmonics, samplerate, 10000.0)
+                naive = worst_alias_db(trivial[1000:], fundamental, harmonics, samplerate, 10000.0)
+                self.assertLess(band_limited, -75.0)            # measured -76.3 (square), -77.0 (saw)
+                self.assertLess(band_limited, naive - 50.0)     # the trivial waves: -24.6
+
+    def test_random_at_rate_0_is_one_seeded_value_a_hit(self):
+        hits = set(range(0, 4000, 40))
+        offset, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=0.0), hits, 4000)
+        values = [offset[n] for n in sorted(hits)]
+        for start in sorted(hits):
+            self.assertTrue(all(offset[n] == offset[start] for n in range(start, start + 40)), start)
+        self.assertEqual(len(set(values)), len(values))                 # a new value every hit
+        self.assertTrue(all(abs(value) <= 3.0 for value in values))
+        self.assertAlmostEqual(sum(values) / len(values), 0.0, delta=0.5)
+        # the same seed draws the same values; another seed others
+        again, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=0.0), hits, 4000)
+        self.assertEqual(again, offset)
+        other, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=0.0, seed=999.0), hits, 4000)
+        self.assertNotEqual([other[n] for n in sorted(hits)], values)
+
+    def test_random_above_rate_0_is_low_passed_noise_of_the_same_spread(self):
+        # its RMS is amount / sqrt(3) (a uniform draw's) at every rate, and it moves no faster than its cutoff
+        for rate in (20.0, 200.0, 2000.0):
+            with self.subTest(rate=rate):
+                offset, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=rate), {0}, 80000)
+                rms = math.sqrt(sum(value * value for value in offset) / len(offset))
+                tolerance = 0.25 if rate == 20.0 else 0.08
+                self.assertAlmostEqual(rms / (3.0 / math.sqrt(3)), 1.0, delta=tolerance)
+        slow, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=20.0), {0}, 8000)
+        fast, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=2000.0), {0}, 8000)
+        mean_step = [sum(abs(s[n] - s[n - 1]) for n in range(1, 8000)) / 7999 for s in (slow, fast)]
+        self.assertLess(mean_step[0], 0.2 * mean_step[1])
+
+
+class SeededWhiteNoiseTests(unittest.TestCase):
+    def noise(self, seed=0.0):
+        return harness([SeededWhiteNoise("noise", seed="seed", restart="in1")], {"seed": seed},
+                       ["noise_out", "noise_state"], samplerate=8000.0)
+
+    def test_it_is_the_minimal_standard_generator(self):
+        # Park & Miller, p. 1195: "z1 = 1 then z10001 = 1043618065" (seed 0 starts the state at 1)
+        _, state = self.noise(0.0).run(10000, [[0.0] * 10000])
+        self.assertEqual(state[-1], 1043618065.0)
+        out, _ = self.noise(271828.0).run(2000, [[0.0] * 2000])
+        self.assertEqual(out, park_miller_sequence(271828.0, 2000))
+
+    def test_a_seed_restarts_it_and_so_does_restart(self):
+        program = self.noise(5.0)
+        first = program.run(100, [[0.0] * 100])[0]
+        program.set_param("seed", 6.0)
+        other = program.run(100, [[0.0] * 100])[0]
+        program.set_param("seed", 5.0)
+        again = program.run(100, [[0.0] * 100])[0]
+        self.assertEqual(first, again)
+        self.assertNotEqual(first, other)
+        restarted = program.run(150, [[0.0] * 50 + [1.0] + [0.0] * 99])[0]
+        self.assertEqual(restarted[50:150], first)
+
+    def test_it_is_white_and_uniform(self):
+        out, _ = self.noise(123456789.0).run(100000, [[0.0] * 100000])
+        mean = sum(out) / len(out)
+        variance = sum((v - mean) ** 2 for v in out) / len(out)
+        self.assertAlmostEqual(mean, 0.0, delta=0.01)
+        self.assertAlmostEqual(variance, 1 / 3, delta=0.01)
+        self.assertTrue(all(-1 < v < 1 for v in out))
+        for lag in (1, 2, 3, 7):
+            correlation = sum(out[n] * out[n - lag] for n in range(lag, len(out))) / len(out) / variance
+            self.assertLess(abs(correlation), 0.02, lag)
+
+
+class MetallicNoiseTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+
+    def source(self, pattern, tune_hz):
+        return harness([LfsrMetallicNoise("metal", hit="in1", tune_hz="tune", pattern="pattern")],
+                       {"tune": tune_hz, "pattern": pattern}, ["metal_out", "metal_register"],
+                       samplerate=self.SAMPLERATE)
+
+    def test_the_register_is_the_python_model(self):
+        # clocked at the sample rate the register steps once a sample
+        for pattern in (1, 29, 77, 142, 255):
+            with self.subTest(pattern=pattern):
+                _, register = self.source(pattern, self.SAMPLERATE).run(600, [[1.0] + [0.0] * 599])
+                self.assertEqual(register, [float(state) for state in lfsr_cycle(pattern)])
+
+    def test_each_pattern_is_its_own_tone_pattern(self):
+        cycles = {}
+        for pattern in range(1, 256):
+            states = lfsr_cycle(pattern, steps=600)
+            tail = states[300:]
+            period = next(length for length in range(1, 300) if tail[length:] == tail[:-length])
+            cycles[pattern] = tuple(state % 2 for state in tail[:period])
+            self.assertNotIn(0, set(states))
+        # never a constant output, and the output bit patterns are many different ones
+        self.assertTrue(all(len(set(bits)) == 2 for bits in cycles.values()))
+        self.assertGreater(len(set(cycles.values())), 100)
+
+    def test_the_tune_pitches_it(self):
+        # pattern 29's cycle at a tune of sr / 4: the output repeats every 4 x the cycle's length in samples
+        states = lfsr_cycle(29, steps=600)[300:]
+        period = next(length for length in range(1, 300) if states[length:] == states[:-length])
+        out, _ = self.source(29, self.SAMPLERATE / 4).run(6000, [[1.0] + [0.0] * 5999])
+        for n in range(3000, 3000 + 400):
+            self.assertAlmostEqual(out[n], out[n + 4 * period], delta=1e-9)
+
+    def test_a_hit_restarts_the_same_pattern(self):
+        hits = [1.0 if n in (0, 1000) else 0.0 for n in range(2000)]
+        out, _ = self.source(77, 1234.5).run(2000, [hits])
+        self.assertEqual(out[1003:1990], out[3:990])
+
+    def test_every_metallic_source_keeps_the_seam(self):
+        # the interface an instrument (and the matcher) swaps sources by; two instances in one voice
+        for source_type in METALLIC_NOISE_SOURCES:
+            with self.subTest(source=source_type.__name__):
+                first = source_type("metal_a", hit="in1", tune_hz="3000", pattern="77")
+                second = source_type("metal_b", hit="in1", tune_hz="4100", pattern="142")
+                program = harness([first, second], {}, ["metal_a_out", "metal_b_out"], samplerate=self.SAMPLERATE)
+                a, b = program.run(4000, [[1.0] + [0.0] * 3999])
+                for out in (a, b):
+                    self.assertLess(max(abs(v) for v in out), 1.3)
+                    self.assertGreater(sum(v * v for v in out) / len(out), 0.5)
+                self.assertNotEqual(a, b)
+
+
+class BellEqualizerTests(unittest.TestCase):
+    SAMPLERATE = 44100.0
+
+    def bell(self, *blocks):
+        return harness(list(blocks) or [BellEqualizer("bell", input="in1", frequency_hz="centre", gain_db="gain",
+                                                      q="q")],
+                       {"centre": 1000.0, "gain": 0.0, "q": 1.0}, ["bell_out"], samplerate=self.SAMPLERATE)
+
+    def gain_db_at(self, frequency, centre, gain_db, q):
+        program = self.bell()
+        for name, value in (("centre", centre), ("gain", gain_db), ("q", q)):
+            program.set_param(name, value)
+        samples = 22050          # half a second to settle (Q 20 at 100 Hz rings with tau 64 ms), the rest measured
+        sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(2 * samples)]
+        out = program.run(2 * samples, [sine])[0]
+        return 20 * math.log10(amplitude_at(out[samples:], frequency, self.SAMPLERATE)
+                               / amplitude_at(sine[samples:], frequency, self.SAMPLERATE))
+
+    def test_exact_at_the_centre(self):
+        for centre in (100.0, 1000.0, 10000.0):
+            for gain_db in (-24.0, 6.0, 40.0):
+                self.assertAlmostEqual(self.gain_db_at(centre, centre, gain_db, 2.0), gain_db, delta=0.01,
+                                       msg=(centre, gain_db))
+
+    def test_small_signals_are_the_band_shelving_filter(self):
+        for frequency in (60.0, 400.0, 700.0, 1400.0, 3000.0, 15000.0):
+            for gain_db, q in ((12.0, 0.7), (-12.0, 4.0)):
+                expected = 20 * math.log10(abs(bell_small_signal_response(frequency, 1000.0, gain_db, q,
+                                                                          self.SAMPLERATE)))
+                self.assertAlmostEqual(self.gain_db_at(frequency, 1000.0, gain_db, q), expected, delta=0.05,
+                                       msg=(frequency, gain_db, q))
+
+    def test_q_is_the_width_at_half_the_gain(self):
+        # |H| = sqrt(G) (half the dB) where |1 - w^2| = w / Q: w = sqrt(1 + 1 / (4 Q^2)) +- 1 / (2 Q), on the
+        # analog axis, mapped back through the prewarping
+        centre, q, gain_db = 1000.0, 2.0, 18.0
+        g = math.tan(math.pi * centre / self.SAMPLERATE)
+        for sign in (-1, 1):
+            w = math.sqrt(1 + 1 / (4 * q * q)) + sign / (2 * q)
+            edge = self.SAMPLERATE / math.pi * math.atan(w * g)
+            self.assertAlmostEqual(self.gain_db_at(edge, centre, gain_db, q), gain_db / 2, delta=0.02, msg=edge)
+
+    def test_a_cut_undoes_the_same_boost_and_0_db_is_the_input(self):
+        boost = BellEqualizer("boost", input="in1", frequency_hz="1000", gain_db="15", q="3")
+        cut = BellEqualizer("bell", input="boost_out", frequency_hz="1000", gain_db="-15", q="3")
+        noise = park_miller_sequence(4242.0, 4000)
+        out = self.bell(boost, cut).run(4000, [noise])[0]
+        self.assertLess(max(abs(x - y) for x, y in zip(out, noise)), 1e-9)
+        flat = self.bell().run(4000, [noise])[0]
+        self.assertEqual(flat, noise)
+
+
+class HalfbandOversamplerTests(unittest.TestCase):
+    SAMPLERATE = 44100.0
+
+    def test_the_design_is_hiirs(self):
+        # HIIR 1.40 oversampling.txt, "2x, 156 dB": 12 coefficients, transition 0.0472053, attenuation 156.686 dB
+        published = (0.017347915108876406, 0.067150480426919179, 0.14330738338179819, 0.23745131944299824,
+                     0.34085550201503761, 0.44601111310335906, 0.54753112652956148, 0.6423859124721446,
+                     0.72968928615804163, 0.81029959388029904, 0.88644514917318362, 0.96150605146543733)
+        for ours, theirs in zip(halfband_coefficients(12, 0.0472053), published):
+            self.assertAlmostEqual(ours, theirs, delta=2e-7)
+        self.assertAlmostEqual(halfband_attenuation_db(12, 0.0472053), 156.686, delta=0.001)
+        self.assertAlmostEqual(halfband_attenuation_db(), 99.3, delta=0.05)
+        with self.assertRaises(BuildError):
+            halfband_coefficients(0, 0.04)
+        with self.assertRaises(BuildError):
+            HalfbandDownsampler("down", first="in1", second="in1", coefficients=(0.5, 1.2))
+
+    def test_the_response_is_flat_in_the_pass_band_and_down_99_db_in_the_stop_band(self):
+        coefficients = halfband_coefficients()
+        for f in (0.0, 0.05, 0.1, 0.15, 0.2, 0.21):
+            self.assertLess(abs(20 * math.log10(abs(halfband_response(f, coefficients)))), 1e-6, f)
+        worst_stop = max(abs(halfband_response(0.29 + 0.21 * k / 400, coefficients)) for k in range(401))
+        self.assertLess(20 * math.log10(worst_stop), -99.0)
+
+    def downsampled(self, two_times_rate_signal):
+        """`two_times_rate_signal`: a GenExpr expression of `t` (seconds) at twice the rate."""
+        down = HalfbandDownsampler("down", first="first", second="second")
+        first = two_times_rate_signal.replace("t_", "(count / samplerate)")
+        second = two_times_rate_signal.replace("t_", "((count + 0.5) / samplerate)")
+        code = gen_code_with_blocks(
+            "/*GEN_BLOCK_FUNCTIONS*/\nHistory count(0);\n/*GEN_BLOCK_DECLARATIONS*/\n"
+            f"first = {first};\nsecond = {second};\ncount = count + 1;\n/*DOWN*/\nout1 = down_out;\nout2 = first;\n",
+            [down], "halfband harness")
+        return GenProgram(code, 0, 2, samplerate=self.SAMPLERATE).run(8192 + 2000)
+
+    def test_the_downsampler_stops_what_naive_decimation_folds(self):
+        # a 30 kHz tone at 88.2 kHz: dropping every other sample folds it to 14.1 kHz at full level
+        filtered, naive = self.downsampled("sin(twopi * 30000 * t_)")
+        alias = self.SAMPLERATE - 30000.0
+        self.assertGreater(amplitude_at(naive[2000:], alias, self.SAMPLERATE), 0.99)
+        self.assertLess(20 * math.log10(amplitude_at(filtered[2000:], alias, self.SAMPLERATE)), -99.0)  # -113.5
+
+    def test_an_fm_pair_at_2x_aliases_far_less_than_at_1x(self):
+        # carrier 9 kHz, modulator 1.3 kHz, index 10: its sidebands (9000 + k 1300) run past Nyquist. Kept ones sit at
+        # +-9000 mod 1300 (1200 or 100), the ones folded at 44.1 kHz at 44100 - those (0 or 1100): the worst folded
+        # sideband below 20 kHz re the carrier, the 1x pair (the naive: every other sample of the 2x one) against the
+        # 2x pair through the downsampler
+        filtered, naive = self.downsampled("sin(twopi * 9000 * t_ + 10 * sin(twopi * 1300 * t_))")
+
+        def worst_folded_db(signal):
+            carrier = amplitude_at(signal, 9000.0, self.SAMPLERATE)
+            kept = {9000 % 1300, -9000 % 1300}
+            folded_residues = {(44100 - residue) % 1300 for residue in kept}
+            self.assertFalse(kept & folded_residues)
+            folded_lines = [f for f in range(100, 20000, 100) if f % 1300 in folded_residues]
+            return 20 * math.log10(max(amplitude_at(signal, f, self.SAMPLERATE) for f in folded_lines) / carrier)
+        at_1x, at_2x = worst_folded_db(naive[2000:]), worst_folded_db(filtered[2000:])
+        self.assertGreater(at_1x, -15.0)                    # measured -11.8 dB
+        self.assertLess(at_2x, -80.0)                       # measured -84.1 dB
+
+    def test_up_then_down_is_the_input_late(self):
+        up = HalfbandUpsampler("up", input="in1")
+        down = HalfbandDownsampler("down", first="up_first", second="up_second")
+        program = harness([up, down], {}, ["down_out", "up_first", "up_second"], samplerate=self.SAMPLERATE)
+        for frequency in (100.0, 1000.0, 15000.0):
+            sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(8820)]
+            out = program.run(8820, [sine])[0]
+            gain = amplitude_at(out[4410:], frequency, self.SAMPLERATE) / amplitude_at(sine[4410:], frequency,
+                                                                                        self.SAMPLERATE)
+            self.assertAlmostEqual(20 * math.log10(gain), 0.0, delta=1e-3, msg=frequency)
+        # the latency at low frequencies (the phase delay at 100 Hz, base-rate samples)
+        sine = [math.sin(2 * math.pi * 100.0 * n / self.SAMPLERATE) for n in range(8820)]
+        out = program.run(8820, [sine])[0]
+        delay = -phase_degrees(out[4410:], sine[4410:], 100.0, self.SAMPLERATE) / 360 * self.SAMPLERATE / 100.0
+        self.assertAlmostEqual(delay, HALFBAND_ROUND_TRIP_LATENCY_SAMPLES, delta=0.05)
+        # the upsampler's image (44.1 kHz - f, in the 88.2 kHz stream) is gone
+        sine = [math.sin(2 * math.pi * 5000.0 * n / self.SAMPLERATE) for n in range(8820)]
+        _, first, second = program.run(8820, [sine])
+        stream = [value for pair in zip(first, second) for value in pair]
+        image = amplitude_at(stream[8820:], self.SAMPLERATE - 5000.0, 2 * self.SAMPLERATE)
+        self.assertLess(20 * math.log10(image), -95.0)
 
 
 if __name__ == "__main__":

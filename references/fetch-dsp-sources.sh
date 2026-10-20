@@ -20,6 +20,10 @@ sources=(
   "najnudel-et-al-dafx23.pdf|https://www.dafx.de/paper-archive/2023/DAFx23_paper_50.pdf|1a715de02fabb617c00d303d01d6dff91adeca4a429c4573873aaeed2dd36037"
   "perkinelmer-vt500-catalog.pdf|https://www.amstzone.org/PerkinElmer-VT500.pdf|f932833fc7ce96715803e79edc0c0393ce307704edab08b0457e0f05ae6594fd"
   "data-knot-dk_reverb_library.genexpr|https://raw.githubusercontent.com/rconstanzo/data-knot/e8ebcecadbf0cade540093ab80d0ea726f325f5f/code/dk_reverb_library.genexpr|208e707616dba19ad5c326497c288d8039ba95b30964eafbc546bbdf4fbf36b4"
+  "microtonic-user-guide-3.3.4.pdf|https://soniccharge.com/public/Microtonic%20User%20Guide.pdf|511c69d53991288431eb890e8ee80f7a5c44f513f4a6a876f718f78d41fcfb94"
+  "park-miller-cacm1988.pdf|https://www.firstpr.com.au/dsp/rand31/p1192-park.pdf|69b0a6f2df4a794b982de14e3af12d97047668ee5e11dd098a6bacb6f85c28f6"
+  "jomox-mbase11-manual.pdf|https://www.jomox.de/upload/manuals/MBase11_E.pdf|10350e766ff794a6afca61b268d8aea2e094cbe8d595aebeb0449c81240b0ef0"
+  "hiir-1.40.zip|https://ldesoras.fr/src/hiir-1.40.zip|ed1d630f85b4ed1eeda8de16acb1f785b18fc93d1430c1956192c6cc1df4221e"
 )
 failed=0
 for entry in "${sources[@]}"; do

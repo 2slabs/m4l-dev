@@ -10,6 +10,10 @@ random reset (how many bars until we go back to the seed restart) and a way to s
   32-bit integer steps (Math.imul, shifts) that JavaScript does exactly, so Max and node draw the same numbers.
   It is the kit's only generator: a device that needs numbers from a value of its own (2sl drums' random function,
   seeded by its settings) uses `seededSequence(seed)` directly.
+- **At audio rate** (gen~, where the brain cannot draw a number a sample): the `SeededWhiteNoise` technique
+  (Park-Miller's minimal standard, m4l_dev/techniques/seeded_white_noise.py) makes the samples, its seed drawn from
+  the brain's sequence (`floor(randomNext() * 2147483646)`) and sent to gen~, so its noise starts over with Seed and
+  Loop like every other draw. gen~'s own noise() cannot be seeded and is not used for anything a seed must repeat.
 - **When it starts over** (`templates/seeded-random.template.js`): when Seed changes; when Live starts playing (so
   play always sounds the same from where it starts); and while Live plays, whenever the song position enters another
   Loop: every Loop bars, counted from the song's start, a bar being 16 16ths (4 beats) whatever Live's time

@@ -203,6 +203,116 @@ and the times are the caller's. Undriven, `release_ms` is exactly the time from 
 `release_to_amps`. The Buchla 292 channel (circuits/buchla-292-low-pass-gate.md, the VTL5C3/2's constants; moved onto
 this block bit for bit) and the Mu-Tron Bi-Phase (circuits/mutron-bi-phase.md, its own UNVERIFIED constants) use it.
 
+## Drum envelope (m4l_dev/techniques/drum_envelope.py)
+
+**Sonic Charge, *Microtonic User Guide* v3.3.4** (`microtonic-user-guide-3.3.4.pdf`; 2sl drums
+references/er1-microtonic-genopatch.md §1.2 reads the whole voice from it).
+- p. 18, Oscillator Attack: "With the default attack setting of zero, the envelope's attack phase is eliminated, and
+  the oscillator triggers at full force directly. This causes a sharp transient with a distinct clicking sound";
+  "Longer attack times suggests a sound that has been reversed in time because the oscillator attack phase is always
+  exponential (most synthesizers have a linear attack and an exponential decay)."
+- p. 18, Oscillator Decay: "The oscillator envelope always runs from maximum to zero amplitude with an exponential
+  decay curve ... (The observant reader may object that an exponential decay never reaches zero, which is true in
+  theory; thus, the time setting is only an approximate.)"
+- p. 19, Noise Envelope Mode: "The Linear Mode creates a more conventional attack, but its decay acquires a 'gated'
+  effect, which is great for simulating gated snare drums. Finally, the Modulated Mode is tailor-made for handclaps.
+  It works by retriggering the envelope in rapid successions before going into the decay phase. In this mode, the
+  attack setting controls the time until the decay phase by changing the number of triggers and the time between
+  them." p. 20, Noise Attack: for the Modulated Mode "this is the total time spent triggering short 'clap bursts'
+  until the decay phase kicks in."
+
+The technique: the attack is the exponential decay reversed in time (rise(u) = (e^(-a(1-u)) - e^(-a)) / (1 - e^(-a))),
+the decay a true exponential, linear both ways in the linear mode, the clap a burst of instant retriggers. Ours, not
+the guide's [UNVERIFIED]: the curvature a = ln 1000, that `decay_ms` spans 60 dB, the clap's count and spacing as two
+controls (the guide folds them into Attack with no law) and each pulse's 60 dB fall over one spacing. A restart
+starts the attack at the level the envelope has (the attack curve inverted), our rule for "restart on hit without
+clicks".
+
+## Pitch modulator (m4l_dev/techniques/pitch_modulator.py)
+
+**Microtonic User Guide v3.3.4**, p. 17: Decaying, "the rate setting controls the time it takes the oscillator to go
+from the highest frequency down to the base frequency (or from the lowest frequency and up if the modulation amount is
+negative). At minimum rate setting, the oscillator is stuck at the highest / lowest frequency"; Sine, "the minimum
+rate setting makes the oscillator stick to its initial frequency and never changes. The highest modulation rates
+generate an FM-like effect"; Random, "Random Pitch Modulation uses a low-pass filtered noise as the modulation source,
+and for this mode, the rate controls the cut-off frequency of the low-pass filter ... At zero rate, it simply
+randomizes the pitch by the chosen amount every time the drum patch is triggered." Ranges: Decaying ±96 semitones,
+infinite to 10 ms; Sine and Random ±48 semitones, 0-2 kHz and 0-20 kHz.
+
+**Korg ER-1 owner's manual** (2sl drums references/er1-microtonic-genopatch.md §1.1, ER1-OM pp. 24-25): Mod Type Saw
+Down ("pitch falls cyclically"), Square ("two pitches alternate"), Triangle ("rises and falls"), Mod Speed 0.1 Hz to
+5 kHz.
+
+The technique: the six shapes, each cyclic one starting at +amount (Microtonic's "stick to its initial frequency" at
+rate 0), the cyclic jumps and corners through `BandLimitedEdges` (C7 square and saw: worst alias below 10 kHz
+-76 dB, the trivial waves -24.6 dB). Ours [UNVERIFIED]: the decay's curve (the drum envelope's rise reversed, reaching
+0 at the decay time), and the random shape's filter, a one-pole AR(1) y <- (1 - c) y + sqrt(c(2 - c)) w that keeps the
+variance of a uniform draw at every cutoff.
+
+## Seeded white noise (m4l_dev/techniques/seeded_white_noise.py)
+
+**Park & Miller, "Random Number Generators: Good Ones Are Hard to Find", CACM 31(10), 1988, pp. 1192-1201**
+(`park-miller-cacm1988.pdf`, a copy hosted at firstpr.com.au).
+- p. 1194 [3]: "a = 16807 and m = 2^31 - 1 define a ... minimal standard"; "16807 is just one of more than 534 million
+  full period" multipliers.
+- p. 1195 [4], "Real Version 1": `temp := a * seed; seed := temp - m * Trunc(temp / m); Random := seed / m`; "This
+  version of Random will be correct if reals are represented with a 46-bit or larger mantissa ... on all systems that
+  support the IEEE 64-bit real arithmetic standard since the mantissa in that case is 53-bits"; seeds "between 1 and
+  2147483646"; the check value: "z1 = 1 then z10001 = 1043618065" (tests/test_techniques.py holds the block to it).
+
+The technique is Real Version 1 (floor for Trunc: the operands are positive), as 2 z / m - 1. That gen~ computes in
+64-bit floats is [UNVERIFIED] here (the 2sl devices' gen~ code has never needed it to be exact before).
+
+## Metallic noise (m4l_dev/techniques/metallic_noise.py)
+
+**Jomox, *MBase 11 manual*** (`jomox-mbase11-manual.pdf`), p. 11, 3.12 MetNze: "Changes the noise of the noise
+generator to a metallic noise. At a value of <000> the noise is a random noise as in the older MBase01. On values above
+that a complex signal made from high pitch digital multi tones and the bit pattern of the value is created. Each unique
+single pattern is corresponding to a value number. This does not result in a continuous signal change over the value
+range, instead the signal patterns jump with each number." pp. 9-10, 3.6 Noise: "the noise can be assembled by
+metallic high pitch tones."
+
+**2sl drums references/adx1.md §6** (the ADX-1 manual read 2026-10-20): its metal source has its own Tune; its
+mechanism is unpublished; its Metal voice runs two sources, each into its own band-pass.
+
+The technique's law is ours [UNVERIFIED as the Jomox's]: an 8-bit shift register whose feedback is the parity of the
+bits the value selects, clocked at a tune, its lowest bit out, a constant state reloaded with the value. It keeps what
+the manual says (digital, high multi-tones, one pattern a value, jumps between values) and what adx1.md asks (a
+tune). The seam for an ADX-1 source: `METALLIC_NOISE_SOURCES` and the interface its docstring states.
+
+## Bell equalizer (m4l_dev/techniques/bell_equalizer.py)
+
+**Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2** (`zavalishin-va-filter-design-2.1.2.pdf`).
+- §4.7, p. 118 [130]: "By adding/subtracting the unit gain bandpass signal to/from the input signal one obtains the
+  band-shelving filter: HBS(s) = 1 + K · HBP1(s)"; "the bandwidth of the filter varies with the shelving boost K. A
+  way to address this issue will be described in Chapter 10."
+- §10.6, pp. 429-430 [441-442]: "H(s) = (s² + M⁻² · 2RM s + 1) / (s² + 2RM s + 1) = HLP(s) + M⁻² HBP1(s) + HHP(s) =
+  1 + (M⁻² − 1) HBP1(s) (mind that the SVF damping is still being equal to RM) ... The amplitude response at the cutoff
+  is H(j) = M⁻² which thereby defines the shelving gain"; eq. (10.19): "H(s) = (s² + 2RM⁻¹ s + 1) / (s² + 2RM s + 1)".
+
+The technique is that filter on the zero-delay SVF with G = M⁻² and the SVF's Q = Q √G (2R = 1/Q). That Q is the
+bandwidth at the half-gain (dB) points, |1 − ω²| = ω/Q, is our algebra from (10.19), tested. Gain ±40 dB is
+Microtonic's EQ range (MT-UG p. 15, Equalizer Gain "Range: -40db to +40db"; "The peak or dip width (i.e., the q
+value) is fixed and cannot be changed", its value not given; its auto-attenuation at high gain is not taken).
+
+## Halfband oversampler (m4l_dev/techniques/halfband_oversampler.py)
+
+**de Soras, *HIIR* 1.40 (2021-12-24, WTFPL)** (`hiir-1.40.zip`).
+- `PolyphaseIir2Designer.cpp`: `compute_coefs_spec_order_tbw`, `compute_transition_param`, `compute_coef`,
+  `compute_acc_num`, `compute_acc_den`, `compute_atten`: ported line for line; tests/test_techniques.py holds the port to
+  `oversampling.txt`'s "2×, 156 dB" design (12 coefficients, transition 0.0472053, 156.686 dB) to 2e-7.
+- `StageProcTpl.hpp`, `process_sample_pos`: each stage `tmp = (spl − mem_out) · coef + mem_in`.
+- `Upsampler2xTpl.hpp`: `even = input; odd = input;` through the stages, `out_0 = even; out_1 = odd`.
+  `Downsampler2xTpl.hpp`: `spl_0 (in_ptr [1]); spl_1 (in_ptr [0]);` through the stages, `return 0.5 * (spl_0 + spl_1)`.
+- `readme.txt`: "a two-path polyphase IIR ... made of a symetric half-band elliptic low-pass filter, hence having an
+  extremely flat frequency response in the passband"; "These filters have a quite flat group and phase delays from DC
+  up to about Fs/20"; its example downsampler is 8 coefficients at transition 0.04 (the kit's default).
+
+The kit's default: 8 coefficients, transition 0.04, 99.3 dB (compute_atten); measured: a 30 kHz tone at 88.2 kHz
+folds to 14.1 kHz at −113.5 dB (naive decimation: 0 dB); an FM pair (9 kHz carrier, 1.3 kHz modulator, index 10) run
+at 2× aliases at −84.1 dB re the carrier below 20 kHz, at 1× at −11.8 dB; up then down is flat to 15 kHz (±0.001 dB)
+and 3.07 samples late at 100 Hz.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):
