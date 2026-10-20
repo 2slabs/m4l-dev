@@ -10,7 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
+from m4l_dev.circuit_modules.mutron_bi_phase import (LATENCY_SAMPLES, MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
                                                      RUNTIME_CHARACTER_FIELDS, cell_ohms, feedback_gain,
                                                      phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
@@ -164,6 +164,26 @@ class MutronBiPhaseTests(unittest.TestCase):
             crossings = sum(1 for i in range(1, len(sweep)) if sweep[i - 1] < 0.5 <= sweep[i])
             with self.subTest(rate=rate):
                 self.assertAlmostEqual(crossings, expected * seconds, delta=1)
+
+    def test_its_latency_is_the_declared_zero_samples(self):
+        # LATENCY_SAMPLES = 0: the rendered output's phase is the Python model's with no delay added (one sample is
+        # 360 f / fs degrees: 8.2 at 1 kHz, 32.7 at 4 kHz, far above the tolerance); the dry alone (foot switch off)
+        # is the input sample for sample
+        self.assertEqual(LATENCY_SAMPLES, 0)
+        program = unit(pedal=3.8)
+        cell = settled_cell_ohms(program)
+        for frequency in (250.0, 1000.0, 4000.0):
+            signal = sine(frequency, 8820)
+            rendered = program.run(8820, [signal])
+            model = phasor_small_signal_response(frequency, cell, 0.0, SAMPLERATE, character=MATCHED)
+            expected = math.degrees(math.atan2(model.imag, model.real)) - 360.0 * frequency * LATENCY_SAMPLES / SAMPLERATE
+            found = phase_degrees(rendered[0][4410:], signal[4410:], frequency, SAMPLERATE)
+            with self.subTest(frequency=frequency):
+                self.assertLess(abs((found - expected + 180.0) % 360.0 - 180.0), 0.5)
+        dry = unit(foot_switch_a=0.0, pedal=3.0)
+        dry.run(44100, [[0.0] * 44100])              # the bypass cell goes dark
+        impulse = [1.0] + [0.0] * 63
+        self.assertGreater(dry.run(64, [impulse])[0][0], 0.99, "the dry reaches the output on the input's own sample")
 
     def test_the_foot_switch_off_leaves_the_dry_signal(self):
         program = unit(foot_switch_a=0.0, pedal=3.0)

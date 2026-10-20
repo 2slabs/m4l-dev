@@ -39,6 +39,7 @@ class KneeSoftClip(Technique):
         super().__init__(instance_name, input=input)
         self.knee = float(knee)
         self.headroom = float(Decimal(1) - Decimal(repr(self.knee)))
+        self.latency_samples = 0       # memoryless: the output is the input's own sample
 
     def functions(self):
         return dict(FUNCTIONS)

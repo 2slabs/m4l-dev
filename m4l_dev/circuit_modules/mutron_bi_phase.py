@@ -78,6 +78,9 @@ DEPTH_POT_FOOT_OHMS = 560.0              # R96 / R105, under the pot: depth 0 st
 DEPTH_FLOOR = DEPTH_POT_FOOT_OHMS / (DEPTH_POT_OHMS + DEPTH_POT_FOOT_OHMS)
 PEDAL_FULL_SCALE_VOLTS = 5.0             # the C-100 "puts out 0-5 volts" (Muzines)
 SLOWEST_SWEEP_HZ, FASTEST_SWEEP_HZ = 0.1, 18.0   # the manual: "from 0.1Hz ... to 18Hz"
+# No delay line, no look-ahead, no oversampling: zero-delay all-pass stages and one-poles, the output on the
+# input's own sample (tests: the rendered phase is the Python model's, with no sample added)
+LATENCY_SAMPLES = 0
 # A fixed pattern for the six parts' spread (each phasor its own), scaled by the character's stage_corner_spread
 STAGE_SPREAD_PATTERN = {"a": (0.62, -0.91, 0.18, 1.0, -0.37, -0.52), "b": (-0.44, 0.83, -1.0, 0.29, 0.71, -0.08)}
 RUNTIME_CHARACTER_FIELDS = ("cell_law_scale_ohms", "cell_law_exponent", "cell_law_floor_ohms", "led_current_dark_amps",

@@ -938,6 +938,15 @@ class KneeSoftClipTests(unittest.TestCase):
             self.assertGreater(out[-1], 1.0 - 1e-12, "reaches 1 for a huge input")
             self.assertEqual(self.clip([-x for x in signal], knee), [-x for x in out], "odd")
 
+    def test_it_is_memoryless_so_its_latency_is_zero(self):
+        # the same sample in gives the same sample out whatever came before: no state, no delay
+        for knee in self.KNEES:
+            self.assertEqual(KneeSoftClip("clip", input="in1", knee=knee).latency_samples, 0)
+            signal = [0.3, 1.7, -2.0, 0.9, 0.3, -0.85, 1.7]
+            out = self.clip(signal, knee)
+            self.assertEqual(out[0], out[4], "0.3 after nothing and 0.3 after a burst")
+            self.assertEqual(out[1], out[6])
+
     def test_the_knee_must_be_a_number_between_0_and_1(self):
         for knee in (0.0, 1.0, -0.5, 1.5, "0.8", None, True):
             with self.assertRaises(BuildError, msg=repr(knee)):
