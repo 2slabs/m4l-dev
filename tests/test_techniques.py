@@ -103,6 +103,31 @@ class ZeroDelayLadderFilterTests(unittest.TestCase):
             self.assertAlmostEqual(value, small_signal_magnitude(frequency, cutoff, resonance, 48000.0), places=9)
 
 
+    def test_the_pass_band_is_the_ladder_s_own(self):
+        # no make-up inside the technique: a small 60 Hz sine with fc 8 kHz comes out at 1 / (1 + k)
+        program = self.ladder()
+        program.set_param("cutoff", 8000.0)
+        for resonance in (0.0, 0.5, 0.9):
+            program.set_param("resonance", resonance)
+            sine = [1e-3 * math.sin(2 * math.pi * 60.0 * i / self.SAMPLERATE) for i in range(8820)]
+            level = amplitude_at(program.run(len(sine), [sine])[0][4410:], 60.0, self.SAMPLERATE) / 1e-3
+            self.assertAlmostEqual(20 * math.log10(level), -20 * math.log10(1 + 4.35 * resonance), delta=0.02)
+
+    def test_a_reset_starts_it_as_a_fresh_ladder(self):
+        ladder = ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="0.8")
+        template = ("/*GEN_BLOCK_FUNCTIONS*/\nParam reset(0, min=0, max=1);\n/*GEN_BLOCK_DECLARATIONS*/\n"
+                    f"if (reset > 0.5) {{\n{ladder.reset_statements()}\n}}\n/*LADDER*/\nout1 = ladder_out;\n")
+        code = gen_code_with_blocks(template, [ladder], "reset test")
+        saw = [((i * 220.0 / self.SAMPLERATE) % 1) * 2 - 1 for i in range(2000)]
+        fresh = GenProgram(code, 1, 1, samplerate=self.SAMPLERATE).run(len(saw), [saw])[0]
+        used = GenProgram(code, 1, 1, samplerate=self.SAMPLERATE)
+        used.run(1234, [[0.7] * 1234])
+        used.set_param("reset", 1.0)
+        first = used.run(1, [[saw[0]]])[0]
+        used.set_param("reset", 0.0)
+        self.assertEqual(first + used.run(len(saw) - 1, [saw[1:]])[0], fresh)
+
+
 class AntiderivativeTanhSaturatorTests(unittest.TestCase):
     SAMPLERATE = 44100.0
 

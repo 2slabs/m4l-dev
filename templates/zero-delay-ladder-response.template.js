@@ -1,8 +1,7 @@
 // The kit's zero-delay ladder filter (m4l_dev/techniques/zero_delay_ladder_filter.py) as a display draws it: its
 // small-signal response, the analog ladder 1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr) (the
-// technique's prewarped bilinear transform), times its make-up. The constants are the technique's, filled in by the build.
+// technique's prewarped bilinear transform). The constants are the technique's, filled in by the build.
 var LADDER_FEEDBACK_AT_FULL_RESONANCE = /*LADDER_FEEDBACK_AT_FULL_RESONANCE*/;
-var LADDER_MAKEUP_PER_FEEDBACK = /*LADDER_MAKEUP_PER_FEEDBACK*/;
 var LADDER_HIGHEST_CUTOFF_OF_SAMPLE_RATE = /*LADDER_HIGHEST_CUTOFF_OF_SAMPLE_RATE*/;
 var LADDER_LOWEST_CUTOFF_HZ = /*LADDER_LOWEST_CUTOFF_HZ*/;
 
@@ -16,5 +15,5 @@ function ladderResponse(frequencyHz, cutoffHz, resonance, sampleRate) {
   var re = 1, im = 0;
   for (var i = 0; i < 4; i++) { var t = re - im * x; im = re * x + im; re = t; }
   re += k;
-  return (1 + LADDER_MAKEUP_PER_FEEDBACK * k) / Math.sqrt(re * re + im * im);
+  return 1 / Math.sqrt(re * re + im * im);
 }

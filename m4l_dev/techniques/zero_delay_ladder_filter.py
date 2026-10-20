@@ -27,14 +27,14 @@ import math
 from m4l_dev.gen_blocks import Technique
 
 FEEDBACK_AT_FULL_RESONANCE = 4.35        # k = 4 (self-oscillation) at Resonance 0.92
-MAKEUP_PER_FEEDBACK = 0.4                # output x (1 + 0.4 k): a level make-up for the pass band k costs (2sl stab's)
 HIGHEST_CUTOFF_OF_SAMPLE_RATE = 0.45     # g = tan(0.45 pi) = 6.3: finite, so the solve stays well-conditioned
 LOWEST_CUTOFF_HZ = 10.0
 
 
 class ZeroDelayLadderFilter(Technique):
     """`<name>_out`: `input` through the ladder at `cutoff_hz` (clamped to [10 Hz, 0.45 sr]) and `resonance` (0..1,
-    clamped). Also `<name>_feedback` (k) and `<name>_cutoff_hz` (as clamped)."""
+    clamped): the ladder's own output, its pass band 1 / (1 + k) (a level rule on top is the instrument's). Also
+    `<name>_feedback` (k) and `<name>_cutoff_hz` (as clamped). `reset_statements()` empties the four stages."""
 
     def __init__(self, instance_name, input, cutoff_hz, resonance):
         super().__init__(instance_name, input=input, cutoff_hz=cutoff_hz, resonance=resonance)
@@ -63,20 +63,24 @@ ${p}_s3 = ${p}_y3 + ${p}_v3;
 ${p}_v4 = (${p}_y3 - ${p}_s4) * ${p}_stage;
 ${p}_y4 = ${p}_v4 + ${p}_s4;
 ${p}_s4 = ${p}_y4 + ${p}_v4;
-${p}_out = ${p}_y4 * (1 + ${makeup} * ${p}_feedback);""",
+${p}_out = ${p}_y4;""",
                                 lowest=LOWEST_CUTOFF_HZ, highest=HIGHEST_CUTOFF_OF_SAMPLE_RATE,
-                                full=FEEDBACK_AT_FULL_RESONANCE, makeup=MAKEUP_PER_FEEDBACK)
+                                full=FEEDBACK_AT_FULL_RESONANCE)
+
+    def reset_statements(self):
+        """The four stages' states empty (a fresh ladder)."""
+        return self.substituted("${p}_s1 = 0;\n${p}_s2 = 0;\n${p}_s3 = 0;\n${p}_s4 = 0;")
 
 
 def small_signal_magnitude(frequency_hz, cutoff_hz, resonance, sample_rate):
     """|H| of the ladder for small signals (tanh slope 1), as its displays draw it: the analog ladder
-    1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr), times the make-up. Python's copy of
+    1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr). Python's copy of
     templates/zero-delay-ladder-response.template.js, which the tests hold equal to it and to the technique."""
     cutoff_hz = min(max(cutoff_hz, LOWEST_CUTOFF_HZ), HIGHEST_CUTOFF_OF_SAMPLE_RATE * sample_rate)
     k = min(max(resonance, 0.0), 1.0) * FEEDBACK_AT_FULL_RESONANCE
     s = 1j * math.tan(math.pi * min(frequency_hz, 0.4999 * sample_rate) / sample_rate) / math.tan(
         math.pi * cutoff_hz / sample_rate)
-    return abs(1 / ((1 + s) ** 4 + k)) * (1 + MAKEUP_PER_FEEDBACK * k)
+    return abs(1 / ((1 + s) ** 4 + k))
 
 
 def response_script_code():
@@ -85,6 +89,5 @@ def response_script_code():
     from m4l_dev.generated_scripts import fill_template, kit_template_text
     return fill_template(kit_template_text("zero-delay-ladder-response.template.js"), {
         "LADDER_FEEDBACK_AT_FULL_RESONANCE": repr(FEEDBACK_AT_FULL_RESONANCE),
-        "LADDER_MAKEUP_PER_FEEDBACK": repr(MAKEUP_PER_FEEDBACK),
         "LADDER_HIGHEST_CUTOFF_OF_SAMPLE_RATE": repr(HIGHEST_CUTOFF_OF_SAMPLE_RATE),
         "LADDER_LOWEST_CUTOFF_HZ": repr(LOWEST_CUTOFF_HZ)}, "zero-delay-ladder-response.template.js")

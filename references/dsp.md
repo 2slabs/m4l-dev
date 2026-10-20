@@ -18,8 +18,8 @@ NI's URL is gone, the Wayback copy is fetched).
   the obtained value of u to process the 1-pole lowpasses one after the other, updating their state"; "the filter
   doesn't become instantaneously unstable provided k ≥ −1."
 - §5.4, p. 138 [150]: "at high resonance settings the amplitude gain of the filter at low frequencies drops ... An
-  obvious way to fix this problem would be e.g. to boost the input signal by the (1+k) factor." (The technique keeps
-  2sl stab's milder make-up, 1 + 0.4 k.)
+  obvious way to fix this problem would be e.g. to boost the input signal by the (1+k) factor." (The technique gives
+  the ladder's own output; a make-up, if any, is the instrument's.)
 - §6.6, p. 191 [203]: replacing tanh u by u "is equivalent to one step of Newton–Raphson with u = 0 as the initial
   guess." p. 192 [204]: the tangent at the last value "usually ... provides a better result, however in the
   excessive (but not so unusual) situations of high cutoff, high feedback amount and/or high signal frequencies
