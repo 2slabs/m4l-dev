@@ -69,3 +69,23 @@ problem; the score cannot see the parameter.
 Prediction: PITCH_WEIGHT 0 (nothing else changed), the default search, drums targets 0-7: recovery rises from 0 / 8
 (the baseline on these eight: 0 / 4 measured before stopping it) to >= 3 / 8; the toy voice stays >= 75 % (its pitch
 slices were unimodal in the spectral term alone: 9 minima over 8 targets).
+
+### H5 result: refuted
+
+PITCH_WEIGHT 0: 0 / 5 recovered (targets 0-4; stopped there, the prediction needed 3 / 8). Best found 2.9-6.7, all
+of it spectral (2.9-6.5 dB; envelope 0.03-0.8). The pitch term made the needle, but the search misses without it too.
+
+### H1 result (stopped at k = 8, which already breaks)
+
+k = 2: 6 / 6; k = 4: 6 / 6; k = 8: 0 / 2 (target 0 lost the noise filter cluster: filter mode, cutoff, band 2 level,
+EQ frequency; target 1 lost the metal tune and band 2 level). Prediction (k 8 ~60 %) too kind: it breaks between 4 and
+8 free parameters, at the noise / filter parameters and the switches, not at pitch.
+
+## H3a. The search's shape: six small strands vs one large population
+
+CMA-ES on multimodal functions with a global structure needs a large population (Hansen's tutorial, IPOP); six
+strands of 2000 with population 14 (1000 global renders each) cannot. The radial measurement shows a global funnel
+(median score rises steadily from r 0.02 to 0.3) under the local ruggedness. Test: one CMA-ES, population 96 (IPOP
+doubling), its population scored in parallel by 6 processes, the same 12 000 renders (70 % global, 30 % refinement
+from its best at step 0.05), the current score, targets 0-7. Prediction: >= 3 / 8 recovered (baseline 0 / 4 on these),
+median best <= 3.
