@@ -16,6 +16,14 @@ One file per modelled circuit (a kit circuit module, architecture/dsp-blocks.md)
 with pages: `circuits/ltc1060-mf10.md`. `circuits/fetch-circuit-sources.sh` downloads and checks them (not kept in
 git). `circuit-module-catalogue.md` ranks the circuits still to model.
 
+## Phasers and all-pass DSP
+
+`phaser-mutron-biphase.md`: the Mu-Tron Bi-Phase circuit (ARP 1979 schematic read, owner's manual), what gives its sound,
+the vactrol link and other phasers, with every claim tagged VERIFIED / DERIVED / SECONDARY / UNVERIFIED.
+`allpass-and-diffusion.md`: first-order TPT all-pass, Schroeder / nested / lattice all-passes, Dattorro's plate (delay
+lengths, coefficients), modulated delay interpolation (linear, all-pass / Thiran, Lagrange), shimmer.
+`fetch-phaser-diffusion-sources.sh` downloads and checks their sources (not kept in git).
+
 ## Loudness
 
 ITU-R BS.1770-5 (loudness and true peak), the meter every device's presets are levelled by: `itu-r-bs1770.md`, with
