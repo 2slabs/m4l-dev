@@ -66,7 +66,7 @@ https://www.timstinchcombe.co.uk/index.php?pge=diode ("Diode Ladder Filters (inc
 
 | circuit | classic instruments | what makes its sound | schematic | datasheet | published models / analyses | measurable | score |
 |---|---|---|---|---|---|---|---|
-| Moog transistor ladder | Minimoog, Moog modular 904A, Moog One lineage; copied everywhere | 4 cascaded transistor-pair 1-poles with global feedback; resonance up to k=4 self-oscillation, passband drops at high resonance, tanh-like stage saturation [VERIFIED Zavalishin 5.1-5.4, also in dsp.md] | patent US3475623 https://patents.google.com/patent/US3475623A (200) ; Minimoog schematics widely circulated [UNVERIFIED] | n/a (discrete) | Huovilainen DAFx-04 (200) https://dafx.de/paper-archive/2004/P_061.PDF ; Stinchcombe PDF above; Zavalishin ch.5-6; Valimaki & Huovilainen 2006; D'Angelo & Valimaki ICASSP 2013 and IEEE TASLP 2014 "generalized Moog ladder" [UNVERIFIED venues]; Fontana ICMC 2007 [UNVERIFIED] | any Minimoog-ladder plugin as listening reference | **3** (kit already has a generic ZDF ladder, gen_ladder.py, NOT chip- or circuit-specific; this is the row that would make it a module) |
+| Moog transistor ladder | Minimoog, Moog modular 904A, Moog One lineage; copied everywhere | 4 cascaded transistor-pair 1-poles with global feedback; resonance up to k=4 self-oscillation, passband drops at high resonance, tanh-like stage saturation [VERIFIED Zavalishin 5.1-5.4, also in dsp.md] | patent US3475623 https://patents.google.com/patent/US3475623A (200) ; Minimoog schematics widely circulated [UNVERIFIED] | n/a (discrete) | Huovilainen DAFx-04 (200) https://dafx.de/paper-archive/2004/P_061.PDF ; Stinchcombe PDF above; Zavalishin ch.5-6; Valimaki & Huovilainen 2006; D'Angelo & Valimaki ICASSP 2013 and IEEE TASLP 2014 "generalized Moog ladder" [UNVERIFIED venues]; Fontana ICMC 2007 [UNVERIFIED] | any Minimoog-ladder plugin as listening reference | **3**; MODELLED 2026-10-20: m4l_dev/circuit_modules/moog_transistor_ladder.py, references/circuits/moog-transistor-ladder.md (patent, Minimoog and 904A sheets, Stinchcombe, Huovilainen, Stilson & Smith, D'Angelo & Valimaki Part I read; the ICASSP 2013 paper and Part II not obtained) |
 | TB-303 / Roland diode ladder (also EMS VCS3 / Synthi-type) | TB-303, TD-3 etc.; EMS Synthi / VCS3 variant (Stinchcombe + Fontana & Civolani 2010) | 4-pole diode ladder; poles not identical (gain compensation weak), 18 dB feel, coupling-cap high-pass adds poles and a high-pass in the resonance loop, flattish bumpy passband [SECONDARY: search abstracts quoting Stinchcombe; a1k0n/303 repo measured on x0xb0x] | 303 service manual (community archives) [UNVERIFIED location]; Stinchcombe page has analysis from the schematic [SECONDARY] | n/a | Stinchcombe diode ladder page; Zavalishin 5.10 [VERIFIED present]; a1k0n/303 https://github.com/a1k0n/303 (surfaced by search, not read) | TB-303 clone hardware if owned | **3** |
 | Roland IR3109 (and BA662 cousins, IR3R05) | Juno-6/60, Jupiter-4 (early: matched BA662 + FET buffers), Jupiter-6/8, JX-3P, MKS-30, MKS-80, SH-101, MC-202, Boss PH-2 [SECONDARY, https://sdiy.info/wiki/IR3109] | "Four independent buffered OTAs ... single input exponential frequency control": an OTA-ladder 4-pole; soft saturation per stage [SECONDARY / VERIFIED structure: Zavalishin OTA ladder 1-poles, p.201] | service manuals (Juno-60 / Jupiter-8 on community archives, https://emusic-diy.org/rolandmanuals; files not opened); AMSynths AM8109 and Shruthi-1 board are open designs (DIY projects listed on sdiy page) | IR3109 datasheet not found by search; Alfa AS3109 clone exists, datasheet via alfarzpp.lv or Electric Druid page on AS3109 filter designs [UNVERIFIED URL] | Zavalishin OTA ladder (structure only); Werner et al. DAFx-17 OTA circuits in WDF [UNVERIFIED venue]; nothing IR3109-specific found | Juno-60-type plugins (reference only) | 2 |
 | SSM2040 | Prophet-5 rev1/2, others | 4-pole filter, exponentially controlled 10 000:1; "resonance and small amounts of soft distortion when overdriven" [SECONDARY, https://sdiy.info/wiki/SSM2040] | clones and schematics section on the wiki; chip datasheet [UNVERIFIED location] | datasheet not found by search (Analog Devices URL unreachable from this machine) | none found | no | 1 |
@@ -134,9 +134,10 @@ tape echo / RE-201 module's sources are in dsp.md, not repeated here.
   (Parker & D'Angelo DAFx-13, Najnudel DAFx-23, VTL5C3).
 - LTC1060 / MF10 switched-capacitor (Sherman): the kit module m4l_dev/circuit_modules/ltc1060_mf10_section.py, its
   datasheets in circuits/ltc1060-mf10.md; the instrument's side in ~/2slabs/2sl-filter/references/sherman-filterbank.md.
-- The zero-delay ladder (m4l_dev/techniques/zero_delay_ladder_filter.py): a technique, not a chip model. A Moog-ladder
-  module would be a new circuit module, given the transistor ladder's schematic / patent and Stinchcombe / Huovilainen
-  numbers as sources.
+- The zero-delay ladder (m4l_dev/techniques/zero_delay_ladder_filter.py): a technique, not a chip model.
+- The Moog transistor ladder (904A / Minimoog VCF): m4l_dev/circuit_modules/moog_transistor_ladder.py;
+  circuits/moog-transistor-ladder.md (US 3,475,623, the Minimoog and 904A sheets, Stinchcombe 2008, Huovilainen
+  DAFx-04, Stilson & Smith 1996, D'Angelo & Valimaki 2014 Part I, Zavalishin ch. 5-6).
 - The zero-delay state-variable filter (m4l_dev/techniques/zero_delay_state_variable_filter.py): a technique, same
   status; the SEM row would be a module built on it.
 
@@ -146,7 +147,8 @@ Order: score 3 first, then by number of classic instruments covered, then by how
 Rank is by source quality and distinctiveness; I have not weighed how hard each is to model or what the user's
 instruments need. [INFERENCE throughout.]
 
-1. **Moog transistor ladder** (3) - Minimoog, modular, the entire "ladder" lineage; the kit's generic ladder becomes this.
+1. **Moog transistor ladder** (3) - Minimoog, modular, the entire "ladder" lineage. MODELLED 2026-10-20
+   (`MoogTransistorLadder`); the kit's generic ladder technique stays (2sl stab runs on it).
 2. **TB-303 diode ladder** (3) - TB-303 plus EMS Synthi / VCS3 variant; clearly different from #1 (weaker resonance
    compensation, coupling-cap high-pass in the loop).
 3. **Korg MS-20 / Sallen-Key filter** (3 by inference) - MS-10 / MS-20; the only high-resonance 2-pole, distinct again.

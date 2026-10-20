@@ -4,7 +4,7 @@ loop's input (references/dsp.md, "Zero-delay ladder filter").
 A technique, not a circuit module: it is the textbook ladder (Zavalishin's ideal four one-poles in a loop, one tanh
 standing for an input pair), modelled on no particular circuit. It has no transistor ladder's schematic, no part's
 mismatch or rails behind it, and its controls are the method's (cutoff in Hz, feedback k as Resonance 0..1), not a
-synthesizer's. A modelled Moog 5U or Roland ladder would be a circuit module built from this kind of technique.
+synthesizer's. The modelled Moog ladder is the circuit module MoogTransistorLadder (circuit_modules/moog_transistor_ladder.py).
 
 Four trapezoidal one-poles, g = tan(pi fc / sr), G = g / (1 + g). The loop is solved without a unit delay
 (Zavalishin, The Art of VA Filter Design rev. 2.1.2, §5.3 eq. 5.8):

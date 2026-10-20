@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetches the sources references/circuits/*.md were written from into references/circuits/sources/ and checks each is the copy
-# it was read from (sha256, 2026-10-18 / 2026-10-19; the Buchla 259 and 292 sources moved here from 2sl gate 2026-10-20). Nothing fetched is kept in git (.gitignore).
+# it was read from (sha256, 2026-10-18 / 2026-10-19; the Buchla 259 and 292 sources moved here from 2sl gate 2026-10-20; the Moog ladder's 2026-10-20). Nothing fetched is kept in git (.gitignore).
 # Fails loudly, naming the file, when a download fails or a file changed upstream.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -45,6 +45,15 @@ sources=(
   "portedplugins-lpg.hpp|$ported/lpg.hpp|3cedceb43c3f0fa0e305f6298eda53e20e431a94882752d7e980dc92ec4dbbf0"
   "portedplugins-LPG.cpp|$ported/LPG/LPG.cpp|49955094b2e8b4843a85870e778483f1510f768a7b1e09867e0a59b9bc4c139a"
   "portedplugins-LPG.hpp|$ported/LPG/LPG.hpp|e2b09c27966c28cadff20557c0b541cc768dda3676ab07a9a9fb80faca980128"
+  # moog-transistor-ladder.md (2026-10-20)
+  "moog-patent-us3475623.pdf|https://patentimages.storage.googleapis.com/ea/a3/6e/d3c9ff36d3e14a/US3475623.pdf|464ba3222f40e8430281388b06085177702331b2d87c9ec9361c929f48480905"
+  "minimoog-vcf-schematic.gif|http://www.fantasyjackpalance.com/fjp/sound/synth/synthdata/16-minimoog/001/911-filt-print-circ-schem.gif|ea509b37b3a6aa3a9af9ca7bd7a774483cd48f0565a6219399ce851c125984c1"
+  "moog-904a-schematic.jpg|$wayback/20070623230759id_/http://www.hylander.com/images/schematics/904a.jpg|63a56d80d69a7cf429e0804b0aadb17d4b181075b325a6e6ead36373f74a2855"
+  "stinchcombe-moog-ladder-tf.pdf|https://www.timstinchcombe.co.uk/synth/Moog_ladder_tf.pdf|34d93147b915db0e5d757d3dd3b4888e986f5fa345c56ed110e22c7dd1e9fd78"
+  "huovilainen-dafx04.pdf|https://dafx.de/paper-archive/2004/P_061.PDF|d8bee4101c859f3eb8f0ccc0d08d6a3af09745ccce4c6549e46dd27138a30d67"
+  "stilson-smith-icmc1996.pdf|https://ccrma.stanford.edu/~stilti/papers/moogvcf.pdf|0253df9ebf59b4bbafd167b3ce9a96397acf37c0b335ea4b8f9f82cb0ebea46d"
+  "dangelo-valimaki-generalized-moog-part1-taslp2014.pdf|https://aaltodoc.aalto.fi/server/api/core/bitstreams/7ebb6719-8c32-4e23-97ce-b6ebac589990/content|8f485ee1ee77e80566cf6570573043a53ef96ae4a20eff8574c4748126b9b91c"
+  "dangelo-dissertation-aalto-2014.pdf|https://aaltodoc.aalto.fi/server/api/core/bitstreams/f87d5b89-72b1-4b8a-85bd-e8ef9511937d/content|9bf563a5491dcea47342ebfd3d7deacbee16977035c2c52fe62e6a00de012013"
 )
 failed=0
 for entry in "${sources[@]}"; do
