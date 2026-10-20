@@ -2,6 +2,7 @@
 (m4l_dev/genexpr.py: ours, not Max's compiler). Each claim runs on a small harness program around one technique
 (tests/gen_block_harness.py), at the lowest sample rate that still tests it, so the whole file takes seconds. Standard
 library only."""
+import cmath
 import math
 import os
 import random
@@ -19,7 +20,8 @@ from m4l_dev.techniques.antiderivative_antialiasing_equaliser import (  # noqa: 
     checked_equaliser_taps)
 from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
     AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable)
-from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,  # noqa: E402
+                                                              AntiderivativeTanhSaturatorLinearTwin)
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
 from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
@@ -354,6 +356,46 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
             self.assertEqual(block.statements().count("tanh_antialiased("), oversampling)
             self.assertEqual(block.statements().count("adaa1_equaliser_2x("), 0 if oversampling == 1 else 2)
             self.assertEqual("drive_up_first" in block.statements(), oversampling == 2)
+
+
+class AntiderivativeTanhSaturatorLinearTwinTests(unittest.TestCase):
+    def test_it_is_the_saturators_small_signal_path(self):
+        # a quiet signal through the saturator (slope 1 at 0) and through the twin: the same samples but for tanh's
+        # curvature and log cosh's rounding over a 1e-4 step (measured 2e-11 at 1e-4: -134 dB), at both rates, so a
+        # dry through it combs nowhere at a 50 % mix
+        noise_source = random.Random(20261020)
+        quiet = [1e-4 * noise_source.uniform(-1, 1) for _ in range(3000)]
+        for oversampling in (1, 2):
+            saturator = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
+            twin = AntiderivativeTanhSaturatorLinearTwin("dry", input="in1", oversampling=oversampling)
+            saturated, twinned = harness([saturator, twin], {}, ["drive_out", "dry_out"]).run(len(quiet), [quiet])
+            self.assertLess(max(abs(a - b) for a, b in zip(saturated, twinned)), 1e-9, msg=oversampling)
+            self.assertEqual(twin.latency_samples, saturator.latency_samples)
+            self.assertNotIn("tanh", "".join(twin.functions()) + "".join(
+                line for line in twin.statements().splitlines() if not line.startswith("//")), "no tanh in the twin")
+
+    def test_a_dry_through_it_has_no_comb_where_a_delay_would(self):
+        # 50 % of the saturator's small-signal response and 50 % of the dry, against 1, at 44.1 kHz (measured
+        # 2026-10-20): 4 samples + a Thiran all-pass for 0.32 leaves -0.44 dB at 10 kHz, -2.3 dB at 20 kHz; the twin 0
+        rate = 44100.0
+        saturator = AntiderivativeTanhSaturator("drive", input="in1", oversampling=2)
+        thiran_coefficient = (1 - 1.32) / (1 + 1.32)          # Smith, "Thiran Allpass Interpolators": (1 - D) / (1 + D)
+
+        def thiran_dry(frequency):
+            z = cmath.exp(-2j * math.pi * frequency / rate)
+            return z ** 3 * (thiran_coefficient + z) / (1 + thiran_coefficient * z)
+
+        for frequency, delay_comb_db in ((10000.0, -0.44), (20000.0, -2.28)):
+            wet = saturator.small_signal_response(frequency, rate)
+            self.assertAlmostEqual(20 * math.log10(abs(0.5 * (wet + thiran_dry(frequency)))), delay_comb_db, delta=0.01)
+        twin = AntiderivativeTanhSaturatorLinearTwin("dry", input="in1", oversampling=2)
+        for frequency in (1000.0, 5000.0, 10000.0, 20000.0):
+            quiet = [1e-4 * math.sin(2 * math.pi * frequency * i / rate) for i in range(4096)]
+            saturated, twinned = harness([saturator, twin], {}, ["drive_out", "dry_out"], samplerate=rate).run(
+                len(quiet), [quiet])
+            mixed = [0.5 * (a + b) for a, b in zip(saturated, twinned)]
+            self.assertAlmostEqual(complex_amplitude_at(mixed[1000:], frequency, rate),
+                                   complex_amplitude_at(saturated[1000:], frequency, rate), delta=1e-9)
 
 
 class BandLimitedEdgesTests(unittest.TestCase):

@@ -185,6 +185,17 @@ budget. A naive tanh(x) is 25–35 ns; the half-band pair alone 17–23 ns; the 
 at 1× (one step), 110–132 ns at 2× (two steps, the 2× equaliser, the downsampler). The 2× saturator is 2.4–2.8× the
 1×.
 
+**The linear twin** (`AntiderivativeTanhSaturatorLinearTwin`, ours, 2026-10-20): the same pair, mean and equaliser
+with x in place of tanh (x's first-order ADAA is exactly the 2-tap mean), so its response is the saturator's small-signal
+response at every frequency: what an instrument puts on a dry path it mixes against the saturator. At 2× the half-band
+pair is not linear phase (the saturator's phase delay at 44.1 kHz: 4.32 samples at 100 Hz, 4.39 at 5 kHz, 4.64 at
+10 kHz, 5.86 at 18 kHz, 6.71 at 20 kHz), so a delay can't follow it. At a 50 % mix against the 2× saturator, 44.1 kHz
+(48 kHz in brackets), the comb left at 1 / 5 / 10 / 20 kHz: 4 samples and a first-order Thiran (above's source) for
+0.32: −0.0002 / −0.010 / −0.44 / −2.28 dB (−0.0002 / −0.007 / −0.26 / −1.69); the Thiran with the least worst comb
+over 20 Hz–20 kHz at both rates (4.53 samples) notches 20 kHz at 48 kHz (−23 dB); the half-band pair and a Thiran for
+the remaining 1.25: −0.0002 / −0.004 / −0.023 / −0.50 dB; the twin: none (rounding, −134 dB under a 1e-4 signal).
+The twin costs the half-band pair and the equaliser, no tanh (about the pair's 17–23 ns, above).
+
 Replaced (2026-10-20): the split tanh x = x + (tanh x − x), x through a first-order Thiran allpass of half a sample
 (**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"**, `jos-thiran-allpass.html`: a1 =
 (1 − Δ)/(1 + Δ) = 1/3 for N = 1, Δ = 0.5) and ADAA on the residual only. Flat on small signals, but at a hot drive the

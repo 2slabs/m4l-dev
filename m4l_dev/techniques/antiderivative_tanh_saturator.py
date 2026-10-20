@@ -107,22 +107,27 @@ class AntiderivativeTanhSaturator(Technique):
             declarations += [self.upsampler.declarations(), self.downsampler.declarations()]
         return "\n".join(declaration for declaration in declarations if declaration)
 
+    def _mean_expression(self, step_input):
+        """GenExpr: the transfer's first-order ADAA over the step from the last input to `step_input`."""
+        p = self.instance_name
+        if self.biased:
+            return f"tanh_antialiased({step_input} + {p}_bias, {p}_previous_input + {p}_bias) - tanh({p}_bias)"
+        return f"tanh_antialiased({step_input}, {p}_previous_input)"
+
+    def _transfer_description(self):
+        return "tanh(x + bias) - tanh(bias)" if self.biased else "tanh"
+
     def _step_statements(self, step_input, step_output):
         """One step at the rate it runs at: the mean from the last step's input to `step_input`, both slid by this
         step's bias (taken as held over the step), less tanh(bias), then the equaliser, leaving `step_output`. Every
         kept value is 0 for silence, so silence is 0 from the first step, before and after the half-band pair."""
         p = self.instance_name
-        if self.biased:
-            mean = (f"tanh_antialiased({step_input} + {p}_bias, {p}_previous_input + {p}_bias) - tanh({p}_bias)")
-        else:
-            mean = f"tanh_antialiased({step_input}, {p}_previous_input)"
-        return (f"{p}_mean = {mean};\n{self.equaliser.statements()}\n"
+        return (f"{p}_mean = {self._mean_expression(step_input)};\n{self.equaliser.statements()}\n"
                 f"{step_output} = {p}_equaliser_out;\n{p}_previous_input = {step_input};")
 
     def statements(self):
         p = self.instance_name
-        what = "tanh(x + bias) - tanh(bias)" if self.biased else "tanh"
-        lines = [f"// {p}: {what}, first-order ADAA at {self.oversampling}x (kit technique: antiderivative tanh "
+        lines = [f"// {p}: {self._transfer_description()}, first-order ADAA at {self.oversampling}x (kit technique: antiderivative tanh "
                  f"saturator)",
                  self.substituted("${p}_input = ${input};")]
         if self.biased:
@@ -143,3 +148,30 @@ class AntiderivativeTanhSaturator(Technique):
         if self.oversampling == 2:
             lines += [self.upsampler.reset_statements(), self.downsampler.reset_statements()]
         return "\n".join(line for line in lines if line)
+
+
+class AntiderivativeTanhSaturatorLinearTwin(AntiderivativeTanhSaturator):
+    """`<name>_out` = `input` through the saturator's linear path at `oversampling`: the same half-band pair, mean
+    and equaliser, with the straight line x in place of tanh (whose first-order ADAA is the 2-tap mean, exactly). Its
+    response is the saturator's `small_signal_response` at every frequency (the saturator's slope at 0 taken out), so
+    it lines up what an instrument mixes against a saturated signal: a dry path at a dry / wet mix.
+
+    Why not a delay: at 2x the half-band pair is not linear phase (its phase delay 4.32 samples at 100 Hz, 4.64 at
+    10 kHz, 6.71 at 20 kHz at 44.1 kHz), so no integer-plus-fractional delay follows it. Measured 2026-10-20 (the
+    saturator at 2x against the dry at a 50 % mix, 44.1 kHz): 4 samples and a first-order Thiran all-pass for 0.32
+    (Smith, "Thiran Allpass Interpolators") leaves -0.44 dB at 10 kHz and -2.3 dB at 20 kHz; the Thiran chosen for the
+    least worst comb over 20 Hz - 20 kHz at 44.1 and 48 kHz notches 20 kHz at 48 kHz (-23 dB); the half-band pair and
+    a Thiran for the remaining 1.25 samples leaves -0.50 dB at 20 kHz; the twin leaves none (tests/test_techniques.py).
+    At 1x it is the 2-tap mean, half a sample late."""
+
+    def __init__(self, instance_name, *, input, oversampling):
+        super().__init__(instance_name, input=input, oversampling=oversampling)
+
+    def _mean_expression(self, step_input):
+        return f"0.5 * ({step_input} + {self.instance_name}_previous_input)"
+
+    def _transfer_description(self):
+        return "the linear twin (x)"
+
+    def functions(self):
+        return self.equaliser.functions()
