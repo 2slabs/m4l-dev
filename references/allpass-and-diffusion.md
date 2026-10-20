@@ -3,7 +3,7 @@
 Written 2026-10-20 for the kit's all-pass block ("a high quality all pass dsp block ... smearing, reverbs ... really good
 pads and shimmers and atmos", user, 2026-10-20). `fetch-phaser-diffusion-sources.sh` downloads the sources below
 into `phaser-diffusion-sources/` (not in git, sha256-checked); Zavalishin and the JOS Thiran page come from
-`fetch-dsp-sources.sh` (`dsp-sources/`). The circuit side of phasers is in `phaser-mutron-biphase.md`.
+`fetch-dsp-sources.sh` (`dsp-sources/`). The circuit side of phasers is in `circuits/mutron-bi-phase.md`.
 
 Tags: **[VERIFIED]** read in the source this session (file, page). **[DERIVED]** computed by us from verified inputs.
 **[SECONDARY]** a practitioner's account, read. **[UNVERIFIED]** only seen as a search excerpt or from memory. Pages
@@ -248,7 +248,7 @@ diffusion inside the feedback loop so "echo density builds with each repeat when
   diffusion, delay, damping, decay gain, cross-coupling), as a technique, with its 12 delay lengths as data scaled by
   fs/29761. (6) *Modulated delay read* with the interpolator choice per use: linear (chorus-like, loses highs), warped
   first-order all-pass/Thiran (reverb modulation, ≤ ±1 semitone), spline/Lagrange (pitch-shifter grains). (7) *Shimmer*:
-  a pitch shifter in the tank's feedback with a high cut. The **circuit module** is the Bi-Phase (phaser-mutron-biphase.md),
+  a pitch shifter in the tank's feedback with a high cut. The **circuit module** is the Bi-Phase (circuits/mutron-bi-phase.md),
   which uses (1)+(2) with the cell law.
 - **Parameters** (the all-pass block): cutoff/delay per stage, coefficient g, stage count, feedback, dry/wet; (diffuser)
   size scaler, diffusion g, mod rate/depth/decorrelation; (tank) decay, damping, bandwidth, predelay; (shimmer) shift in

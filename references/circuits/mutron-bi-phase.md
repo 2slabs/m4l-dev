@@ -1,8 +1,9 @@
 # The Mu-Tron Bi-Phase and the phasers it is compared with: sources, the circuit as drawn
 
 Written 2026-10-20 for the kit's phaser block ("a bi-phase ... absolutely freaking nail that water phaser sound",
-user, 2026-10-20). `fetch-phaser-diffusion-sources.sh` downloads every source below into
-`phaser-diffusion-sources/` (not in git) and checks it is the copy this was read from (sha256 / a phrase).
+user, 2026-10-20); the circuit behind `m4l_dev/circuit_modules/mutron_bi_phase.py` (the last section says what the
+module takes from here). `references/fetch-phaser-diffusion-sources.sh` downloads every source below into
+`references/phaser-diffusion-sources/` (not in git) and checks it is the copy this was read from (sha256 / a phrase).
 
 Tags: **[VERIFIED]** read in the source itself this session (file named, page or sheet given). **[DERIVED]** computed
 by us from verified inputs; the method is given. **[SECONDARY]** a credible secondary source read in full or in the
@@ -19,7 +20,7 @@ drawing in the same archive (4558 + BF245A FETs, 47 nF) is a hobbyist's FET vari
 
 ## 1. The sources
 
-| file (in `phaser-diffusion-sources/`) | what it is | URL |
+| file (in `references/phaser-diffusion-sources/`) | what it is | URL |
 |---|---|---|
 | arp-bi-phase-schematic-page1.gif | ARP sheet 1 of drawing 77204: input buffers, S1 Phasor B input, output mixers, both sweep generators, pedal input | https://experimentalistsanonymous.com/diy/Schematics/Phasers/Mu-Tron%20Bi-phase%20page%201.gif |
 | arp-bi-phase-schematic-page2.gif | sheet 2: the two six-stage phase shifters and the LED drivers (cropped at the bottom edge by the scan) | same folder, `...page 2.gif` |
@@ -115,7 +116,7 @@ excerpts are marked [UNVERIFIED].
   the "+" with gain 1 + R5/R4 = 2 and the 6.2/4.7 divider, so **at most 0.86 of the phasor's output is fed back,
   non-inverted**, i.e. positive feedback with loop gain ≤ 0.86 × the stages' phase: peak height at most about
   1/(1 − 0.86) = 7.1 → +17 dB over the no-feedback response at the frequencies where the six stages total
-  0°/360°. (The 0.47 µF output coupling and the pot give a bass roll-off in the loop near 34 Hz.) The manual: "as the
+  0°/360°. (The 0.47 µF output coupling and the pot give a bass roll-off in the loop near 34 Hz. CORRECTED 2026-10-20, §8: J1-1 is also loaded by R26 4.7 kΩ into Z9B's virtual ground, so the corner is ~106–140 Hz.) The manual: "as the
   'Feedback' control is turned up, electronic feedback is added, creating positive peaks in the frequency response
   in between the cancellations" [VERIFIED]; at full feedback "the Bi-Phase will pick out the individual notes and
   harmonics of a chord as it sweeps up and down" [VERIFIED].
@@ -225,3 +226,49 @@ spaced notches" [VERIFIED]. (Equal stages, as in the Bi-Phase, are still non-uni
   F. Ridder and M. Beigel, listed on Soundgas and mu-tron.com but not found as text) and patents; (7) a source
   that says what gives the Bi-Phase its "water" (the user's word); the best candidates to test by listening are the
   feedback peaks, the optical skew, and Rev-sync stereo, ranked by the kit's own matcher against a recording.
+
+## 8. Mu-Tron Bi-Phase (m4l_dev/circuit_modules/mutron_bi_phase.py)
+
+What the kit's module takes from the sections above, what it derives, and what it had to choose. Written 2026-10-20.
+
+**Taken from the drawing [VERIFIED reading, sheets 1–2; sheet 2 re-read for C12]:** six identical stages per phasor
+(4.7k / 4.7k, 6.8 nF, 220k ∥ cell), one LED per six cells; the input stage Z8B (R4 = R5 = 4.7k, R7 6.2k, R6 4.7k ∥ C5
+3.3 nF, the feedback pot R133 10k at J1-1); the last stage's output through C12 0.47 µF to J1-1 (sheet 2: Z3B pin 7 →
+C12 → J1-1), loaded by the pot and by R26 4.7k into Z9B's inverting input (pin 5 grounded: a virtual ground); Z9B
+inverting (R26 = R27 = 4.7k); the mix node (PM1, R123, C14 0.15 µF, R29 4.7k from the wet; R31 12k from Z8A's output,
+the dry; C15 47 pF and Z9A's "+" input, nothing else); S1's Out A taken from Z9A's output (A's mixed output: series is
+A's whole output into B); the Depth pots R131 / R138 10k over R96 / R105 560 Ω; S7 Rev through Z15B; ±15 V rails.
+
+**Derived [DERIVED, our algebra]:**
+- Feedback gain from the pot's rotation p, the wiper loaded by R7 + R6 = 10.9k:
+  `k = 2 · R6/(R6 + R7) · p · 10.9k / (10.9k + p(1 − p) · 10k)`: 0.862 at p = 1, 0.351 at p = 0.5 (linear taper).
+- The "+" node's low-pass: C5 against R6 ∥ (R7 + the wiper's source resistance p(1 − p) · 10k): 18.0 kHz at p = 0 or
+  1, 15.8 kHz at p = 0.5.
+- J1-1's high-pass: C12 into R26 ∥ (the pot, its lower part ∥ 10.9k): 106 Hz at p = 0 (3.2 kΩ), 137 Hz at p = 1. It
+  sits inside the feedback loop and in the wet path, so the wet's bass is cut and the low notches are pulled up (at a
+  500 Hz stage corner the middle notch is +6 %, the lowest +35 %; at 1.8 kHz +1.8 % and +12 %).
+- The mix node, exactly (C15 left out): `out = dry + α · HP(wet − dry)`, `α = R31/(R31 + Rw)`,
+  `Rw = R29 + R123 + R_PM1`, HP a one-pole at `1/(2π (R31 + Rw) C14)` (44 Hz when α = 0.5). Notches are deepest at
+  α = 0.5, i.e. Rw = 12 kΩ.
+- Depth: the pot over 560 Ω passes `560/10560 + (1 − 560/10560) · rotation` of the sweep: Depth 0 still sweeps 5.3 %.
+- Six stages of the circuit, (sRC − 1)/(sRC + 1), equal six of the technique's (1 − s)/(1 + s): an even count.
+
+**Chosen, UNVERIFIED (the module's `MutronBiPhaseCharacter`; §7's open gaps):**
+
+| field | default | why this default |
+|---|---|---|
+| `cell_law_scale_ohms`, `cell_law_exponent`, `cell_law_floor_ohms` | 3.464, 1.4, 1136.212 | the VTL5C3/2 law (DAFx-13 eq. 39) stands in for the unpublished photo-mod |
+| `led_current_dark_amps`, `led_current_full_amps` | 50 µA, 5 mA | with that law the stage corner sweeps ~112 Hz (the 220k floor is 106 Hz) to ~3.4 kHz: notches ~30 Hz to ~13 kHz; log-linear between (equal sweep steps = equal octaves of current, 2sl gate's practice; the real driver's diode break-points not traced) |
+| `cell_attack_ms`, `cell_release_ms` | 2.5 ms, 35 ms | the VTL5C3's catalog turn-on (63 %) and turn-off (to 100 kΩ) orders; release = undriven time from the full current to the dark one |
+| `stage_corner_spread` | 0.05 | the drawing's 10 % capacitors and the cells' tracking; a fixed pattern per phasor |
+| `feedback_pot_taper_exponent` | 1.0 | linear taper assumed |
+| `sweep_sine_roundness` | 1.0 | a true sine (how Z15A shapes the "sine" was not traced; 0 = the triangle) |
+| `wet_trim_ohms` (R123) | 3978 Ω | trimmed for α = 0.5 with the bypass cell lit at 10 mA (3.32 kΩ by the law) |
+| `bypass_led_current_amps` | 10 mA | PM1 (PE613-12) lit by the foot switch; its law taken as the sweep cells' |
+| `rail_volts` | 13 V | the op amps' swing at ±15 V (the op amp part not legible) |
+
+**Left out:** the input coupling (C1 0.047 µF into 390k: 8.7 Hz) and the RF filter; the 34 kHz roll-offs of C9 / C13
+across R5 / R27; C15; the output's 560 Ω and C16; Gen 1's rate from the pedal (S2 "Ped"); the LED drivers' exact
+network and trims; any signal dependence of the cells' resistance; noise. The sweep generators are modelled from the
+manual (0.1–18 Hz, sine / square) and the drawing's topology (a triangle core), not traced component by component.
+

@@ -43,5 +43,9 @@ block, they're just wrapping it, this is what we're doing)". Level 3, "reorganiz
    one. The user (2026-10-20): a Mackie desk sim, "so it can sound like a mackie desk" (console channel/summing).
 6. First new instrument: a standalone phaser device (the user, 2026-10-20: "lets start by making a standalone phaser, I
    can then try to find the water in it by playing with parameters"): the Mu-Tron Bi-Phase as a circuit module on an
-   all-pass technique (references/phaser-mutron-biphase.md, references/allpass-and-diffusion.md). No hardware needed: a
+   all-pass technique (references/circuits/mutron-bi-phase.md, references/allpass-and-diffusion.md). No hardware needed: a
    sourced circuit sim that sounds good is enough.
+   KIT BLOCKS DONE 2026-10-20: techniques ZeroDelayOnePoleFilter, ZeroDelayAllpassCascade (normalised-lattice sections:
+   the TPT all-pass gains energy under fast modulation), LedDrivenPhotocell (the gate's vactrol law and memory, for the
+   292 module to share); circuit module MutronBiPhase (references/circuits/mutron-bi-phase.md, moved from
+   references/). The device itself (a standalone 2sl phaser) is next, in its own repository.

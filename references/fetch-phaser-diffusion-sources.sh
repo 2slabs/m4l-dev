@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetches the sources references/phaser-mutron-biphase.md and references/allpass-and-diffusion.md were written from
+# Fetches the sources references/circuits/mutron-bi-phase.md and references/allpass-and-diffusion.md were written from
 # into references/phaser-diffusion-sources/ and checks each is the copy they were read from (sha256, 2026-10-20).
 # Nothing fetched is kept in git (.gitignore). Fails loudly, naming the file, when a download fails or a file changed
 # upstream. The Zavalishin PDF and the JOS Thiran page the allpass note also cites come from fetch-dsp-sources.sh.
