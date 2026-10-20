@@ -35,6 +35,7 @@ The build character (`MoogTransistorLadderCharacter`): VT, C (the Minimoog's 0.0
 ratio (mismatch), the input pair's offset (even harmonics), the mixer's volts-at-the-bases per input volt (an input:
 one full-level mixer channel's source volts; how hot a given level drives it), the converter's reference current and
 volts per octave, the Emphasis pot's top k, and the output coupling corner. The UNVERIFIED defaults (the Emphasis top
+"""
 k) are marked; §7 of the reference says which.
 
 import dataclasses
