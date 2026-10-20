@@ -15,7 +15,9 @@ from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
-    AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable)
+    SECOND_ORDER_EQUALISER_EDGE, SECOND_ORDER_EQUALISER_INNER_TAP, SECOND_ORDER_EQUALISER_OUTER_TAP,
+    SECOND_ORDER_EQUALISER_TAPS, SECOND_ORDER_LATENCY_STEPS, AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable,
+    second_order_equaliser_call)
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
@@ -47,8 +49,9 @@ from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetall
 from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
-from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, exact_second_order_mean, folded,  # noqa: E402
-                               frequency_by_zero_crossings, harness, phase_degrees, worst_alias_db)
+from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, equalised_second_order_outputs,  # noqa: E402
+                               exact_second_order_mean, folded, frequency_by_zero_crossings, harness, phase_degrees,
+                               second_order_equaliser_remez, worst_alias_db)
 
 
 class ZeroDelayLadderFilterTests(unittest.TestCase):
@@ -395,15 +398,19 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
                                    msg=(x0, x1, x2))
             self.assertLessEqual(abs(value), 3.0)        # never blows up near a corner (the table stays under 3)
 
-    def test_second_order_is_the_line_on_a_piece_and_lowers_the_aliases_further(self):
+    def test_second_order_is_the_equalised_line_on_a_piece_and_lowers_the_aliases_further(self):
         table = PiecewiseLinearTable("clip", self.CLIP)
         inside = [0.3 * math.sin(2 * math.pi * 500 * i / self.SAMPLERATE) for i in range(200)]
         program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)], {},
                           ["shaper_out"], samplerate=self.SAMPLERATE)
         out = program.run(len(inside), [inside])[0]
-        for i in range(2, len(inside)):                  # inside one piece: the line at the three's mean, one late
-            self.assertAlmostEqual(out[i], (inside[i] + inside[i - 1] + inside[i - 2]) / 3, places=12)
-        # the hot 3 kHz sine (measured 2026-10-20, worst alias below 10 kHz: naive -38.2, ADAA1 -55.3, ADAA2 -72.6 dB)
+        # inside one piece: the line at the three's mean (raw), through the equaliser
+        raw_means = [(inside[i] + (inside[i - 1] if i >= 1 else 0.0) + (inside[i - 2] if i >= 2 else 0.0)) / 3
+                     for i in range(len(inside))]
+        for i, expected in enumerate(equalised_second_order_outputs(raw_means)):
+            self.assertAlmostEqual(out[i], expected, places=12)
+        # the hot 3 kHz sine (measured 2026-10-20, worst alias below 10 kHz: naive -38.2, ADAA1 -55.3, ADAA2 -72.6 dB raw,
+        # -69.9 equalised: its worst alias, near 10 kHz, is past the equaliser's edge at 44.1 kHz and lifted with the band)
         count, fundamental = 8192, 3000.0
         hot = [2.0 * math.sin(2 * math.pi * fundamental * i / self.SAMPLERATE) for i in range(count)]
         harmonics = range(9, 40, 2)
@@ -413,7 +420,31 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
                               {}, ["shaper_out"], samplerate=self.SAMPLERATE)
             worst[order] = worst_alias_db(program.run(count, [hot])[0][1000:], fundamental, harmonics,
                                           self.SAMPLERATE, 10000)
-        self.assertLess(worst[2], worst[1] - 15)
+        self.assertLess(worst[2], worst[1] - 13)
+
+    def test_the_equaliser_undoes_the_three_tap_mean_up_to_its_edge(self):
+        # the taps are the Remez design's, the DC exactly 1, the 3-tap mean's droop (at 96 kHz -5.9 dB at 20 kHz)
+        # within 0.0972 dB (1 - 0.0111) up to the edge (20 kHz at 96 kHz); measured on a quiet sine through the shaper inside
+        # one piece (the clip's unity line), SECOND_ORDER_LATENCY_STEPS late
+        outer, inner, worst = second_order_equaliser_remez(SECOND_ORDER_EQUALISER_EDGE)
+        self.assertAlmostEqual(outer, SECOND_ORDER_EQUALISER_OUTER_TAP, places=12)
+        self.assertAlmostEqual(inner, SECOND_ORDER_EQUALISER_INNER_TAP, places=12)
+        self.assertAlmostEqual(sum(SECOND_ORDER_EQUALISER_TAPS), 1.0, places=15)
+        self.assertLess(-20 * math.log10(1 - worst), 0.0973)
+        self.assertEqual(SECOND_ORDER_LATENCY_STEPS, 3)
+        rate, count = 96000.0, 4000
+        table = PiecewiseLinearTable("clip", self.CLIP)
+        for frequency in (100.0, 1000.0, 5000.0, 10000.0, 15000.0, 18000.0, 20000.0):
+            quiet = [0.3 * math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
+            program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)], {},
+                              ["shaper_out"], samplerate=rate)
+            out = program.run(count, [quiet])[0]
+            gain = complex_amplitude_at(out[100:], frequency, rate) / complex_amplitude_at(
+                quiet[100 - SECOND_ORDER_LATENCY_STEPS:count - SECOND_ORDER_LATENCY_STEPS], frequency, rate)
+            self.assertLess(abs(20 * math.log10(abs(gain))), 0.0973, msg=frequency)
+            self.assertLess(abs(gain.imag), 1e-6, msg=f"{frequency}: linear phase, SECOND_ORDER_LATENCY_STEPS late")
+        with self.assertRaises(BuildError):
+            second_order_equaliser_call(["a", "b", "c", "d"])
 
     def test_second_order_needs_a_continuous_table(self):
         jumping = PiecewiseLinearTable("jump", [(-math.inf, 0.0, -1.0), (0.0, 0.0, 1.0)])

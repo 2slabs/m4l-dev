@@ -152,3 +152,41 @@ def exact_second_order_mean(pieces, x0, x1, x2):
     x0, x1, x2 = Fraction(x0), Fraction(x1), Fraction(x2)
     differences = [(second_integral(a) - second_integral(b)) / (a - b) for a, b in ((x0, x1), (x1, x2))]
     return float(2 * (differences[0] - differences[1]) / (x0 - x2))
+
+
+def equalised_second_order_outputs(raw_means):
+    """The technique's second-order output from ADAA2's raw means (oldest first): the equaliser's taps over the last
+    five, the means before the first taken as 0 (its Histories' start)."""
+    from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import SECOND_ORDER_EQUALISER_TAPS
+    padded = [0.0] * (len(SECOND_ORDER_EQUALISER_TAPS) - 1) + list(raw_means)
+    return [sum(tap * padded[i + k] for k, tap in enumerate(SECOND_ORDER_EQUALISER_TAPS)) for i in range(len(raw_means))]
+
+
+def second_order_equaliser_remez(edge_cycles_per_sample):
+    """(outer tap, inner tap, worst deviation): the symmetric 5-tap equaliser whose product with ADAA2's 3-tap mean
+    (1 + 2 cos w) / 3 is 1 at DC and equiripple up to the edge, by the Remez exchange on three extrema."""
+    edge = 2 * math.pi * edge_cycles_per_sample
+
+    def mean_response(w):
+        return (1 + 2 * math.cos(w)) / 3
+
+    def deviation(outer, inner, w):            # the equaliser, its DC fixed at 3 / 3 = 1 by its middle tap
+        return mean_response(w) * (1 + 2 * inner * (math.cos(w) - 1) + 2 * outer * (math.cos(2 * w) - 1)) - 1
+    extrema = [0.4 * edge, 0.8 * edge, edge]
+    grid = [edge * k / 20000 for k in range(20001)]
+    for _ in range(30):
+        rows = [[mean_response(w) * 2 * (math.cos(2 * w) - 1), mean_response(w) * 2 * (math.cos(w) - 1), -(-1) ** i,
+                 1 - mean_response(w)] for i, w in enumerate(extrema)]
+        for i in range(3):                     # Gauss-Jordan on the 3 x 3 system
+            pivot = max(range(i, 3), key=lambda r: abs(rows[r][i]))
+            rows[i], rows[pivot] = rows[pivot], rows[i]
+            for r in range(3):
+                if r != i:
+                    factor = rows[r][i] / rows[i][i]
+                    rows[r] = [a - factor * b for a, b in zip(rows[r], rows[i])]
+        outer, inner = rows[0][3] / rows[0][0], rows[1][3] / rows[1][1]
+        errors = [deviation(outer, inner, w) for w in grid]
+        peaks = [grid[k] for k in range(1, len(grid) - 1)
+                 if abs(errors[k]) >= abs(errors[k - 1]) and abs(errors[k]) >= abs(errors[k + 1]) and abs(errors[k]) > 1e-12]
+        extrema = sorted(set(peaks + [edge]))[-3:]
+    return outer, inner, max(abs(error) for error in errors)

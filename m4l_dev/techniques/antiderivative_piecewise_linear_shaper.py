@@ -23,12 +23,29 @@ one corner, the line of the lower piece plus the slope change times ADAA2 of a r
 piece, so the divisors are not small). A continuous table only (each piece meets the next): the build fails
 otherwise.
 
+ADAA2 also filters what it lets through: on a straight piece it is the 3-tap mean (1 + z^-1 + z^-2) / 3, and being
+linear in the transfer it puts that on every signal, folded or not: -1.3 dB at 10 kHz, -5.9 dB at 20 kHz at 96 kHz,
+-9.5 dB at Nyquist. Bilbao et al. 2017 §IV give the remedy: "Additional linear filtering is one option in this case,
+as suggested in [33], [34] for antialiased oscillators"; [34] (Valimaki, Pekonen & Nam 2012, eq. (16)) is "a
+post-processing equalizing filter ... a low-order filter, which is independent of the fundamental frequency", a
+linear-phase FIR. So the second-order output is ADAA2 through `SECOND_ORDER_EQUALISER_TAPS`, a symmetric 5-tap FIR
+(ours: equiripple, Remez) whose product with the 3-tap mean is 1 at DC and within +-0.1 dB up to
+SECOND_ORDER_EQUALISER_EDGE (5/24 of the rate: 20 kHz at 96 kHz, 10 kHz at 48 kHz); two more steps late
+(SECOND_ORDER_LATENCY_STEPS, 3 in all). Linear and after the transfer, it lifts a harmonic and an alias at one
+frequency alike (their ratio stays; an alias re the fundamental rises by the lift at its own frequency, at most +5.8 dB
+at the edge), and above the edge it keeps lifting (+15.9 dB at Nyquist: what a 2x instrument's downsampler takes
+away). The split the tanh saturator uses (the line on a filter-free path, ADAA on the rest) is not this: a folder's
+rest is mostly the line, so the split's error, (1 - the 3-tap mean) x (the line - the transfer), is the line's whole
+size at the input's frequency once it folds.
+
 `PiecewiseLinearTable` is the table and its GenExpr functions (`<name>(x)`, `<name>_integral(x)`,
 `<name>_mean(x, x_before, integral, integral_before)`; a continuous table also `<name>_second_order_mean(x,
-x_before, x_before_before)` and its helpers). Its function name carries a digest of the pieces, so two tables (two
-circuits, or one circuit built two ways) are two functions and can sit in one patch; a circuit module that runs a
-mean at several points a sample (an oscillator's sub-samples, a look-ahead probe) uses the table's expressions
-directly. `AntiderivativePiecewiseLinearShaper` is the plain use: one signal in, its ADAA1 or ADAA2 mean out.
+x_before, x_before_before)`, ADAA2's raw mean, and its helpers, and `adaa2_equaliser`). Its function name carries a
+digest of the pieces, so two tables (two circuits, or one circuit built two ways) are two functions and can sit in
+one patch; a circuit module that runs a mean at several points a sample (an oscillator's sub-samples, a look-ahead
+probe) uses the table's expressions directly: for second order, the raw mean at each point, kept, and
+`second_order_equaliser_call` over the last five. `AntiderivativePiecewiseLinearShaper` is the plain use: one signal
+in, its ADAA1 mean or its equalised ADAA2 out.
 """
 import hashlib
 import math
@@ -42,9 +59,21 @@ ILL_CONDITIONED_STEP = 0.000001
 # Where two pieces meet, their lines may differ by rounding (a table measured from a model): more than this (relative
 # to the value) is a jump, which second order does not take.
 CONTINUITY_TOLERANCE = 1e-9
+# ADAA2's equaliser (the module docstring): symmetric taps, designed (Remez on three extrema; tests/test_techniques.py
+# designs it again) so that it times ADAA2's 3-tap mean is 1 at DC and within +-0.0111 (0.0972 dB) up to the edge
+SECOND_ORDER_EQUALISER_EDGE = 5 / 24                    # cycles a sample: 20 kHz at 96 kHz
+SECOND_ORDER_EQUALISER_OUTER_TAP = 0.2663188927333224
+SECOND_ORDER_EQUALISER_INNER_TAP = -1.3145767744925694
+SECOND_ORDER_EQUALISER_TAPS = (SECOND_ORDER_EQUALISER_OUTER_TAP, SECOND_ORDER_EQUALISER_INNER_TAP,
+                               1 - 2 * SECOND_ORDER_EQUALISER_OUTER_TAP - 2 * SECOND_ORDER_EQUALISER_INNER_TAP,
+                               SECOND_ORDER_EQUALISER_INNER_TAP, SECOND_ORDER_EQUALISER_OUTER_TAP)
+SECOND_ORDER_EQUALISER_LENGTH = len(SECOND_ORDER_EQUALISER_TAPS)
+# ADAA2 is one step late (centred on the input before), its equaliser two more (centred on its middle tap)
+SECOND_ORDER_LATENCY_STEPS = 1 + (SECOND_ORDER_EQUALISER_LENGTH - 1) // 2
 
-# ADAA2 of the ramp max(u, 0) through u0 (newest), u1, u2 (eq. (15), fallbacks (17)-(20)): shared by every table
-RAMP_FUNCTIONS = {
+# shared by every continuous table: ADAA2 of the ramp max(u, 0) through u0 (newest), u1, u2 (eq. (15), fallbacks
+# (17)-(20)), and the equaliser
+SHARED_SECOND_ORDER_FUNCTIONS = {
     "adaa2_ramp_first_integral": """// the ramp max(u, 0)'s first antiderivative (kit technique: antiderivative piecewise-linear shaper)
 adaa2_ramp_first_integral(u) {
 \treturn u > 0 ? 0.5 * u * u : 0;
@@ -73,7 +102,21 @@ adaa2_ramp(u0, u1, u2) {
 \t}
 \treturn y;
 }""" % {"eps": ILL_CONDITIONED_STEP},
+    "adaa2_equaliser": """// ADAA2's equaliser over its last five raw means, m0 newest (kit technique: antiderivative piecewise-linear shaper)
+adaa2_equaliser(m0, m1, m2, m3, m4) {
+\treturn %(outer)r * (m0 + m4) + %(inner)r * (m1 + m3) + %(middle)r * m2;
+}""" % {"outer": SECOND_ORDER_EQUALISER_TAPS[0], "inner": SECOND_ORDER_EQUALISER_TAPS[1],
+        "middle": SECOND_ORDER_EQUALISER_TAPS[2]},
 }
+
+
+def second_order_equaliser_call(mean_expressions):
+    """GenExpr: the second-order output, the equaliser over ADAA2's last five raw means (`mean_expressions`, newest
+    first), SECOND_ORDER_LATENCY_STEPS late in all. A continuous table's functions() hold `adaa2_equaliser`."""
+    if len(mean_expressions) != SECOND_ORDER_EQUALISER_LENGTH:
+        raise BuildError(f"the second-order equaliser takes {SECOND_ORDER_EQUALISER_LENGTH} raw means, newest first, "
+                         f"got {len(mean_expressions)}: {mean_expressions!r}")
+    return f"adaa2_equaliser({', '.join(mean_expressions)})"
 
 
 class PiecewiseLinearTable:
@@ -205,7 +248,7 @@ class PiecewiseLinearTable:
             return (f"({self.second_integral(start)!r} + {self.integral(start)!r} * (x - {start!r}) + {slope!r} * "
                     f"((x * x * x - {start ** 3!r}) / 6 - {start * start / 2!r} * (x - {start!r})) + "
                     f"{intercept / 2!r} * (x - {start!r}) * (x - {start!r}))")
-        functions = dict(RAMP_FUNCTIONS)
+        functions = dict(SHARED_SECOND_ORDER_FUNCTIONS)
         functions.update({
             f"{name}_second_integral": f"""// its second antiderivative from 0, closed form per piece
 {name}_second_integral(x) {{
@@ -267,7 +310,8 @@ class PiecewiseLinearTable:
                 f"{integral_before_expression})")
 
     def second_order_mean_call(self, x_expression, x_before_expression, x_before_before_expression):
-        """GenExpr: ADAA2 through the three inputs (newest first), one sample late. A table with a jump fails."""
+        """GenExpr: ADAA2's raw mean through the three inputs (newest first), one sample late; the audio is the
+        equaliser over the last five of these (`second_order_equaliser_call`). A table with a jump fails."""
         if not self.is_continuous:
             raise BuildError(f"PiecewiseLinearTable {self.function_name}: second-order ADAA needs a continuous "
                              f"table, and its pieces jump where they meet")
@@ -277,8 +321,9 @@ class PiecewiseLinearTable:
 
 class AntiderivativePiecewiseLinearShaper(Technique):
     """`<name>_out`: `input` through `table` (a PiecewiseLinearTable): `order` 1, its ADAA1 mean over the step from
-    the last sample's input (half a sample late); `order` 2, ADAA2 through the last three inputs (one sample late; a
-    continuous table). State: the last inputs (and, first order, the last antiderivative)."""
+    the last sample's input (half a sample late); `order` 2, ADAA2 through the last three inputs, equalised over its
+    last five raw means (SECOND_ORDER_LATENCY_STEPS, three samples, late; a continuous table). State: the last inputs
+    (first order, the last antiderivative; second order, the last raw means)."""
 
     def __init__(self, instance_name, *, input, table, order=1):
         super().__init__(instance_name, input=input)
@@ -293,21 +338,30 @@ class AntiderivativePiecewiseLinearShaper(Technique):
         self.table = table
         self.order = order
 
+    def _raw_mean_history_names(self):
+        """The Histories of the last raw ADAA2 means, newest first (second order)."""
+        return [f"{self.instance_name}_raw_mean_before_{age}" for age in range(1, SECOND_ORDER_EQUALISER_LENGTH)]
+
     def functions(self):
         return self.table.functions()
 
     def declarations(self):
         if self.order == 2:
-            return self.substituted("History ${p}_input_before(0), ${p}_input_before_before(0);")
+            return self.substituted("History ${p}_input_before(0), ${p}_input_before_before(0), ") + \
+                ", ".join(f"{name}(0)" for name in self._raw_mean_history_names()) + ";"
         return self.substituted("History ${p}_input_before(0), ${p}_integral_before(0);")
 
     def statements(self):
         p = self.instance_name
         if self.order == 2:
-            return self.substituted("""// ${p}: a piecewise-linear transfer, second-order ADAA (kit technique: antiderivative piecewise-linear shaper)
+            raw_means = self._raw_mean_history_names()
+            shifts = [f"{raw_means[age]} = {raw_means[age - 1]};" for age in range(len(raw_means) - 1, 0, -1)]
+            return self.substituted("""// ${p}: a piecewise-linear transfer, second-order ADAA, equalised (kit technique: antiderivative piecewise-linear shaper)
 ${p}_input = ${input};
-${p}_out = """) + self.table.second_order_mean_call(f"{p}_input", f"{p}_input_before", f"{p}_input_before_before") + \
-                self.substituted(""";
+${p}_raw_mean = """) + self.table.second_order_mean_call(f"{p}_input", f"{p}_input_before",
+                                                        f"{p}_input_before_before") + ";\n" + \
+                f"{p}_out = {second_order_equaliser_call([f'{p}_raw_mean'] + raw_means)};\n" + \
+                "\n".join(shifts) + f"\n{raw_means[0]} = {p}_raw_mean;" + self.substituted("""
 ${p}_input_before_before = ${p}_input_before;
 ${p}_input_before = ${p}_input;""")
         return self.substituted("""// ${p}: a piecewise-linear transfer, first-order ADAA (kit technique: antiderivative piecewise-linear shaper)

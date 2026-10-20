@@ -14,8 +14,8 @@ from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
     cell_node_volts, output_volts, summed_output_volts_unlimited)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
-from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, exact_second_order_mean,  # noqa: E402
-                               harness)
+from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,  # noqa: E402
+                               equalised_second_order_outputs, exact_second_order_mean, harness)
 
 ORIGINAL = Buchla259TimbreSectionCharacter()
 
@@ -100,7 +100,7 @@ class FolderGenExprTests(unittest.TestCase):
         # folder's mean along the straight line between the bus's last two values
         timbre = section()
         frequency, drive, offset, count = 200.0, 5.0, 0.4, 300
-        statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n"
+        statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n" + timbre.output_statements("now") + "\n"
                       + f"out1 = {timbre.segment_output_volts('now', timbre.running_point)};\n"
                       + "out2 = now_folder_input_volts;\n" + timbre.remember_statements("now"))
         template = (f"/*GEN_BLOCK_FUNCTIONS*/\nParam drive({drive!r});\nParam offset({offset!r});\n"
@@ -122,6 +122,7 @@ class FolderGenExprTests(unittest.TestCase):
         running segment's first-order mean, out3 the bus."""
         timbre = section()
         statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n"
+                      + timbre.output_statements("now") + "\n"
                       + f"out1 = {timbre.output_volts_at('now')};\n"
                       + f"out2 = {timbre.segment_output_volts('now', timbre.running_point)};\n"
                       + "out3 = now_folder_input_volts;\n" + timbre.remember_statements("now"))
@@ -129,30 +130,60 @@ class FolderGenExprTests(unittest.TestCase):
                     f"Param frequency({frequency!r});\n/*GEN_BLOCK_DECLARATIONS*/\n/*TIMBRE*/\n" + statements)
         return GenProgram(gen_code_with_blocks(template, [timbre], "test harness"), 1, 3, samplerate=samplerate)
 
-    def test_the_output_is_second_order_adaa_of_the_folder(self):
+    def test_the_output_is_second_order_adaa_of_the_folder_equalised(self):
         # each step: Bilbao et al.'s eq. (15) through the last three bus values on the folder's pieces (= the circuit
-        # model, test above), one step late, exact, on a 5 V, 200 Hz sine with a 0.4 V offset
+        # model, test above), exact, then the technique's equaliser over the last five, on a 5 V, 200 Hz sine with a
+        # 0.4 V offset (from step 2, once the bus has two before it; the raw means before are what ran)
         frequency, count = 200.0, 300
         sine = [math.sin(2 * math.pi * frequency * i / 44100) for i in range(count)]
         out, _, bus = self.folder_program(5.0, frequency, 0.4).run(count, [sine])
         pieces = section().table.pieces
-        for i in range(2, count):
-            self.assertAlmostEqual(out[i], exact_second_order_mean(pieces, bus[i], bus[i - 1], bus[i - 2]), delta=1e-9,
-                                   msg=i)
+        raw_means = [exact_second_order_mean(pieces, bus[i], bus[i - 1], bus[i - 2]) for i in range(2, count)]
+        equalised = equalised_second_order_outputs(raw_means)
+        for i in range(6, count):                        # the equaliser's taps all on exact means
+            self.assertAlmostEqual(out[i], equalised[i - 2], delta=1e-9, msg=i)
+        self.assertEqual(Buchla259TimbreSection.latency_steps, 3)
+
+    def test_the_straight_middle_is_flat_to_20_khz_at_2x(self):
+        # a quiet sine on the straight middle piece (the dry path, slope 5): the output is the bus times 5, latency_steps
+        # late, within 0.0973 dB up to 20 kHz at 2x 48 kHz (raw ADAA2, its 3-tap mean: -1.3 dB at 10 kHz, -5.9 dB at
+        # 20 kHz); the drive stage's roll-off is in the bus, so the bus is the reference
+        rate, count, settle = 96000.0, 3000, 100
+        for frequency in (1000.0, 5000.0, 10000.0, 15000.0, 18000.0, 20000.0):
+            sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(count)]
+            out, _, bus = self.folder_program(0.3, frequency, samplerate=rate).run(count, [sine])
+            late = Buchla259TimbreSection.latency_steps
+            gain = complex_amplitude_at(out[settle:], frequency, rate) / complex_amplitude_at(
+                [5 * value for value in bus[settle - late:count - late]], frequency, rate)
+            self.assertLess(abs(20 * math.log10(abs(gain))), 0.0973, msg=frequency)
+            self.assertLess(abs(gain.imag), 1e-6, msg=frequency)
+
+    def test_the_output_needs_its_statements_first(self):
+        timbre = section()
+        with self.assertRaises(BuildError):
+            timbre.output_volts_at("now")
+        with self.assertRaises(BuildError):
+            timbre.remember_statements("now")
+        timbre.output_statements("now")
+        self.assertEqual(timbre.output_volts_at("now"), "now_folder_output_volts")
 
     def test_second_order_lowers_the_aliases(self):
         # a pure sine at 2x 48 kHz, the worst alias under 20 kHz re the fundamental (no leakage: a whole number of
-        # cycles in the window). Measured 2026-10-20, first order -> second: 4 V at 3.1 kHz -22.3 -> -36.4 dB,
-        # 8 V at 1.37 kHz -33.7 -> -48.7 dB (16384 points; the trivial folder: -3.5 and -16.5 dB)
-        rate, length, settle = 96000.0, 8192, 300
-        for drive, frequency, first_order, second_order in ((4.0, 3100.0, -22.3, -36.4), (8.0, 1370.0, -33.7, -48.7)):
+        # cycles in the window). Measured 2026-10-20 (16384 points), first order -> second raw (before its equaliser)
+        # -> second equalised: 4 V at 3.1 kHz -22.3 -> -36.4 -> -31.5 dB, 8 V at 1.37 kHz -33.7 -> -48.7 -> -45.8 dB,
+        # 4 V at 410 Hz -55.8 -> -69.8 -> -65.9 dB (the trivial folder: -3.5, -16.5, -41.8 dB). The equaliser lifts an
+        # alias as it lifts the harmonics at its frequency (up to +5.8 dB at 20 kHz): under 16 kHz, -44.5 -> -42.6,
+        # -48.7 -> -45.8, -74.8 -> -71.3 dB
+        rate, length, settle = 96000.0, 16384, 300
+        for drive, frequency, first_order, second_order in ((4.0, 3100.0, -22.3, -31.5), (8.0, 1370.0, -33.7, -45.8),
+                                                            (4.0, 410.0, -55.8, -65.9)):
             fundamental_bin, frequency = coherent_frequency(frequency, rate, length)
             sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(length + settle)]
             second, first, _ = self.folder_program(drive, frequency, samplerate=rate).run(length + settle, [sine])
             measured = [coherent_worst_alias_db(output[settle:], fundamental_bin, rate, 20000) for output in (first, second)]
             self.assertAlmostEqual(measured[0], first_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, first order")
             self.assertLess(measured[1], second_order + 1.5, msg=f"{drive} V, {frequency} Hz, second order")
-            self.assertLess(measured[1], measured[0] - 12)
+            self.assertLess(measured[1], measured[0] - 8)
 
     def test_two_units_are_two_folders_in_one_patch(self):
         original, starved = section("original"), section("starved", Buchla259TimbreSectionCharacter(cell_rail_volts=4.5))

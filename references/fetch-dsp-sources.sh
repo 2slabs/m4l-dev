@@ -23,6 +23,7 @@ sources=(
   "microtonic-user-guide-3.3.4.pdf|https://soniccharge.com/public/Microtonic%20User%20Guide.pdf|511c69d53991288431eb890e8ee80f7a5c44f513f4a6a876f718f78d41fcfb94"
   "park-miller-cacm1988.pdf|https://www.firstpr.com.au/dsp/rand31/p1192-park.pdf|69b0a6f2df4a794b982de14e3af12d97047668ee5e11dd098a6bacb6f85c28f6"
   "jomox-mbase11-manual.pdf|https://www.jomox.de/upload/manuals/MBase11_E.pdf|10350e766ff794a6afca61b268d8aea2e094cbe8d595aebeb0449c81240b0ef0"
+  "lapastina-dangelo-gabrielli-dafx21.pdf|https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf|2673492050d120d39962d65805764fa2368dc0bc614930e15c8bb93cc971b7bc"
   "hiir-1.40.zip|https://ldesoras.fr/src/hiir-1.40.zip|ed1d630f85b4ed1eeda8de16acb1f785b18fc93d1430c1956192c6cc1df4221e"
 )
 failed=0

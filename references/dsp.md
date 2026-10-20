@@ -79,7 +79,31 @@ Taking it piece-wise (a line at the three's mean on one piece; the lower piece's
 eq. (15) of a ramp in coordinates at the corner across one corner; eq. (15) itself across more) is our construction
 for conditioning: F2 is a cubic of the input, and eq. (15) divides its differences by products of steps that are tiny
 near a corner at a slow input. tests/test_techniques.py holds it to eq. (15) in exact rational arithmetic and
-measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, below 10 kHz: −55.3 → −72.6 dB).
+measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, below 10 kHz: −55.3 → −72.6 dB raw, −69.9
+equalised).
+
+ADAA2's linear filtering and its equaliser: the same paper, §II.A after eq. (16) [PDF p. 4]: "In practice, though aliasing is
+indeed suppressed, such methods do introduce a degree of linear filtering to the original signal, and thus all
+evaluation in Sec. IV will be carried out at a 2× oversampled rate"; §IV [PDF p. 5]: "An inherent characteristic of
+this family of methods is that of spectral shaping of the output; though aliasing is suppressed, there can be some
+attenuation of the signal in the high frequency range. Additional linear filtering is one option in this case, as
+suggested in [33], [34] for antialiased oscillators. ... generalisations beyond the nested structures presented here
+could aid in finding antialiasing methods for which such attenuation is reduced." [34] is Välimäki, Pekonen & Nam
+2012 (below, `valimaki-polyblep-jasa2012.pdf`), pp. 978–979 [PDF pp. 5–6], eq. (16): "... amplitudes of the higher harmonics are
+to be restored to the desired level, a post-processing equalizing filter can be used. In practice, a low-order
+filter, which is independent of the fundamental frequency, will suffice ... a second-order linear-phase FIR filter
+expressed as Heq(z) = b0 + b1 z^−1 + b0 z^−2". On a straight piece ADAA2 is the 3-tap mean (1 + z^−1 + z^−2) / 3
+(−1.3 dB at 10 kHz, −5.9 dB at 20 kHz at 96 kHz); a 3-tap equaliser on it reaches only ±0.3 dB to 18 kHz at 96 kHz by
+giving up 0.3 dB at DC, so the technique's is 5 taps, symmetric, equiripple by the Remez exchange (our design; DC
+exactly 1, within ±0.097 dB up to 5/24 of the rate, 20 kHz at 96 kHz; two steps more latency). Not chosen: AA-IIR
+kernels (**La Pastina, D'Angelo & Gabrielli, "Arbitrary-order IIR antiderivative antialiasing", DAFx20in21**
+(`lapastina-dangelo-gabrielli-dafx21.pdf`),
+https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf, the "generalisations" route: a
+Butterworth or Chebyshev kernel, at the cost of complex exponential integrals of the transfer per pole); and the line
+split the tanh saturator uses, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the transfer), the
+line's whole size at the input's frequency. An equaliser after the transfer lifts an alias as it lifts the harmonics at
+its frequency: the 259 folder at 2× 48 kHz, worst alias under 20 kHz re the fundamental, 4 V at 3.1 kHz −36.4 → −31.5
+dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
 
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 
