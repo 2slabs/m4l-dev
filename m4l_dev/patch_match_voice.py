@@ -2,8 +2,9 @@
 parameters' search ranges, how it is triggered) and the map from the search's unit cube to parameter values.
 
 A voice is plain data (picklable: the search's worker processes get it whole). Rendering one hit: a fresh GenProgram
-(no state from the hit before), the fixed values, the searched values, the noise seed, the trigger on its input, the
-other inputs at zero, the audio output's samples.
+(no state from the hit before), the fixed values, the searched values, the noise seed (gen~'s noise() and, through the
+voice's seed Param, the kit's seeded techniques), the trigger on its input, the other inputs at zero, the audio
+output's samples.
 """
 import math
 from dataclasses import dataclass, field
@@ -100,7 +101,9 @@ class MatchTrigger:
 class MatchedVoice:
     """A voice to match: its GenExpr code, inputs / outputs, the searched parameters, the fixed values of others,
     its trigger, which output is the audio, and the noise seed every render uses (a hit is a function of its
-    parameters)."""
+    parameters). The seed reaches gen~'s noise() (the renderer's seed) and, when `noise_seed_param` names one, the
+    voice's Param that seeds its kit techniques (SeededWhiteNoise, PitchModulator's random: architecture/
+    seeded-random.md), set to `noise_seed` on every render."""
     name: str
     gen_code: str
     num_inputs: int
@@ -110,6 +113,7 @@ class MatchedVoice:
     audio_output: int = 1
     fixed_values: tuple = field(default_factory=tuple)   # ((name, value), ...)
     noise_seed: int = 1
+    noise_seed_param: str = ""                           # the Param the voice's seeded techniques read ("": none)
 
     def __post_init__(self):
         where = f"voice '{self.name}'"
@@ -134,6 +138,16 @@ class MatchedVoice:
                 raise BuildError(f"{where}: fixes '{fixed_name}', which the code does not declare as a Param")
             if fixed_name in names:
                 raise BuildError(f"{where}: '{fixed_name}' is both fixed and searched")
+        if self.noise_seed_param:
+            if self.noise_seed_param not in info.params:
+                raise BuildError(f"{where}: its noise seed Param '{self.noise_seed_param}' is not declared by the code")
+            if self.noise_seed_param in names or self.noise_seed_param in dict(self.fixed_values):
+                raise BuildError(f"{where}: its noise seed Param '{self.noise_seed_param}' is also searched or fixed")
+            declared = info.params[self.noise_seed_param]
+            if ((declared.minimum is not None and self.noise_seed < declared.minimum)
+                    or (declared.maximum is not None and self.noise_seed > declared.maximum)):
+                raise BuildError(f"{where}: noise seed {self.noise_seed} is outside its Param's "
+                                 f"[{declared.minimum}, {declared.maximum}]: the renderer would clamp it")
         if not 1 <= self.trigger.input_number <= self.num_inputs:
             raise BuildError(f"{where}: the trigger is on input {self.trigger.input_number}, the voice has "
                                   f"{self.num_inputs}")
@@ -160,6 +174,8 @@ class MatchedVoice:
         program = GenProgram(self.gen_code, self.num_inputs, self.num_outputs, samplerate=rate, seed=self.noise_seed)
         for fixed_name, fixed_value in self.fixed_values:
             program.set_param(fixed_name, fixed_value)
+        if self.noise_seed_param:
+            program.set_param(self.noise_seed_param, self.noise_seed)
         for parameter in self.parameters:
             if parameter.name not in values_by_name:
                 raise BuildError(f"voice '{self.name}': no value for '{parameter.name}'")

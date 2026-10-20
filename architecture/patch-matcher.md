@@ -30,8 +30,9 @@ Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a re
   Each searched Param has a range on a linear or log scale, or is an integer range, or an enum (its values); the
   range must sit inside the Param's own min / max (the renderer would clamp it silently otherwise). Params not
   searched keep their default or a fixed value. A hit is: a fresh program (no state from the hit before), the trigger
-  on its input (an impulse, or a gate held `held_seconds`), the other inputs at 0, the audio output, a fixed noise seed.
-  A hit is a function of its parameters.
+  on its input (an impulse, or a gate held `held_seconds`), the other inputs at 0, the audio output, a fixed noise seed
+  (gen~'s noise(), and the voice's seed Param, `noise_seed_param`, which its kit techniques read: SeededWhiteNoise,
+  PitchModulator's random). A hit is a function of its parameters.
 - **The score** (`patch_match_score.py`'s docstring for the terms): 0 for identical hits, in dB-like units, blind to
   level and to where the hit starts in the file; at most the first 2 s after the onset. Silence scores the worst
   (`SILENT_CANDIDATE_SCORE`); a NaN or infinity raises (a voice bug, never a score).

@@ -23,7 +23,9 @@ from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
                                         match_patch, symmetric_eigendecomposition)
-from m4l_dev.patch_match_voice import MatchedParameter  # noqa: E402
+from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
+from m4l_dev.patch_match_voice import MatchedParameter, MatchedVoice  # noqa: E402
+from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise  # noqa: E402
 from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
 RATE = 48000
@@ -135,6 +137,29 @@ class VoiceTests(unittest.TestCase):
 
     def test_a_render_has_no_memory_of_the_one_before(self):
         self.assertEqual(render(KICK, 0.1), render(KICK, 0.1))
+
+    def test_the_noise_seed_reaches_the_kits_seeded_noise_through_the_seed_param(self):
+        # a voice whose noise is the kit's SeededWhiteNoise, seeded by its Param "seed": the matched voice's seed
+        # decides its noise (gen~'s noise() is not in it)
+        noise = SeededWhiteNoise("white", seed="seed")
+        code = gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\nParam level(0.5, min=0, max=1);\n"
+                                    "Param seed(1, min=0, max=2147483646);\n/*GEN_BLOCK_DECLARATIONS*/\n/*WHITE*/\n"
+                                    "out1 = white_out * level * (in1 + 1);\n", [noise], "seeded voice")
+        voice = MatchedVoice(name="seeded", gen_code=code, num_inputs=1, num_outputs=1,
+                             parameters=(MatchedParameter.continuous("level", 0.1, 1),), noise_seed=7,
+                             noise_seed_param="seed")
+        hits = {seed: dataclasses.replace(voice, noise_seed=seed).render({"level": 0.5}, 64, RATE) for seed in (7, 8)}
+        self.assertEqual(voice.render({"level": 0.5}, 64, RATE), hits[7])
+        self.assertNotEqual(hits[7], hits[8])
+        unplumbed = dataclasses.replace(voice, noise_seed_param="")
+        self.assertEqual(unplumbed.render({"level": 0.5}, 64, RATE),
+                         dataclasses.replace(unplumbed, noise_seed=8).render({"level": 0.5}, 64, RATE))
+        with self.assertRaisesRegex(BuildError, "not declared"):
+            dataclasses.replace(voice, noise_seed_param="sead")
+        with self.assertRaisesRegex(BuildError, "also searched or fixed"):
+            dataclasses.replace(voice, noise_seed_param="level")
+        with self.assertRaisesRegex(BuildError, "outside its Param"):
+            dataclasses.replace(voice, noise_seed=-3)
 
 
 class SearchTests(unittest.TestCase):
