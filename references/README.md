@@ -6,8 +6,15 @@ these by section; the examples are 2sl stab's, where each rule was first found.
 
 ## DSP
 
-The DSP blocks' sources (the ladder, the saturator, band-limited edges, the tape echo, and what gen~ accepts) are in
+The techniques' sources (the zero-delay ladder and state-variable filters, the antiderivative saturator, the knee soft
+clip, band-limited edges, the tape-style echo, and what gen~ accepts) are in
 `dsp.md`, with quotes and pages; `fetch-dsp-sources.sh` downloads and checks them (not kept in git).
+
+## Circuits
+
+One file per modelled circuit (a kit circuit module, architecture/dsp-blocks.md), its datasheets and schematics quoted
+with pages: `circuits/ltc1060-mf10.md`. `circuits/fetch-circuit-sources.sh` downloads and checks them (not kept in
+git). `circuit-module-catalogue.md` ranks the circuits still to model.
 
 ## Loudness
 

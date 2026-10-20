@@ -1,4 +1,5 @@
-"""The output soft clip block: clean below a knee, a tanh shoulder above it that reaches 1 and stays under it.
+"""The knee soft clip (a technique; references/dsp.md, "Knee soft clip"): clean below a knee, a tanh shoulder above
+it that reaches 1 and stays under it. What every device's output goes through last.
 
     y = x                                                  |x| <= knee
     y = sign(x) * (knee + h * tanh((|x| - knee) / h)),     h = 1 - knee,  |x| > knee
@@ -13,7 +14,7 @@ limiter). The knee is a constant of the device (a Python number, not a GenExpr):
 from decimal import Decimal
 
 from m4l_dev.build_error import BuildError
-from m4l_dev.gen_blocks import GenBlock
+from m4l_dev.gen_blocks import Technique
 
 FUNCTIONS = {
     "soft_clip_above_knee": """// clean up to the knee, then knee + headroom * tanh(excess / headroom): value and slope continuous, bounded by 1
@@ -28,12 +29,12 @@ soft_clip_above_knee(v, knee, headroom) {
 }
 
 
-class OutputSoftClip(GenBlock):
+class KneeSoftClip(Technique):
     """`<name>_out` = `input` through the soft clip with `knee` (a number, 0 < knee < 1)."""
 
     def __init__(self, instance_name, input, knee):
         if isinstance(knee, bool) or not isinstance(knee, (int, float)) or not 0.0 < knee < 1.0:
-            raise BuildError(f"OutputSoftClip {instance_name}: the knee must be a number between 0 and 1 "
+            raise BuildError(f"KneeSoftClip {instance_name}: the knee must be a number between 0 and 1 "
                              f"(exclusive), got {knee!r}")
         super().__init__(instance_name, input=input)
         self.knee = float(knee)
@@ -43,6 +44,6 @@ class OutputSoftClip(GenBlock):
         return dict(FUNCTIONS)
 
     def statements(self):
-        return self.substituted("// ${p}: soft clip, knee ${knee} (kit soft clip block)\n"
+        return self.substituted("// ${p}: soft clip, knee ${knee} (kit technique: knee soft clip)\n"
                                 "${p}_out = soft_clip_above_knee(${input}, ${knee}, ${headroom});",
                                 knee=self.knee, headroom=self.headroom)

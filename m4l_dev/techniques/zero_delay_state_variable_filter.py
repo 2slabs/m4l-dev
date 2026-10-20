@@ -1,5 +1,5 @@
-"""The state-variable filter block: a 2-pole multimode filter (low-pass, band-pass, high-pass at once), zero-delay
-feedback (TPT), linear (references/dsp.md, "State-variable filter").
+"""The zero-delay state-variable filter (a technique): a 2-pole multimode filter (low-pass, band-pass, high-pass at
+once), zero-delay feedback (TPT), linear (references/dsp.md, "Zero-delay state-variable filter").
 
 The analog SVF (Zavalishin, The Art of VA Filter Design rev. 2.1.2, §4.1 eq. 4.1):
 
@@ -23,13 +23,14 @@ outputs split the input exactly: LP + 2R BP + HP = x (eq. 4.4). The band-pass ti
 (§4.5 eq. 4.15). An impulse rings at the cutoff with an envelope time constant 1 / (R wc) = Q / (pi fc).
 
 What it is for: an analog circuit's two-pole stages by their cutoff and Q (a Sallen-Key low- or high-pass, a
-multiple-feedback band-pass, a bridged-T ring). Not the ladder (four poles, one output, saturating loop) and not the
-switched-capacitor block (an LDI filter stepped at a chip's clock, its staircase and images kept on purpose).
+multiple-feedback band-pass, a bridged-T ring): a circuit module turns its components into the cutoff and Q. Not the
+zero-delay ladder (four poles, one output, saturating loop) and not the LTC1060 / MF10 module (an LDI filter stepped at
+a chip's clock, its staircase and images kept on purpose).
 """
 import math
 
 from m4l_dev.build_error import BuildError
-from m4l_dev.gen_blocks import GenBlock
+from m4l_dev.gen_blocks import Technique
 
 HIGHEST_PREWARP_OF_SAMPLE_RATE = 0.45    # tan(0.45 pi) = 6.3: the prewarping point stays where tan is finite
 LOWEST_CUTOFF_HZ = 10.0                  # the cutoff's and the prewarping point's floor: g > 0
@@ -45,11 +46,11 @@ def _check_a_number_input(instance_name, input_name, expression):
     except ValueError:
         return
     if not math.isfinite(value) or value <= 0:
-        raise BuildError(f"StateVariableFilter {instance_name}: {input_name} is {expression!r}; it must be a finite "
+        raise BuildError(f"ZeroDelayStateVariableFilter {instance_name}: {input_name} is {expression!r}; it must be a finite "
                          "number above 0")
 
 
-class StateVariableFilter(GenBlock):
+class ZeroDelayStateVariableFilter(Technique):
     """`<name>_lowpass`, `<name>_bandpass`, `<name>_highpass`: `input` through the SVF at `cutoff_hz` (at least
     10 Hz, no upper limit) and `q` (clamped to [0.05, 200]), the bilinear transform exact at `prewarp_hz` (default:
     the cutoff; held to [10 Hz, 0.45 sr]); `<name>_bandpass_normalised` = 2R x the band-pass (unit gain at the
@@ -66,7 +67,7 @@ class StateVariableFilter(GenBlock):
         return self.substituted("History ${p}_s1(0), ${p}_s2(0);")
 
     def statements(self):
-        return self.substituted("""// ${p}: 2-pole state-variable filter, zero-delay feedback (kit state-variable block)
+        return self.substituted("""// ${p}: 2-pole state-variable filter, zero-delay feedback (kit technique: zero-delay state-variable filter)
 ${p}_cutoff = max(${cutoff_hz}, ${lowest});
 ${p}_prewarp = clamp(${prewarp_hz}, ${lowest}, samplerate * ${highest});
 ${p}_g = tan(pi * ${p}_prewarp / samplerate) * (${p}_cutoff / ${p}_prewarp);
@@ -88,9 +89,9 @@ ${p}_bandpass_normalised = ${p}_damping * ${p}_bandpass;""",
 
 
 def small_signal_response(frequency_hz, cutoff_hz, q, sample_rate, prewarp_hz=None):
-    """{"lowpass", "bandpass", "highpass"}: the block's complex response at `frequency_hz`, the analog SVF at
+    """{"lowpass", "bandpass", "highpass"}: the filter's complex response at `frequency_hz`, the analog SVF at
     s = j tan(pi f / sr) / g, g = tan(pi fp / sr) fc / fp (the bilinear transform prewarped at fp, eq. 3.18),
-    clamped as the block clamps."""
+    clamped as the filter clamps."""
     cutoff_hz = max(cutoff_hz, LOWEST_CUTOFF_HZ)
     prewarp_hz = cutoff_hz if prewarp_hz is None else prewarp_hz
     prewarp_hz = min(max(prewarp_hz, LOWEST_CUTOFF_HZ), HIGHEST_PREWARP_OF_SAMPLE_RATE * sample_rate)

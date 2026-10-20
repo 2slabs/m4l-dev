@@ -1,5 +1,5 @@
-"""The edges block: band-limited jumps (4-point polyBLEP) and corners (4-point polyBLAMP) for a device's oscillators
-(references/dsp.md, "Edges").
+"""Band-limited edges (a technique): jumps (4-point polyBLEP) and corners (4-point polyBLAMP) for a trivial waveform
+(references/dsp.md, "Band-limited edges").
 
 A device computes its trivial ("naive") waveform mix each sample, and tells the block where in that sample each jump
 or corner happened. Each correction spreads over four samples, two on each side of the edge, so the block delays the
@@ -9,14 +9,14 @@ landed on it. One block per voice serves every edge of every oscillator (the cor
 The residuals are the cubic B-spline's first integral minus the unit step (polyBLEP) and its second integral minus
 the ramp (polyBLAMP), per tap, as polynomials in d, the fraction of a sample from the edge to the first sample after
 it (Esqueda, Välimäki & Bilbao, DAFx-16, Table 1; derived again from the B-spline and equal to it). Measured (research
-2026-10-19, worst alias below 10 kHz re the fundamental, 44.1 kHz; tests/test_dsp_blocks.py keeps the claims):
+2026-10-19, worst alias below 10 kHz re the fundamental, 44.1 kHz; tests/test_techniques.py keeps the claims):
 saw C7 -50.4 (2-point) -> -76.2 dB; triangle C7 -51.8 (naive) -> -100.7 dB and C8 -41.2 -> -95.5 dB with polyBLAMP,
 where an integrated polyBLEP square reached only -87.9 / -84.5 dB and needs a leaky integrator's state.
 """
 from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
-from m4l_dev.gen_blocks import GenBlock
+from m4l_dev.gen_blocks import Technique
 
 LOOK_AHEAD_SAMPLES = 2
 TAP_NAMES = ("two_before", "one_before", "at", "one_after")   # samples n-2, n-1, n, n+1; n: the first after the edge
@@ -56,7 +56,7 @@ FUNCTIONS = dict(residual_functions("polyblep4", POLYBLEP4_RESIDUAL, "4-point po
                  **residual_functions("polyblamp4", POLYBLAMP4_RESIDUAL, "4-point polyBLAMP"))
 
 
-class BandLimitedEdges(GenBlock):
+class BandLimitedEdges(Technique):
     """`<name>_out`: `naive` two samples late, its jumps and corners band-limited.
 
     add_jump(happened, fraction, height): when `happened` (true this sample), the mix jumped by `height` at
@@ -97,7 +97,7 @@ class BandLimitedEdges(GenBlock):
     def statements(self):
         if not self.edges:
             raise BuildError(f"BandLimitedEdges {self.instance_name}: no jump or corner was added")
-        lines = [self.substituted("// ${p}: band-limited edges, two samples of look-ahead (kit edges block)")]
+        lines = [self.substituted("// ${p}: band-limited edges, two samples of look-ahead (kit technique: band-limited edges)")]
         for number, (kind, happened, fraction, size) in enumerate(self.edges, start=1):
             edge = f"{self.instance_name}_edge_{number}"
             lines.append(f"if ({happened}) {{")

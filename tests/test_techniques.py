@@ -1,78 +1,35 @@
-"""The kit's DSP blocks (m4l_dev/gen_ladder.py, gen_saturator.py, gen_edges.py, gen_echo.py, gen_state_variable.py): each block's claims,
-rendered through our GenExpr renderer (m4l_dev/genexpr.py: ours, not Max's compiler), and the gen block pattern's
-build rules (m4l_dev/gen_blocks.py). Each claim runs on a small harness program around one block, at the lowest
-sample rate that still tests it, so the whole file takes seconds. Standard library only."""
+"""The kit's techniques (m4l_dev/techniques/): each technique's claims, rendered through our GenExpr renderer
+(m4l_dev/genexpr.py: ours, not Max's compiler). Each claim runs on a small harness program around one technique
+(tests/gen_block_harness.py), at the lowest sample rate that still tests it, so the whole file takes seconds. Standard
+library only."""
 import math
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.gen_blocks import GenBlock, gen_code_with_blocks  # noqa: E402
-from m4l_dev.gen_echo import TapeEcho  # noqa: E402
-from m4l_dev.gen_edges import BandLimitedEdges  # noqa: E402
-from m4l_dev.gen_ladder import LadderFilter, response_script_code, small_signal_magnitude  # noqa: E402
-from m4l_dev.gen_soft_clip import OutputSoftClip  # noqa: E402
-from m4l_dev.gen_saturator import AntiderivativeTanhSaturator  # noqa: E402
-from m4l_dev.gen_state_variable import StateVariableFilter, ring_time_constant_seconds, small_signal_response  # noqa: E402
-from m4l_dev.genexpr import GenProgram, check  # noqa: E402
+from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
+from m4l_dev.genexpr import GenProgram  # noqa: E402
+from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
+from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
+from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
+from m4l_dev.techniques.tape_style_echo import TapeStyleEcho  # noqa: E402
+from m4l_dev.techniques.zero_delay_ladder_filter import (ZeroDelayLadderFilter, response_script_code,  # noqa: E402
+                                                         small_signal_magnitude)
+from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
+                                                                 ring_time_constant_seconds, small_signal_response)
+from gen_block_harness import (amplitude_at, cents, folded, frequency_by_zero_crossings, harness,  # noqa: E402
+                               worst_alias_db)
 
 
-def harness(blocks, params, outputs, num_inputs=1, samplerate=44100.0):
-    """A gen~ program: the Params (name -> default), the blocks, `outN = outputs[N-1];`."""
-    declarations = "\n".join(f"Param {name}({value!r}, min=-1e9, max=1e9);" for name, value in params.items())
-    statements = "\n".join(f"/*{block.marker}*/" for block in blocks)
-    template = (f"/*GEN_BLOCK_FUNCTIONS*/\n{declarations}\n/*GEN_BLOCK_DECLARATIONS*/\n{statements}\n"
-                + "".join(f"out{n} = {expression};\n" for n, expression in enumerate(outputs, start=1)))
-    code = gen_code_with_blocks(template, blocks, "test harness")
-    check(code, num_inputs=num_inputs, num_outputs=len(outputs))
-    return GenProgram(code, num_inputs, len(outputs), samplerate=samplerate)
-
-
-def frequency_by_zero_crossings(signal, samplerate):
-    crossings = [i + signal[i] / (signal[i] - signal[i + 1]) for i in range(len(signal) - 1)
-                 if signal[i] <= 0 < signal[i + 1]]
-    return samplerate * (len(crossings) - 1) / (crossings[-1] - crossings[0])
-
-
-def amplitude_at(signal, frequency, samplerate):
-    """The amplitude of the sinusoid at `frequency` in `signal` (Hann window, one DFT bin evaluated directly)."""
-    n = len(signal)
-    real = imaginary = window_sum = 0.0
-    step = 2 * math.pi * frequency / samplerate
-    for i, value in enumerate(signal):
-        window = 0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1))
-        real += value * window * math.cos(step * i)
-        imaginary -= value * window * math.sin(step * i)
-        window_sum += window
-    return 2 * math.hypot(real, imaginary) / window_sum
-
-
-def folded(frequency, samplerate):
-    frequency = math.fmod(frequency, samplerate)
-    return samplerate - frequency if frequency > samplerate / 2 else frequency
-
-
-def worst_alias_db(signal, fundamental, harmonics, samplerate, below_hz):
-    """The loudest folded harmonic (of `harmonics`, all above Nyquist) landing below `below_hz`, dB re the
-    fundamental."""
-    reference = amplitude_at(signal, fundamental, samplerate)
-    levels = [amplitude_at(signal, folded(k * fundamental, samplerate), samplerate) for k in harmonics
-              if k * fundamental > samplerate / 2 and folded(k * fundamental, samplerate) < below_hz]
-    return 20 * math.log10(max(levels) / reference)
-
-
-def cents(frequency, reference):
-    return 1200 * math.log2(frequency / reference)
-
-
-class LadderTests(unittest.TestCase):
+class ZeroDelayLadderFilterTests(unittest.TestCase):
     SAMPLERATE = 44100.0
 
     def ladder(self):
-        return harness([LadderFilter("ladder", input="in1", cutoff_hz="cutoff", resonance="resonance")],
+        return harness([ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="cutoff", resonance="resonance")],
                        {"cutoff": 1000.0, "resonance": 0.0}, ["ladder_out"], samplerate=self.SAMPLERATE)
 
     def ring(self, cutoff, resonance, samples=8820):
@@ -121,7 +78,7 @@ class LadderTests(unittest.TestCase):
             self.assertAlmostEqual(value, small_signal_magnitude(frequency, cutoff, resonance, 48000.0), places=9)
 
 
-class SaturatorTests(unittest.TestCase):
+class AntiderivativeTanhSaturatorTests(unittest.TestCase):
     SAMPLERATE = 44100.0
 
     def saturate(self, signal, block=True):
@@ -176,7 +133,7 @@ class SaturatorTests(unittest.TestCase):
         self.assertLess(worst_alias_db(out, 8000.0, range(2, 16), self.SAMPLERATE, 10000.0), -48.0)
 
 
-class EdgeTests(unittest.TestCase):
+class BandLimitedEdgesTests(unittest.TestCase):
     SAMPLERATE = 44100.0
 
     def oscillator(self, fundamental, wave):
@@ -232,9 +189,9 @@ class EdgeTests(unittest.TestCase):
         self.assertAlmostEqual(max(out), 1.0, delta=0.02)
 
 
-class EchoTests(unittest.TestCase):
+class TapeStyleEchoTests(unittest.TestCase):
     def echo(self, samplerate, diffusion=True, **params):
-        block = TapeEcho("echo", left_input="in1", right_input="in1", time_ms="time", feedback="feedback",
+        block = TapeStyleEcho("echo", left_input="in1", right_input="in1", time_ms="time", feedback="feedback",
                          loop_lowpass_hz="lowpass", loop_highpass_hz="highpass", saturation_gain="saturation",
                          wow_cents="wow", flutter_cents="flutter", stop_pressed="stop > 0",
                          diffusion="diffusion" if diffusion else None, initial_time_ms=375.0,
@@ -326,12 +283,12 @@ class EchoTests(unittest.TestCase):
 
 
 
-class StateVariableFilterTests(unittest.TestCase):
+class ZeroDelayStateVariableFilterTests(unittest.TestCase):
     SAMPLERATE = 22050.0
     OUTPUTS = ["svf_lowpass", "svf_bandpass", "svf_highpass", "svf_bandpass_normalised"]
 
     def svf(self, cutoff, q):
-        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
+        program = harness([ZeroDelayStateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
                           {"cutoff": cutoff, "q": q}, self.OUTPUTS, samplerate=self.SAMPLERATE)
         return program
 
@@ -362,7 +319,7 @@ class StateVariableFilterTests(unittest.TestCase):
                 self.assertAlmostEqual(20 * math.log10(self.sine_response(cutoff, 7.3, cutoff, 8820)[3]), 0.0, delta=0.05)
 
     def test_the_outputs_split_the_input(self):
-        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
+        program = harness([ZeroDelayStateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q")],
                           {"cutoff": 1234.0, "q": 3.0}, ["svf_lowpass + svf_bandpass_normalised + svf_highpass"],
                           samplerate=self.SAMPLERATE)
         signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
@@ -382,7 +339,7 @@ class StateVariableFilterTests(unittest.TestCase):
         self.assertAlmostEqual(frequency_by_zero_crossings(ring[:1500], self.SAMPLERATE), cutoff, delta=cutoff * 0.01)
 
     def test_stable_under_fast_modulation(self):
-        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="20 + 9000 * (0.5 + 0.5 * sin(in1 * 300))",
+        program = harness([ZeroDelayStateVariableFilter("svf", input="in1", cutoff_hz="20 + 9000 * (0.5 + 0.5 * sin(in1 * 300))",
                                                q="0.05 + 30 * (0.5 + 0.5 * cos(in1 * 170))")],
                           {}, self.OUTPUTS, samplerate=self.SAMPLERATE)
         noise = [math.sin(n * n * 0.001) for n in range(8000)]
@@ -390,7 +347,7 @@ class StateVariableFilterTests(unittest.TestCase):
         self.assertTrue(all(math.isfinite(value) and abs(value) < 1e3 for output in outputs for value in output))
 
     def prewarped_sine_response(self, cutoff, q, prewarp, frequency, samples=4410):
-        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q", prewarp_hz="prewarp")],
+        program = harness([ZeroDelayStateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q", prewarp_hz="prewarp")],
                           {"cutoff": cutoff, "q": q, "prewarp": prewarp}, self.OUTPUTS, samplerate=self.SAMPLERATE)
         sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(samples)]
         outputs = program.run(samples, [sine])
@@ -426,7 +383,7 @@ class StateVariableFilterTests(unittest.TestCase):
         self.assertAlmostEqual(20 * math.log10(measured), 20 * math.log10(abs(bounded["lowpass"])), delta=0.01)
 
     def test_stable_with_the_cutoff_swept_far_past_nyquist(self):
-        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="20 + 2e6 * (0.5 + 0.5 * sin(in1 * 300))",
+        program = harness([ZeroDelayStateVariableFilter("svf", input="in1", cutoff_hz="20 + 2e6 * (0.5 + 0.5 * sin(in1 * 300))",
                                                q="0.05 + 30 * (0.5 + 0.5 * cos(in1 * 170))",
                                                prewarp_hz="20 + 30000 * (0.5 + 0.5 * sin(in1 * 90))")],
                           {}, self.OUTPUTS, samplerate=self.SAMPLERATE)
@@ -440,14 +397,14 @@ class StateVariableFilterTests(unittest.TestCase):
                 inputs = dict(input="in1", cutoff_hz="1000", q="0.7", prewarp_hz="1000")
                 inputs[input_name] = bad
                 with self.subTest(input=input_name, value=bad), self.assertRaises(BuildError):
-                    StateVariableFilter("svf", **inputs)
+                    ZeroDelayStateVariableFilter("svf", **inputs)
 
 
-class SoftClipTests(unittest.TestCase):
+class KneeSoftClipTests(unittest.TestCase):
     KNEES = (0.8, 0.95)
 
     def clip(self, signal, knee):
-        program = harness([OutputSoftClip("clip", input="in1", knee=knee)], {}, ["clip_out"])
+        program = harness([KneeSoftClip("clip", input="in1", knee=knee)], {}, ["clip_out"])
         return program.run(len(signal), [signal])[0]
 
     def test_it_is_unity_up_to_the_knee(self):
@@ -476,39 +433,11 @@ class SoftClipTests(unittest.TestCase):
     def test_the_knee_must_be_a_number_between_0_and_1(self):
         for knee in (0.0, 1.0, -0.5, 1.5, "0.8", None, True):
             with self.assertRaises(BuildError, msg=repr(knee)):
-                OutputSoftClip("clip", input="in1", knee=knee)
+                KneeSoftClip("clip", input="in1", knee=knee)
 
     def test_its_headroom_is_one_minus_the_knee_as_written(self):
-        self.assertIn("soft_clip_above_knee((in1), 0.8, 0.2)", OutputSoftClip("c", input="in1", knee=0.8).statements())
-        self.assertIn("0.95, 0.05)", OutputSoftClip("c", input="in1", knee=0.95).statements())
-
-
-class GenBlockPatternTests(unittest.TestCase):
-    def test_markers_must_match(self):
-        ladder = LadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="0")
-        with self.assertRaises(BuildError):
-            gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*GEN_BLOCK_DECLARATIONS*/\nout1 = 0;", [ladder], "t")
-        with self.assertRaises(BuildError):
-            gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*LADDER*/\nout1 = 0;", [ladder], "t")
-
-    def test_instance_names(self):
-        with self.assertRaises(BuildError):
-            LadderFilter("Ladder", input="in1", cutoff_hz="1000", resonance="0")
-        with self.assertRaises(BuildError):
-            LadderFilter("ladder", input="", cutoff_hz="1000", resonance="0")
-        twice = [LadderFilter("ladder", input="in1", cutoff_hz="1", resonance="0")] * 2
-        with self.assertRaises(BuildError):
-            gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*GEN_BLOCK_DECLARATIONS*/\n/*LADDER*/", twice, "t")
-
-    def test_one_function_name_one_body(self):
-        class Clash(GenBlock):
-            def functions(self):
-                return {"smoothing_coefficient": "smoothing_coefficient(a, b) { return 0; }"}
-
-            def statements(self):
-                return ""
-        with self.assertRaises(BuildError):
-            gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*GEN_BLOCK_DECLARATIONS*/\n/*CLASH*/", [Clash("clash")], "t")
+        self.assertIn("soft_clip_above_knee((in1), 0.8, 0.2)", KneeSoftClip("c", input="in1", knee=0.8).statements())
+        self.assertIn("0.95, 0.05)", KneeSoftClip("c", input="in1", knee=0.95).statements())
 
 
 if __name__ == "__main__":

@@ -18,6 +18,11 @@ block, they're just wrapping it, this is what we're doing)". Level 3, "reorganiz
 1. Kit: architecture/ states the layers and the pattern of each; every existing block is filed into one (the
    generic ladder decided: a technique, or a real module); modules and files moved and renamed; no old name left.
    Sound unchanged (bit-identical renders).
+   DONE 2026-10-20: techniques in m4l_dev/techniques/ (zero-delay ladder and state-variable filters, antiderivative
+   tanh saturator, knee soft clip, band-limited edges, tape-style echo: the ladder and the echo model no circuit),
+   the LTC1060 / MF10 section the one circuit module (m4l_dev/circuit_modules/, volts in and out, clock in Hz,
+   character a dataclass, references/circuits/ltc1060-mf10.md); architecture/dsp-blocks.md, tests/test_gen_block_layers.py;
+   all 113 renders of the blocks' tests bit-identical. The devices move onto it in their own steps.
 2. Gate: the 259 (sine core, modulation oscillator, folder) and the 292 (network, vactrol) move into the kit as
    modules; gate wires them. Bit-identical.
 3. Stab + filter: the pump (duplicated in both) moves into the kit; both use it.

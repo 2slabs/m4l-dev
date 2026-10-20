@@ -1,6 +1,12 @@
-"""The echo block: a stereo tape echo with filters, diffusion and saturation in its loop (references/dsp.md, "Echo").
+"""The tape-style echo (a technique): a stereo delay loop that behaves like tape (glide, wow, flutter, a saturating
+loop) with filters and diffusion in it (references/dsp.md, "Tape-style echo").
 
-What it promises (tests/test_dsp_blocks.py checks each):
+A technique, not a circuit module: it models no machine. Its time is synced milliseconds and its controls are the
+loop's own quantities (gain, filter corners, cents of wow), not a Space Echo's; it borrows the RE-201 study's
+measured glide ratio and wow band, and its tape is a saturating loop, not a head / tape / hysteresis model
+(references/dsp.md). A modelled RE-201 would be a circuit module.
+
+What it promises (tests/test_techniques.py checks each):
 - **On the grid.** Both sides loop at one time T (the glided Time). Each side's loop re-reads its tape at T - D, D
   being the loop's own delay (the diffusion allpasses' lengths, the loop low-pass's group delay at DC, the
   saturator's half sample), so every repeat lands at n T: the left output reads at T, the right at T + `right_lag_ms`
@@ -23,8 +29,8 @@ Outputs: `<name>_left`, `<name>_right` (the repeats), `<name>_level` (a falling 
 import math
 
 from m4l_dev.build_error import BuildError
-from m4l_dev.gen_blocks import GenBlock
-from m4l_dev.gen_saturator import AntiderivativeTanhSaturator
+from m4l_dev.gen_blocks import Technique
+from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator
 
 # Live's highest sample rate (Ableton, Live editions: "Multitrack recording up to 32-bit/192 kHz"): the Delay sizes
 # are fixed numbers of samples (gen's Delay takes a sample count), enough at 192 kHz.
@@ -44,7 +50,7 @@ STOP_FADE_MS = 2.0
 NATURAL_LOG_OF_2 = math.log(2.0)
 
 
-class TapeEcho(GenBlock):
+class TapeStyleEcho(Technique):
     """See the module docstring. Inputs are GenExpr expressions; `diffusion` (allpass gain, 0..0.7) is None for an
     echo without the allpasses. `initial_time_ms`, `longest_time_ms`, `right_lag_ms` and `rounds_kept` are numbers."""
 
@@ -60,9 +66,9 @@ class TapeEcho(GenBlock):
         super().__init__(instance_name, **inputs)
         self.has_diffusion = diffusion is not None
         if not 0 < initial_time_ms <= longest_time_ms:
-            raise BuildError(f"TapeEcho {instance_name}: initial time {initial_time_ms} ms outside (0, {longest_time_ms}]")
+            raise BuildError(f"TapeStyleEcho {instance_name}: initial time {initial_time_ms} ms outside (0, {longest_time_ms}]")
         if right_lag_ms < 0 or rounds_kept < 0 or int(rounds_kept) != rounds_kept:
-            raise BuildError(f"TapeEcho {instance_name}: right_lag_ms must be >= 0, rounds_kept a whole number >= 0")
+            raise BuildError(f"TapeStyleEcho {instance_name}: right_lag_ms must be >= 0, rounds_kept a whole number >= 0")
         self.initial_time_ms = float(initial_time_ms)
         self.longest_time_ms = float(longest_time_ms)
         self.right_lag_ms = float(right_lag_ms)
@@ -134,7 +140,7 @@ class TapeEcho(GenBlock):
         diffusion_amount = "clamp(${diffusion}, 0, 0.7)" if self.has_diffusion else "0"
         loop_upper_bound = self.tape_samples - 8 - math.ceil(HIGHEST_SAMPLE_RATE * self.right_lag_ms / 1000)
         reset_saturators = "\n\t".join(s.reset_statements().replace("\n", "\n\t") for s in self.saturators.values())
-        code = f"""// {p}: tape echo (kit echo block)
+        code = f"""// {p}: tape-style echo (kit technique: tape-style echo)
 // Stop: everything on the tape is from before it
 if (${{stop_pressed}}) {{
 	{p}_since_stop = 0;

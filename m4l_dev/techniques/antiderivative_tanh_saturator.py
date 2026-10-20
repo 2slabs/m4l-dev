@@ -1,5 +1,5 @@
-"""The saturator block: tanh with first-order antiderivative antialiasing (ADAA) of its nonlinear part
-(references/dsp.md, "Saturator").
+"""The antiderivative tanh saturator (a technique): tanh with first-order antiderivative antialiasing (ADAA) of its
+nonlinear part (references/dsp.md, "Antiderivative tanh saturator").
 
 tanh(x) = x + r(x). The nonlinear residual r is antialiased (Bilbao et al. 2017, eq. 5):
 
@@ -9,11 +9,11 @@ tanh(x) = x + r(x). The nonlinear residual r is antialiased (Bilbao et al. 2017,
 fallback). That average over the step is half a sample late; the linear part x goes through a first-order Thiran
 allpass with half a sample of delay (a = (1 - 0.5) / (1 + 0.5) = 1/3), so both halves are half a sample late and the
 small-signal response stays flat. Plain ADAA of tanh would average the whole signal: -2.4 dB at 10 kHz, -6.4 dB at
-15 kHz (44.1 kHz). Measured (research, 2026-10-19; tests/test_dsp_blocks.py keeps the claims): a 0.6 x 4.5 sine's
+15 kHz (44.1 kHz). Measured (research, 2026-10-19; tests/test_techniques.py keeps the claims): a 0.6 x 4.5 sine's
 worst alias below 10 kHz, naive -> plain ADAA -> this: 5 kHz -33.3 -> -48.6 -> -49.8 dB, 8 kHz -23.7 -> -53.6 ->
 -56.4 dB; small signals 0.00 dB at 5, 10 and 15 kHz.
 """
-from m4l_dev.gen_blocks import GenBlock
+from m4l_dev.gen_blocks import Technique
 
 # Below this input step the quotient loses digits (R's rounding over the step); above it the midpoint is off by about
 # r''' * step^2 / 24. 1e-5 keeps both under 1e-10 for |x| < 20.
@@ -38,7 +38,7 @@ tanh_residual_antialiased(x, previous_x) {{
 }
 
 
-class AntiderivativeTanhSaturator(GenBlock):
+class AntiderivativeTanhSaturator(Technique):
     """`<name>_out` = tanh of `input`, half a sample late, antialiased. State: the last input and the allpass's.
 
     With `bias` (a GenExpr expression), `<name>_out` = tanh(input + bias) - tanh(bias): the curve slid along itself,
@@ -62,7 +62,7 @@ class AntiderivativeTanhSaturator(GenBlock):
 
     def statements(self):
         if self.biased:
-            return self.substituted("""// ${p}: tanh(x + bias) - tanh(bias), antialiased (kit saturator block)
+            return self.substituted("""// ${p}: tanh(x + bias) - tanh(bias), antialiased (kit technique: antiderivative tanh saturator)
 ${p}_input = ${input};
 ${p}_bias = ${bias};
 ${p}_shifted = ${p}_input + ${p}_bias;
@@ -71,7 +71,7 @@ ${p}_out = ${p}_linear + tanh_residual_antialiased(${p}_shifted, ${p}_previous_s
 ${p}_previous_input = ${p}_input;
 ${p}_previous_linear = ${p}_linear;
 ${p}_previous_shifted = ${p}_shifted;""", a=HALF_SAMPLE_ALLPASS_COEFFICIENT)
-        return self.substituted("""// ${p}: tanh, antialiased (kit saturator block)
+        return self.substituted("""// ${p}: tanh, antialiased (kit technique: antiderivative tanh saturator)
 ${p}_input = ${input};
 ${p}_linear = ${a} * ${p}_input + ${p}_previous_input - ${a} * ${p}_previous_linear;
 ${p}_out = ${p}_linear + tanh_residual_antialiased(${p}_input, ${p}_previous_input);

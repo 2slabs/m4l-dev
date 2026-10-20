@@ -6,10 +6,12 @@ repository as a git submodule (device-repository.md). It holds no device.
 | partition | what it is | the pattern |
 |---|---|---|
 | `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
-| `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display) and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
+| `m4l_dev/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
+| `m4l_dev/circuit_modules/` | gen blocks, layer 2: one modelled piece of hardware per file (dsp-blocks.md) | one `CircuitModule` a file: inputs the circuit's controls in its units, character a frozen dataclass of numbers, cites its references/circuits/ file; built from techniques |
+| `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests); `match_patch.py` (the patch matcher's CLI, patch-matcher.md) |
 | `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing |
-| `references/` | sources (Max, Live, Live presets, DSP) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies. Papers aren't kept: a fetch script per set downloads and checks them (`fetch-dsp-sources.sh`) |
+| `references/` | sources (Max, Live, Live presets, DSP techniques in dsp.md, circuits in circuits/) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies. Papers and datasheets aren't kept: a fetch script per set downloads and checks them (`fetch-dsp-sources.sh`, `circuits/fetch-circuit-sources.sh`) |
 | `architecture/` | this | the partitions and the contracts below |
 
 ## m4l_dev/, module by module
@@ -30,8 +32,8 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `c_library_cache.py` | the one place the kit runs a C compiler: `load_c_library(c_source, flags)` builds once per source / compiler / flags into the cache, loads once; the renderer and the patch matcher's analysis both use it |
 | `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
-| `gen_blocks.py` | the DSP block pattern: `GenBlock`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
-| `gen_ladder.py`, `gen_saturator.py`, `gen_soft_clip.py`, `gen_edges.py`, `gen_echo.py` | the DSP blocks: ladder filter, antialiased tanh, output soft clip, band-limited edges, tape echo (dsp-blocks.md) |
+| `gen_blocks.py` | the gen block pattern: `GenBlock` and its two layers' bases `Technique` and `CircuitModule`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
+| `techniques/`, `circuit_modules/` | the gen blocks, by layer (their own partitions, above) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
 | `patch_match_voice.py`, `patch_match_score.py` (+ `patch_match_features.c`), `patch_match_search.py` | the patch matcher: a voice's parameters for a target hit (render, score, CMA-ES strands), the 2sl drums' acceptance test (patch-matcher.md) |
 | `wave_files.py` | WAV in (PCM 8-32 bit, float 32/64) and out (float 32), failing loudly on anything else |
@@ -55,8 +57,8 @@ from m4l_dev.seeded_random import SeededRandom           # SeededRandom(patch, b
 from m4l_dev.chord_block import ChordBlock               # ChordBlock(patch, seeded_random, brain, control inlet,
                                                          #   display outlet, display box, most_notes_per_chord)
 from m4l_dev.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
-from m4l_dev.gen_ladder import LadderFilter              # and AntiderivativeTanhSaturator, BandLimitedEdges,
-                                                         #   OutputSoftClip, TapeEcho (gen_saturator, gen_soft_clip, gen_edges, gen_echo)
+from m4l_dev.techniques.zero_delay_ladder_filter import ZeroDelayLadderFilter   # one module per technique
+from m4l_dev.circuit_modules.ltc1060_mf10_section import Ltc1060Mf10Section     # one module per circuit
 ```
 
 The builder's helpers: `box`, `wire`, `find`, `gen_box(code, ins, outs, rect, box_text, outlet_type)`, `dial`, `menu`,
@@ -87,12 +89,13 @@ A block is a piece of a device that is the same in every device that has it, and
 The blocks: the transport clock (templates/transport-clock.template.js), the seeded random (seeded-random.md), the
 chord block (chord-block.md).
 
-## DSP blocks: kit gen~ code a device includes
+## Gen blocks: kit gen~ code a device includes, in layers
 
-The same idea for the gen~ code (dsp-blocks.md): `m4l_dev/gen_<block>.py` makes an instance with a name and its
+The same idea for the gen~ code (dsp-blocks.md), in three layers: techniques (`m4l_dev/techniques/`), circuit modules
+(`m4l_dev/circuit_modules/`), and the instruments, which are the devices. A block instance is made with a name and its
 inputs as GenExpr expressions; the device's gen~ template has `/*GEN_BLOCK_FUNCTIONS*/`, `/*GEN_BLOCK_DECLARATIONS*/`
-and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. The ladder, the saturator, the output soft clip,
-band-limited edges, the tape echo. Tests: tests/test_dsp_blocks.py.
+and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. Tests: tests/test_techniques.py,
+tests/test_circuit_module_*.py, and tests/test_gen_block_layers.py for the layers' rules.
 
 ## Layout: widths from text
 

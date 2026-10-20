@@ -1,44 +1,109 @@
-# DSP blocks: gen~ code a device includes
+# Gen blocks: techniques, circuit modules, instruments
 
 User, 2026-10-19: "build them as kit blocks … find your favorite and coolest and best implementation of these
-things". A DSP block is GenExpr that is the same in every device that has it (2sl stab, 2sl gate, 2sl filter) and improves in
-one place. Each is chosen by numbers against a stated reference (the analog model, the tempo grid, an oversampled
-ideal) and keeps its claims as tests. Sources: references/dsp.md.
+things". User, 2026-10-20 (PLANS/2026-10-20-kit-layers.md): "we have all of these modules that exist that are the
+backbone of these instruments, either that expose their modularity, or that wrap it (the roland synths using the same
+filter chip, that's their modular building block, they're just wrapping it, this is what we're doing)".
 
-## The pattern
+A gen block is GenExpr that is the same in every device that has it and improves in one place. The kit's DSP is in
+three layers; each layer uses only the layers below it:
 
-- **Python** (`m4l_dev/gen_<block>.py`): one `GenBlock` subclass. An instance is made with a name and its inputs as
-  GenExpr expressions (`LadderFilter("ladder", input="osc", cutoff_hz="fc", resonance="reso")`). The name prefixes
-  every History, Delay and local it makes; its outputs are locals named in its docstring (`ladder_out`). It gives
-  `functions()` (shared by every instance, one body per name), `declarations()` and `statements()`. A block has no
-  Params: the device declares its controls and passes expressions, so a block serves devices whose knobs differ
-  (2sl stab's Dub macro and 2sl gate's Repeats / Wow / Saturation feed the same echo). A block may be made of blocks
-  (the echo's loop saturators are saturator instances).
+| layer | where | what it is | may use |
+|---|---|---|---|
+| 1. techniques | `m4l_dev/techniques/` (`Technique`) | how to do DSP well, with no circuit identity: antialiasing, zero-delay structures, a soft clip, an echo's loop | other techniques |
+| 2. circuit modules | `m4l_dev/circuit_modules/` (`CircuitModule`) | one modelled piece of hardware: a chip, a section of one, an instrument's circuit block | techniques |
+| 3. instruments | the devices' own repositories (2sl stab, gate, filter, drums) | wire modules and techniques, and either expose a module (gate shows the 259) or wrap it (drums) | modules, techniques |
+
+Every block is chosen by numbers against a stated reference (the analog model, the tempo grid, an oversampled ideal)
+and keeps its claims as tests.
+
+## The pattern every gen block keeps (both layers)
+
+- **Python**: a `Technique` or `CircuitModule` subclass (`m4l_dev/gen_blocks.py`; never `GenBlock` directly). An
+  instance is made with a name and its inputs as GenExpr expressions
+  (`ZeroDelayLadderFilter("ladder", input="osc", cutoff_hz="fc", resonance="reso")`). The name prefixes every
+  History, Delay and local it makes; its outputs are locals named in its docstring (`ladder_out`). It gives
+  `functions()` (shared by every instance, one body per name: a value that differs per instance is a function
+  argument, not baked into the body), `declarations()` and `statements()`. A block has no Params: the instrument
+  declares its controls and passes expressions.
 - **The device's gen~ code** is a template: `/*GEN_BLOCK_FUNCTIONS*/` first (before its own functions),
   `/*GEN_BLOCK_DECLARATIONS*/` among its declarations, and one `/*<NAME>*/` per instance where the block's statements
   run, after the device has computed its inputs. `gen_code_with_blocks(template, blocks, name, other_replacements)`
   fills them (and the device's own markers) with `fill_template`'s rules: a missing or extra marker, a name that
   isn't an identifier, two instances of one name, one function name with two bodies, all fail the build.
-  `smoothing_coefficient(ms, sample_rate)` is the kit's; devices use it, never a copy.
-- **Constants** a display also needs come from the block, never a copy: the ladder's response is
-  `templates/ladder-response.template.js`, filled from `gen_ladder.py` (`response_script_code()`), and a test holds
-  the script, the Python formula and the rendered block equal.
+  `smoothing_coefficient(ms, sample_rate)` is the kit's, always included; devices use it, never a copy.
+- **Constants** a display also needs come from the block, never a copy: a block with a display gives
+  `response_script_code()` (an ES5 template in `templates/`, filled from the block's constants), and a test holds the
+  script, the Python formula and the rendered block equal.
 - **Only what Max accepts.** The kit renderer (`m4l_dev/genexpr.py`) is our subset, not Max: every construct a block
-  uses has a source or a real GenExpr precedent in references/dsp.md ("gen~"), e.g. `Delay d(size, 2)` for a Delay
-  read at two places, `interp="spline"` (documented as Catmull-Rom, which the renderer does).
-- **Tests** (`tests/test_dsp_blocks.py`): each block's claims on a small harness program around it, at the lowest
-  sample rate that still tests the claim (the whole file runs in seconds), plus the pattern's build rules.
+  uses has a source or a real GenExpr precedent in references/dsp.md ("gen~").
+- **Cites its sources**: the class's `references_entry` is a references/ file with a `## ` heading naming the block's
+  source file, and the block's docstring names that file.
+- **Tests**: each block's claims on a small harness program around it (`tests/gen_block_harness.py`), at the lowest
+  sample rate that still tests the claim.
 
-## The blocks
+## Techniques (layer 1)
 
-| block | module | what it is | its claims (tested) |
+A technique **may** contain: a DSP method, the method's constants (each sourced or measured in its docstring), other
+techniques. Its inputs are signals and the method's own quantities (Hz, Q, a feedback gain, cents, ms).
+
+A technique **may not** contain: a circuit's identity (a part number it claims to be, a unit's rails, trims,
+tolerances or voltages), a circuit module, an instrument's controls. Borrowing a measured number from a circuit study
+(the echo's glide ratio from the RE-201 study) is allowed and said; claiming to model the circuit is not: that is a
+module.
+
+Sources: a section of `references/dsp.md`. Tests: `tests/test_techniques.py`.
+
+| technique | file | what it is | its claims (tested) |
 |---|---|---|---|
-| ladder | `gen_ladder.py` | 4-pole TPT ladder, the loop solved with no unit delay (Zavalishin eq. 5.8), tanh at the loop's input; Resonance 0..1 → k 0..4.35 | sings at fc ±3 cents at 300 Hz / 3 kHz / 12 kHz from Resonance 0.92; rings out below; bounded driven hard at 0.45 sr; small signals = the display's response |
-| saturator | `gen_saturator.py` | tanh = x + (tanh x − x): the residual antialiased (first-order ADAA, Bilbao 2017), x through a half-sample Thiran allpass; half a sample late; with a `bias`, tanh(x + b) - tanh(b) (asymmetric: even harmonics) | 8 kHz hot sine: aliases −24 → < −50 dB below 10 kHz; flat (±0.05 dB) to 15 kHz; exact for near-equal samples; biased: the slid curve, its aliases < -48 dB (naive > -30) |
-| soft clip | `gen_soft_clip.py` | the output's soft clip: unity up to a knee (a device constant), then knee + (1 - knee) tanh(excess / (1 - knee)); memoryless; headroom computed in decimal so 1 - 0.8 is 0.2 | unity below the knee; value and slope continuous at the knee (both signs); bounded by 1, odd, rising; a knee outside (0, 1) fails the build |
-| edges | `gen_edges.py` | 4-point polyBLEP jumps and polyBLAMP corners into a two-sample look-ahead ring; one per voice for every oscillator | saw < −70 dB, triangle < −85 dB alias below 10 kHz at C7 / C8; after a restart (`restart_statements`) nothing from before it comes out |
-| echo | `gen_echo.py` | stereo tape loop: one time, re-read D early (the loop's own delay); LP / HP / diffusion / saturator in the loop; glide limited to 0.5 ms per ms; wow and flutter as pitch; Stop; rounds for a display | repeats ±1 ms of n T; read speed in [0.5, 1.5]; over unity it howls, held under 1 / saturation; under, it dies; wow / flutter RMS cents as set, the same at every Time; Stop empties it |
-| switched capacitor | `gen_switched_capacitor.py` | one section of a dual switched-capacitor chip (MF10 / LTC1060): an LDI state-variable filter stepped per clock tick at 100 (or 50) x the cutoff, all of a sample's ticks at once in closed form (A^n), LP / BP held between ticks, HP the live summer; the staircase as the line through the last two ticks plus its residual band-limited by an edges instance (gone as the clock passes 0.35-0.5 of the host rate); the chip's Q enhancement, rails, 10 mV p-p clock feedthrough, hold; a section divided from another; 3 samples late; `templates/switched-capacitor-response.template.js` for displays | rings at clock / 100 ±0.5 % at 300 Hz and 3 kHz; small signals = the display's response ±0.3 dB; whistle at 100 x the cutoff at the datasheets' level; none past Nyquist; two free sections beat; a divided one ticks on every n-th tick, phase-locked; past oscillation steady under the rail; damping 0.008 rings out at 300 Hz, sings at 12 kHz; hold freezes LP / BP; the chip's in-band image kept (-39.9 dB less ~3), the host's folds < -45 dB (naive -30) |
-| state-variable filter | `gen_state_variable.py` | 2-pole multimode SVF, zero-delay feedback (Zavalishin §4.4 eq. 4.14), g = tan(pi fp / sr) fc / fp: exact at a prewarping point fp (§3.8 eq. 3.18; default the cutoff, held to [10 Hz, 0.45 sr]), the cutoff unbounded above (past Nyquist: an overdamped network heard far below it); Q in; LP, BP, HP and the unit-peak BP (2R BP) at once; linear, no latency; for analog two-pole stages (Sallen-Key, MFB band-pass, bridged-T, the 292's network) by their cutoff and Q | small signals = the prewarped analog SVF ±0.05 dB; exact (1e-9) at the prewarping point, past Nyquist too; 2R BP 0 dB at the cutoff; LP + 2R BP + HP = input (1e-12); an impulse rings at fc ±1 % with tau Q / (pi fc) ±3 %; bounded under audio-rate cutoff, Q and prewarp modulation, the cutoff up to 2 MHz; a literal input ≤ 0 or not finite fails the build |
+| `ZeroDelayLadderFilter` | `zero_delay_ladder_filter.py` | 4-pole TPT ladder, the loop solved with no unit delay (Zavalishin eq. 5.8), tanh at the loop's input; Resonance 0..1 → k 0..4.35; display: `templates/zero-delay-ladder-response.template.js` | sings at fc ±3 cents at 300 Hz / 3 kHz / 12 kHz from Resonance 0.92; rings out below; bounded driven hard at 0.45 sr; small signals = the display's response |
+| `AntiderivativeTanhSaturator` | `antiderivative_tanh_saturator.py` | tanh = x + (tanh x − x): the residual antialiased (first-order ADAA, Bilbao 2017), x through a half-sample Thiran allpass; half a sample late; with a `bias`, tanh(x + b) - tanh(b) | 8 kHz hot sine: aliases −24 → < −50 dB below 10 kHz; flat (±0.05 dB) to 15 kHz; exact for near-equal samples; biased: the slid curve, its aliases < -48 dB (naive > -30) |
+| `KneeSoftClip` | `knee_soft_clip.py` | unity up to a knee (a device constant), then knee + (1 - knee) tanh(excess / (1 - knee)); memoryless; headroom computed in decimal | unity below the knee; value and slope continuous at the knee; bounded by 1, odd, rising; a knee outside (0, 1) fails the build |
+| `BandLimitedEdges` | `band_limited_edges.py` | 4-point polyBLEP jumps and polyBLAMP corners into a two-sample look-ahead ring; one per voice for every oscillator | saw < −70 dB, triangle < −85 dB alias below 10 kHz at C7 / C8; after a restart nothing from before it comes out |
+| `TapeStyleEcho` | `tape_style_echo.py` | stereo delay loop that behaves like tape: one time, re-read D early; LP / HP / diffusion / saturator in the loop; glide ≤ 0.5 ms per ms; wow and flutter as pitch; Stop; rounds for a display | repeats ±1 ms of n T; read speed in [0.5, 1.5]; over unity it howls, held; under, it dies; wow / flutter RMS cents as set; Stop empties it |
+| `ZeroDelayStateVariableFilter` | `zero_delay_state_variable_filter.py` | 2-pole multimode SVF, zero-delay feedback (Zavalishin eq. 4.14), prewarped at fp (eq. 3.18); LP, BP, HP, unit-peak BP; for a circuit's two-pole stages by cutoff and Q | small signals = the prewarped analog SVF ±0.05 dB; exact at fp; LP + 2R BP + HP = input; rings at fc with tau Q / (pi fc); bounded under audio-rate modulation |
 
-What each was chosen over, with numbers, is in its module docstring.
+Why the ladder and the echo are techniques: the ladder is the textbook ideal ladder (four one-poles, one tanh), on no
+schematic, with the method's controls; the echo models no machine (its tape is a saturating loop, its time synced ms).
+A modelled Moog / Roland ladder or an RE-201 would be circuit modules.
+
+## Circuit modules (layer 2)
+
+A circuit module is one modelled piece of hardware, one module file each, in `m4l_dev/circuit_modules/`. Its
+interface:
+
+- **Inputs are the circuit's**: its controls and CV in the circuit's units: volts at its pins, its clock in Hz, the
+  quantity its resistors set (a damping, a gain), a logic pin as a 0 / 1 expression. All GenExpr expressions,
+  keyword-only.
+- **Wiring choices** fixed when the instrument is built (a strap, which pin feeds which) are Python constructor
+  values, checked (`clock_ratio=100`: pin 12).
+- **Build character** is `character=`, an instance of the module's `character_type`: a frozen dataclass of numbers
+  (rails, trims, tolerances, leakage), defaulting to the datasheet's typical unit. Two instances with two characters
+  are two units. Character never goes into a shared function's body (the function takes it as arguments), so two
+  units can sit in one patch.
+- **Outputs** are the circuit's pins, in its units. Where a technique must run once on their sum (band-limiting), the
+  module takes the summing amplifier's gains at the pins and gives the sum.
+- **Cites its circuit**: `references_entry` is its own `references/circuits/<circuit>.md` (datasheet, schematic:
+  quoted with pages, fetched and checked by `references/circuits/fetch-circuit-sources.sh`).
+- Built from techniques; never from another layer's code (no device, no patch builder).
+
+Tests: `tests/test_circuit_module_<module>.py`.
+
+| module | file | the hardware | its claims (tested) |
+|---|---|---|---|
+| `Ltc1060Mf10Section` (`Ltc1060Mf10Character`) | `ltc1060_mf10_section.py` | one section of the LTC1060 / MF10 dual switched-capacitor filter: an LDI state-variable filter stepped per clock tick at its CLK pin's clock (centre = clock / 50 or 100), all of a sample's ticks at once in closed form (A^n), LP / BP held between ticks, HP the live summer; the staircase band-limited by `BandLimitedEdges`; the chip's Q enhancement, rails, clock feedthrough, pin 12 hold; a section clocked from another's through a divider; volts in and out; 3 samples late; display: `templates/ltc1060-mf10-section-response.template.js` | rings at clock / 100 ±0.5 %; small signals = the display's response ±0.3 dB; whistle at the clock at the datasheets' level; none past Nyquist; two free sections beat; a divided one ticks on every n-th tick, phase-locked; past oscillation steady under the rail; Q enhancement sings only near the top; hold freezes LP / BP; the chip's in-band image kept, the host's folds < -45 dB |
+
+## What is enforced (tests/test_gen_block_layers.py)
+
+- every `GenBlock` subclass in `m4l_dev/` is in `techniques/` (a `Technique`) or `circuit_modules/` (a
+  `CircuitModule`), never both;
+- a technique imports only `gen_blocks`, `build_error`, `generated_scripts`, other techniques and the standard
+  library (so never a circuit module); a circuit module the same plus techniques;
+- every block cites a `references_entry` that exists, has a `## ` heading naming the block's file and is named in
+  its docstring; a module's is under `references/circuits/`;
+- a circuit module file holds exactly one `CircuitModule`, whose `character_type` is a frozen dataclass whose fields
+  all default to numbers;
+- the pattern's build rules (markers, instance names, one function body per name).
+
+Not enforced by a test, kept by review: a technique carries no circuit identity in its constants; a module's inputs
+are in the circuit's units.

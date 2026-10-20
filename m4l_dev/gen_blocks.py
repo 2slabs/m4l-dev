@@ -1,4 +1,10 @@
-"""DSP blocks: GenExpr code the kit provides and a device's gen~ code includes (architecture/dsp-blocks.md).
+"""Gen blocks: GenExpr code the kit provides and a device's gen~ code includes (architecture/dsp-blocks.md).
+
+Every gen block is in one of two layers, each a package with its base class here:
+- a **technique** (`m4l_dev/techniques/`, `Technique`): a way to do DSP well, with no circuit identity;
+- a **circuit module** (`m4l_dev/circuit_modules/`, `CircuitModule`): one modelled piece of hardware, built from
+  techniques; its inputs are the circuit's controls and CV in the circuit's units, its build character a setting.
+The third layer, the instruments, are the devices (their own repositories).
 
 A block instance is made with a name (its prefix: every History, Delay and local it makes starts with `<name>_`) and
 the GenExpr expressions it reads (its inputs, evaluated once each sample where the block's statements stand). It gives
@@ -28,8 +34,12 @@ smoothing_coefficient(time_constant_ms, sample_rate) {
 
 
 class GenBlock:
-    """One instance of a kit DSP block. Subclasses set `code_template` (string.Template text: `${p}` is the
-    instance name, `${<input>}` each input expression) or override `statements`."""
+    """One instance of a kit gen block. Not subclassed directly: a block is a `Technique` or a `CircuitModule`
+    (tests/test_gen_block_layers.py holds the kit to that). `substituted` fills string.Template text: `${p}` is the
+    instance name, `${<input>}` each input expression."""
+
+    # The references/ file whose `## ` heading names the block's source file: where its sources are quoted.
+    references_entry = None
 
     def __init__(self, instance_name, **input_expressions):
         if not GEN_IDENTIFIER.match(instance_name):
@@ -65,6 +75,34 @@ class GenBlock:
 
     def statements(self):
         raise NotImplementedError
+
+
+class Technique(GenBlock):
+    """A way to do DSP well, with no circuit identity (antialiasing, zero-delay structures, a soft clip, an echo's
+    loop): its inputs are signals and the method's own quantities (Hz, Q, gains), its constants the method's, sourced
+    in references/dsp.md. A technique may be built from other techniques, never from a circuit module."""
+
+    references_entry = "references/dsp.md"
+
+
+class CircuitModule(GenBlock):
+    """One modelled piece of hardware (a chip, a section of one, a circuit block of an instrument), built from
+    techniques. Its inputs are the real circuit's controls and CV in the circuit's units (volts at its pins, its clock
+    in Hz); its build character (rails, trims, tolerances, a unit's leakage) is `character`, an instance of the
+    module's `character_type` (a frozen dataclass of numbers whose defaults are the datasheet's typical unit), so two
+    instances can be two different units. Subclasses set `references_entry` to the circuit's own file in
+    references/circuits/ (schematic, datasheet: quoted, with pages) and `character_type`."""
+
+    character_type = None
+
+    def __init__(self, instance_name, character=None, **input_expressions):
+        super().__init__(instance_name, **input_expressions)
+        if character is None:
+            character = self.character_type()
+        if not isinstance(character, self.character_type):
+            raise BuildError(f"{type(self).__name__} {instance_name}: its character must be a "
+                             f"{self.character_type.__name__}, got {character!r}")
+        self.character = character
 
 
 def gen_code_with_blocks(template_text, blocks, template_name, other_replacements=None):

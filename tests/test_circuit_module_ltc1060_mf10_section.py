@@ -1,6 +1,7 @@
-"""The switched-capacitor filter block (m4l_dev/gen_switched_capacitor.py): its claims, rendered through our GenExpr
-renderer (ours, not Max's compiler), each on a small harness at the lowest length that still tests it. Standard
-library only; the harness and spectral helpers are tests/test_dsp_blocks.py's."""
+"""The LTC1060 / MF10 section module (m4l_dev/circuit_modules/ltc1060_mf10_section.py): its claims, rendered through
+our GenExpr renderer (ours, not Max's compiler), each on a small harness (tests/gen_block_harness.py) at the lowest
+length that still tests it. The claims are stated in fractions of the chip's full scale: the harness feeds the section
+volts (in1 x full scale) and reads its output back in full scale. Standard library only."""
 import math
 import os
 import sys
@@ -10,11 +11,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.gen_switched_capacitor import (FEEDTHROUGH_AMPLITUDE, LATENCY_SAMPLES, SwitchedCapacitorFilter,  # noqa: E402
-                                            response_script_code, small_signal_response)
-from test_dsp_blocks import amplitude_at, frequency_by_zero_crossings, harness  # noqa: E402
+from m4l_dev.circuit_modules.ltc1060_mf10_section import (LATENCY_SAMPLES, Ltc1060Mf10Character,  # noqa: E402
+                                                          Ltc1060Mf10Section, response_script_code,
+                                                          small_signal_response)
+from gen_block_harness import amplitude_at, frequency_by_zero_crossings, harness  # noqa: E402
 
 SAMPLERATE = 44100.0
+FULL_SCALE_VOLTS = Ltc1060Mf10Character().full_scale_volts
+FEEDTHROUGH_AMPLITUDE = Ltc1060Mf10Character().clock_feedthrough_of_full_scale
 OUTPUT_MIX = {"lowpass": ("1", "0", "0"), "bandpass": ("0", "1", "0"), "highpass": ("0", "0", "1")}
 
 
@@ -23,17 +27,18 @@ def section(output="lowpass", divided=False, **params):
     hold, feedthrough (and cutoff_2, division). Outputs: out, ticked (, the second's out, ticked)."""
     params = dict({"cutoff": 1000.0, "damping": 1.0, "hold": 0.0, "feedthrough": 0.0}, **params)
     lowpass, bandpass, highpass = OUTPUT_MIX[output]
-    blocks = [SwitchedCapacitorFilter("sc", input="in1", cutoff_hz="cutoff", damping="damping", hold="hold",
-                                      feedthrough="feedthrough", lowpass_gain=lowpass, bandpass_gain=bandpass,
-                                      highpass_gain=highpass)]
-    outputs = ["sc_out", "sc_ticked"]
+    volts = f"in1 * {FULL_SCALE_VOLTS!r}"
+    blocks = [Ltc1060Mf10Section("sc", input_volts=volts, clock_hz="cutoff * 100", damping="damping", hold="hold",
+                                 clock_feedthrough="feedthrough", lowpass_gain=lowpass, bandpass_gain=bandpass,
+                                 highpass_gain=highpass)]
+    outputs = [f"sc_out / {FULL_SCALE_VOLTS!r}", "sc_ticked"]
     if divided:
         params = dict({"cutoff_2": 1000.0, "division": 2.0}, **params)
-        blocks.append(SwitchedCapacitorFilter("sd", input="in1", cutoff_hz="cutoff_2", damping="damping",
-                                              hold="hold", feedthrough="feedthrough", lowpass_gain=lowpass,
-                                              bandpass_gain=bandpass, highpass_gain=highpass,
-                                              divided_from=blocks[0], division="division"))
-        outputs += ["sd_out", "sd_ticked"]
+        blocks.append(Ltc1060Mf10Section("sd", input_volts=volts, clock_hz="cutoff_2 * 100", damping="damping",
+                                         hold="hold", clock_feedthrough="feedthrough", lowpass_gain=lowpass,
+                                         bandpass_gain=bandpass, highpass_gain=highpass,
+                                         divided_from=blocks[0], division="division"))
+        outputs += [f"sd_out / {FULL_SCALE_VOLTS!r}", "sd_ticked"]
     return harness(blocks, params, outputs, samplerate=SAMPLERATE)
 
 
@@ -53,7 +58,7 @@ def db(ratio):
     return 20 * math.log10(ratio)
 
 
-class SwitchedCapacitorTests(unittest.TestCase):
+class Ltc1060Mf10SectionTests(unittest.TestCase):
     def test_it_sings_at_the_clock_over_the_ratio(self):
         # just past oscillation, the section rings at clock / 100 = the cutoff, at a low and a high clock
         for cutoff in (300.0, 3000.0):
@@ -67,17 +72,17 @@ class SwitchedCapacitorTests(unittest.TestCase):
                 signal = sine(frequency, 4410)
                 out = section(output, cutoff=1000.0, damping=0.7).run(4410, [signal])[0]
                 measured = db(amplitude_at(out[2205:], frequency, SAMPLERATE) / 0.05)
-                expected = db(abs(small_signal_response(frequency, 1000.0, 0.7)[index]))
+                expected = db(abs(small_signal_response(frequency, 100 * 1000.0, 0.7)[index]))
                 self.assertAlmostEqual(measured, expected, delta=0.3, msg=f"{output} at {frequency} Hz")
 
     def test_the_display_script_is_the_same_response(self):
         script = response_script_code()
         for frequency, cutoff, damping, ratio in ((100.0, 700.0, 0.3, 100), (700.0, 700.0, 0.05, 100),
                                                   (15000.0, 20000.0, 1.5, 50)):
-            pins = small_signal_response(frequency, cutoff, damping, ratio)
+            pins = small_signal_response(frequency, ratio * cutoff, damping, ratio)
             for pin, value in zip(("lp", "bp", "hp"), pins):
                 for part, expected in (("Re", value.real), ("Im", value.imag)):
-                    got = float(es5.evaluate(script + f"\nswitchedCapacitorResponse({frequency}, {cutoff}, {damping}, "
+                    got = float(es5.evaluate(script + f"\nltc1060Mf10SectionResponse({frequency}, {ratio * cutoff}, {damping}, "
                                                       f"{ratio}).{pin}{part}"))
                     self.assertAlmostEqual(got, expected, places=9, msg=f"{pin}{part} at {frequency} Hz")
 
@@ -156,11 +161,14 @@ class SwitchedCapacitorTests(unittest.TestCase):
 
     def test_the_block_says_what_it_is_given_wrong(self):
         with self.assertRaises(BuildError):
-            SwitchedCapacitorFilter("sc", input="in1", cutoff_hz="1", damping="1", hold="0", feedthrough="0",
-                                    lowpass_gain="1", bandpass_gain="0", highpass_gain="0", clock_ratio=75)
+            Ltc1060Mf10Section("sc", input_volts="in1", clock_hz="100", damping="1", hold="0", clock_feedthrough="0",
+                               lowpass_gain="1", bandpass_gain="0", highpass_gain="0", clock_ratio=75)
         with self.assertRaises(BuildError):
-            SwitchedCapacitorFilter("sc", input="in1", cutoff_hz="1", damping="1", hold="0", feedthrough="0",
-                                    lowpass_gain="1", bandpass_gain="0", highpass_gain="0", division="2")
+            Ltc1060Mf10Section("sc", input_volts="in1", clock_hz="100", damping="1", hold="0", clock_feedthrough="0",
+                               lowpass_gain="1", bandpass_gain="0", highpass_gain="0", division="2")
+        with self.assertRaises(BuildError):
+            Ltc1060Mf10Section("sc", input_volts="in1", clock_hz="100", damping="1", hold="0", clock_feedthrough="0",
+                               lowpass_gain="1", bandpass_gain="0", highpass_gain="0", character=0.8)
 
 
 if __name__ == "__main__":

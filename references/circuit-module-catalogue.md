@@ -132,11 +132,13 @@ tape echo / RE-201 module's sources are in dsp.md, not repeated here.
   DAFx-17, Theelen).
 - Buchla 292 LPG + vactrol: ~/2slabs/2sl-gate/references/vactrol-and-lpg.md (Parker & D'Angelo DAFx-13, Najnudel DAFx-23,
   VTL5C3).
-- LTC1060 / MF10 switched-capacitor (Sherman): ~/2slabs/2sl-filter/references/sherman-filterbank.md; chip datasheets
-  fetched by dsp.md.
-- A generic ZDF ladder (m4l_dev/gen_ladder.py): a technique, not a chip model. It becomes the Moog-ladder module only if
-  the Moog transistor ladder is given its schematic / patent and Stinchcombe / Huovilainen numbers as sources.
-- A generic ZDF state-variable filter (gen_state_variable.py): same status; the SEM row would add the circuit.
+- LTC1060 / MF10 switched-capacitor (Sherman): the kit module m4l_dev/circuit_modules/ltc1060_mf10_section.py, its
+  datasheets in circuits/ltc1060-mf10.md; the instrument's side in ~/2slabs/2sl-filter/references/sherman-filterbank.md.
+- The zero-delay ladder (m4l_dev/techniques/zero_delay_ladder_filter.py): a technique, not a chip model. A Moog-ladder
+  module would be a new circuit module, given the transistor ladder's schematic / patent and Stinchcombe / Huovilainen
+  numbers as sources.
+- The zero-delay state-variable filter (m4l_dev/techniques/zero_delay_state_variable_filter.py): a technique, same
+  status; the SEM row would be a module built on it.
 
 ## 8. Ranked shortlist: starting base modules
 

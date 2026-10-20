@@ -1,9 +1,15 @@
-"""The switched-capacitor filter block: one section of a dual switched-capacitor filter chip (the MF10 / LTC1060
-family), clocked, as the chip is (references/dsp.md, "Switched-capacitor filter").
+"""The LTC1060 / MF10 section (a circuit module): one section of the dual switched-capacitor filter chip (Linear's
+LTC1060, pin-compatible with National's MF10), clocked, as the chip is (references/circuits/ltc1060-mf10.md).
 
-The chip is a discrete-time state-variable filter with fixed coefficients, stepped once per clock tick; its clock is
-`clock_ratio` (100 or 50, the chip's pin 12) times the cutoff. Each tick, with LDI integrators (the switched-capacitor
-biquad; Chamberlin's digital state-variable filter):
+Its inputs are the chip's: the signal at its input in volts, the clock at its CLK pin in Hz, the damping its
+resistors set (q = 1/Q), pin 12's hold, and the summing amplifier's gains at its LP, BP and HP pins
+(the band-limiting runs once, on their sum). Its build character (`Ltc1060Mf10Character`: the op amps' swing, where
+the integrators meet their rails, the clock's feedthrough, the Q enhancement of its op amps) is a setting, the
+datasheets' typical unit by default. Pin 12's 50:1 / 100:1 strap is `clock_ratio`, fixed when the instrument is built.
+
+The chip is a discrete-time state-variable filter with fixed coefficients, stepped once per clock tick: its centre
+frequency is the clock over `clock_ratio`. Each tick, with LDI integrators (the switched-capacitor biquad;
+Chamberlin's digital state-variable filter):
 
     hp = x - lp - q bp ;   bp += F hp ;   lp += F bp ;      F = 2 sin(pi / clock_ratio)
 
@@ -11,57 +17,56 @@ so the poles sit at exactly clock / clock_ratio, whatever the host rate. Between
 hold: the staircase that makes the chip's images, its "eee"); HP is the chip's summing amplifier, continuous in the
 live input. The input is sampled at the ticks with nothing in front (it folds, as the chip's does).
 
-Per host sample the block finds the ticks that fall in it (a phase accumulator at the clock), and steps the filter
+Per host sample the module finds the ticks that fall in it (a phase accumulator at the clock), and steps the filter
 over all of them at once in closed form (the input a straight line between samples): with A the tick matrix, e the state's
 distance from its rest point (0, x), n ticks take e to A^n e, and A^n = r^(n-1) sin(n th)/sin th A - r^n sin((n-1)
-th)/sin th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the block keeps). The last tick is stepped
+th)/sin th I (A's eigenvalues r e^(+-i th); complex for q < 2 - F, which the module keeps). The last tick is stepped
 explicitly, so the integrators' rails (a soft clip at full scale) act at the tick rate whenever there is at most one
 tick a sample. Above that the rails act once a host sample.
 
 What the chip makes and what the host rate would add (measured, research 2026-10-19, against a tick-exact model
 rendered at 32 x and decimated: chip_reference.py in the research's scratchpad):
 - read naively, the staircase's images above the host's Nyquist fold back into the audio band;
-- so the block gives out the staircase as the straight line through the last two tick states (half a tick late,
+- so the module gives out the staircase as the straight line through the last two tick states (half a tick late,
   as the staircase is on average) plus
-  the staircase's residual (a saw at the clock, one jump a tick), the residual band-limited by the kit edges block
+  the staircase's residual (a saw at the clock, one jump a tick), the residual band-limited by the kit's
+  band-limited edges technique
   (4-point polyBLEP at the tick's exact time) and faded out as the clock passes 0.35 to 0.5 of the host rate, where
   the residual's fundamental leaves the band. Below 0.35 the output is the chip's staircase, band-limited; above 0.5
   it is the tick sequence, linearly interpolated (images sinc^2 down, -80 dB and lower).
 - Q enhancement: the chip's op amps add phase in the resonant loop, which "enhances the Q value at high clock
   frequencies" (LTC1060 datasheet p. 8); the datasheet's one number: at 1.4 MHz clock, Q = 5 has "about 8% error".
   Modelled as the excess-phase law Q' = Q / (1 - Q c f_clock), i.e. the damping q' = q - c f_clock, c fitted to that
-  point (c = 0.0741 / (5 x 1.4 MHz)). So a section set just short of oscillation sings at the top of its range
+  point (c = 0.0741 / (5 x 1.4 MHz)): the character's `q_enhancement_per_clock_hz`. So a section set just short of oscillation sings at the top of its range
   (the FB1: "only manages the mid/upper kHz range", SOS 1997).
-- Clock feedthrough: the datasheets' 10 mV p-p (LTC1060 "fCLK <= 1MHz", MF10 "Q = 10, Mode 1") against a full scale
-  of the op amps' 4 V swing: a square at the clock, +-0.00125 at `feedthrough` 1, through the same edges block and
-  fade (none above the host's Nyquist).
+- Clock feedthrough: the datasheets' 10 mV p-p (LTC1060 "fCLK <= 1MHz", MF10 "Q = 10, Mode 1"): a square at the
+  clock, +-5 mV at `clock_feedthrough` 1, through the same band-limiting and fade (none above the host's Nyquist).
+- Rails: the integrators are linear to `rail_knee_of_full_scale` of the op amps' swing (`full_scale_volts`, +-4 V at
+  +-5 V supplies), then round off into it.
 - Hold (pin 12 to V-): the ticks stop; "the bandpass and lowpass outputs act as a S/H circuit holding the last
   sample" (LTC1060 p. 7). HP, the summer, still passes the input. The datasheet's 20 mV hold step is left out.
 
-The output is `<name>_out` = lowpass_gain LP + bandpass_gain BP + highpass_gain HP + feedthrough, three samples
-late: one for the input (the ticks read it between two samples, its straight line's droop undone by a symmetric
-3-tap pre-emphasis) and two for the edges block's look-ahead. LATENCY_SAMPLES says so. Also `<name>_clock_hz`, `<name>_ticked` (1 when a tick fell in this sample) and
+The output is `<name>_out` (volts) = lowpass_gain LP + bandpass_gain BP + highpass_gain HP + feedthrough, three
+samples late: one for the input (the ticks read it between two samples, its straight line's droop undone by a
+symmetric 3-tap pre-emphasis) and two for the band-limited edges' look-ahead. LATENCY_SAMPLES says so. Inside, the
+section works in fractions of full scale: the input is divided by `full_scale_volts` and the output multiplied back. Also `<name>_clock_hz`, `<name>_ticked` (1 when a tick fell in this sample) and
 `<name>_tick_time` (ticks so far, modulo TICK_COUNT_WRAP, plus the phase: what a divided section follows).
 
-A section can be divided from another (the Sherman's Harmonics: "what if I divide those clocks", R§2.0): with
-`divided_from` (another instance, whose statements run first) and a `division` expression, while `division` > 0.5
-its clock is the other's divided by it, phase-locked, ticking on every division-th of its ticks; at 0 it runs on its
-own cutoff. 2 x division must divide TICK_COUNT_WRAP.
+A section's clock can come from another section's through a divider (a counter between the two CLK pins; the
+Sherman Filterbank's Harmonics, in 2sl filter): with `divided_from` (another instance, whose statements run first) and
+a `division` expression, while `division` > 0.5 its clock is the other's divided by it, phase-locked, ticking on every
+division-th of its ticks; at 0 it runs on its own `clock_hz`. 2 x division must divide TICK_COUNT_WRAP.
 """
+import dataclasses
 import math
 
 from m4l_dev.build_error import BuildError
-from m4l_dev.gen_blocks import GenBlock
-from m4l_dev.gen_edges import BandLimitedEdges
+from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.techniques.band_limited_edges import BandLimitedEdges
 
-CLOCK_RATIOS = (50, 100)
-LOWEST_CUTOFF_HZ = 1.0
-HIGHEST_CUTOFF_HZ = 30000.0          # the FB2 flyer's "0 Hz (!) up to 30 kHz"
-FULL_SCALE_VOLTS = 4.0               # the op amps' swing at +-5 V (MF10: +-3.8 V min, +-4.25 V typ)
-CLOCK_FEEDTHROUGH_VOLTS_PEAK_TO_PEAK = 0.010
-FEEDTHROUGH_AMPLITUDE = CLOCK_FEEDTHROUGH_VOLTS_PEAK_TO_PEAK / 2 / FULL_SCALE_VOLTS
-Q_ENHANCEMENT_PER_HZ = 0.0741 / (5 * 1.4e6)   # LTC1060 p. 8: Q = 5 "about 8% error" at a 1.4 MHz clock
-RAIL_KNEE = 0.8                      # the integrators are linear to 0.8 of full scale, then round off into the rail
+CLOCK_RATIOS = (50, 100)             # pin 12: 50:1 tied to V+, 100:1 to half supply (LTC1060 p. 7)
+LOWEST_CENTER_HZ = 1.0               # the clock is held to clock_ratio x [1 Hz, 30 kHz]
+HIGHEST_CENTER_HZ = 30000.0          # LTC1060 p. 1 "Operates Up to 30kHz"; MF10 p. 1 "Operation up to 30 kHz"
 RESIDUAL_FULL_BELOW = 0.35           # clock / host rate: the staircase's residual whole below, gone at 0.5
 RESIDUAL_GONE_AT = 0.5
 LOWEST_DAMPING = -0.2                # a section can be set past oscillation; the rails hold it
@@ -70,37 +75,56 @@ LATENCY_SAMPLES = 3
 TICK_COUNT_WRAP = 10080              # 2^5 3^2 5 7: 2 x every Harmonics division of the Sherman divides it
 
 FUNCTIONS = {
-    "switched_capacitor_rail": f"""// an integrator's output against its op amp's rail: linear to the knee, then rounding off at full scale
-switched_capacitor_rail(v) {{
+    "ltc1060_mf10_rail": """// an integrator's output against its op amp's rail: linear to the knee, then rounding off at full scale (1)
+ltc1060_mf10_rail(v, knee, headroom) {
 \tmagnitude = abs(v);
-\tif (magnitude > {RAIL_KNEE!r}) {{
-\t\treturn sign(v) * ({RAIL_KNEE!r} + {1 - RAIL_KNEE!r} * tanh((magnitude - {RAIL_KNEE!r}) / {1 - RAIL_KNEE!r}));
-\t}}
+\tif (magnitude > knee) {
+\t\treturn sign(v) * (knee + headroom * tanh((magnitude - knee) / headroom));
+\t}
 \treturn v;
-}}""",
+}""",
 }
 
 
-class SwitchedCapacitorFilter(GenBlock):
-    """`<name>_out`: `input` through one clocked switched-capacitor section at `cutoff_hz` with damping `damping`
-    (q = 1/Q at a low clock; the chip's Q enhancement lowers it as the clock rises), `hold` (> 0.5: the clock stops),
-    `feedthrough` (the clock's feedthrough, 1 = the datasheets' 10 mV p-p) and the output mix `lowpass_gain`,
-    `bandpass_gain`, `highpass_gain`. LATENCY_SAMPLES (3) late."""
+@dataclasses.dataclass(frozen=True)
+class Ltc1060Mf10Character:
+    """One unit's build character; the defaults are the datasheets' typical part at +-5 V supplies."""
+    full_scale_volts: float = 4.0                  # the op amps' swing at +-5 V (MF10 p. 4: +-3.8 V min, +-4.25 V typ)
+    rail_knee_of_full_scale: float = 0.8           # the integrators are linear to here, then round off into the rail
+    clock_feedthrough_volts_peak_to_peak: float = 0.010   # LTC1060 p. 2 "fCLK <= 1MHz"; MF10 p. 4 "Q = 10, Mode 1"
+    q_enhancement_per_clock_hz: float = 0.0741 / (5 * 1.4e6)   # LTC1060 p. 8: Q = 5 "about 8% error" at 1.4 MHz
 
-    def __init__(self, instance_name, input, cutoff_hz, damping, hold, feedthrough, lowpass_gain, bandpass_gain,
-                 highpass_gain, clock_ratio=100, divided_from=None, division=None):
-        inputs = dict(input=input, cutoff_hz=cutoff_hz, damping=damping, hold=hold, feedthrough=feedthrough,
-                      lowpass_gain=lowpass_gain, bandpass_gain=bandpass_gain, highpass_gain=highpass_gain)
+    @property
+    def clock_feedthrough_of_full_scale(self):
+        """The feedthrough square's amplitude (half its peak to peak) as a fraction of full scale."""
+        return self.clock_feedthrough_volts_peak_to_peak / 2 / self.full_scale_volts
+
+
+class Ltc1060Mf10Section(CircuitModule):
+    """`<name>_out` (volts): `input_volts` through one section clocked at `clock_hz` (its centre: the clock over
+    `clock_ratio`) with damping `damping` (q = 1/Q at a low clock; the chip's Q enhancement lowers it as the clock
+    rises), `hold` (> 0.5: pin 12 at V-, the clock stops), `clock_feedthrough` (1 = this unit's feedthrough, the
+    datasheets' 10 mV p-p by default) and the summing gains at the pins `lowpass_gain`, `bandpass_gain`,
+    `highpass_gain`. LATENCY_SAMPLES (3) late."""
+
+    references_entry = "references/circuits/ltc1060-mf10.md"
+    character_type = Ltc1060Mf10Character
+
+    def __init__(self, instance_name, *, input_volts, clock_hz, damping, hold, clock_feedthrough, lowpass_gain,
+                 bandpass_gain, highpass_gain, clock_ratio=100, divided_from=None, division=None, character=None):
+        inputs = dict(input_volts=input_volts, clock_hz=clock_hz, damping=damping, hold=hold,
+                      clock_feedthrough=clock_feedthrough, lowpass_gain=lowpass_gain, bandpass_gain=bandpass_gain,
+                      highpass_gain=highpass_gain)
         if (divided_from is None) != (division is None):
-            raise BuildError(f"SwitchedCapacitorFilter {instance_name}: divided_from and division go together")
+            raise BuildError(f"Ltc1060Mf10Section {instance_name}: divided_from and division go together")
         if division is not None:
-            if not isinstance(divided_from, SwitchedCapacitorFilter):
-                raise BuildError(f"SwitchedCapacitorFilter {instance_name}: divided_from must be another "
-                                 "SwitchedCapacitorFilter instance")
+            if not isinstance(divided_from, Ltc1060Mf10Section):
+                raise BuildError(f"Ltc1060Mf10Section {instance_name}: divided_from must be another "
+                                 "Ltc1060Mf10Section instance")
             inputs["division"] = division
-        super().__init__(instance_name, **inputs)
+        super().__init__(instance_name, character=character, **inputs)
         if clock_ratio not in CLOCK_RATIOS:
-            raise BuildError(f"SwitchedCapacitorFilter {instance_name}: the chip's clock ratio is 50 or 100 (pin 12), "
+            raise BuildError(f"Ltc1060Mf10Section {instance_name}: the chip's clock ratio is 50 or 100 (pin 12), "
                              f"got {clock_ratio!r}")
         self.clock_ratio = clock_ratio
         self.tick_coefficient = 2 * math.sin(math.pi / clock_ratio)
@@ -122,8 +146,7 @@ class SwitchedCapacitorFilter(GenBlock):
     def clock_statements(self):
         """Statements leaving the clock's phase before and after this sample (in ticks: a tick wherever it passes
         an integer) and the clock's increment (ticks a sample)."""
-        free = self.substituted("""${p}_free_increment = min(${ratio} * ${p}_cutoff_hz / samplerate, ${top} / samplerate);""",
-                                ratio=self.clock_ratio, top=self.clock_ratio * HIGHEST_CUTOFF_HZ)
+        free = self.substituted("""${p}_free_increment = ${p}_clock_input_hz / samplerate;""")
         if self.divided_from is None:
             return free + self.substituted("""
 ${p}_phase_before = ${p}_phase;
@@ -143,17 +166,18 @@ ${p}_previous_division = ${p}_division;""", m=self.divided_from.instance_name, w
 
     def statements(self):
         F = self.tick_coefficient
-        clocked = self.substituted("""// ${p}: a clocked switched-capacitor section (kit switched-capacitor block)
+        clocked = self.substituted("""// ${p}: an LTC1060 / MF10 section, clocked (kit circuit module: LTC1060 / MF10 section)
 // the input a sample late, so the ticks can read it between this sample and the last with the straight line's
 // droop undone: the line through samples averages to sinc^2 at a tick (the ticks fall all over it), and (1 + w^2/12)
 // from the symmetric 3-tap [-1, 14, -1] / 12 cancels its w^2 term
-${p}_newest_input = ${input};
+${p}_newest_input = ${input_volts} / ${full_scale_volts};
 ${p}_x = ${p}_input_1;
 ${p}_tick_input = (14 * ${p}_input_1 - ${p}_newest_input - ${p}_input_2) / 12;
 ${p}_input_2 = ${p}_input_1;
 ${p}_input_1 = ${p}_newest_input;
-${p}_cutoff_hz = clamp(${cutoff_hz}, ${lowest}, ${highest});
-""", lowest=LOWEST_CUTOFF_HZ, highest=HIGHEST_CUTOFF_HZ) + self.clock_statements() + self.substituted("""
+${p}_clock_input_hz = clamp(${clock_hz}, ${lowest_clock}, ${highest_clock});
+""", full_scale_volts=self.character.full_scale_volts, lowest_clock=self.clock_ratio * LOWEST_CENTER_HZ,
+            highest_clock=self.clock_ratio * HIGHEST_CENTER_HZ) + self.clock_statements() + self.substituted("""
 // hold: the clock stops
 ${p}_phase_after = ${hold} > 0.5 ? ${p}_phase_before : ${p}_phase_after;
 ${p}_increment = ${p}_phase_after - ${p}_phase_before;
@@ -194,8 +218,8 @@ if (${p}_ticks > 0) {
 \t${p}_before_lp = ${p}_c1 * (${F} * ${p}_a11 * ${p}_e_bp + ${p}_a22 * ${p}_e_lp) + ${p}_c0 * ${p}_e_lp + ${p}_rest_before_lp;
 \t// the last tick, stepped: the summer, then the two integrators against their rails
 \t${p}_tick_hp = ${p}_last_tick_input - ${p}_before_lp - ${p}_q * ${p}_before_bp;
-\t${p}_new_bp = switched_capacitor_rail(${p}_before_bp + ${F} * ${p}_tick_hp);
-\t${p}_new_lp = switched_capacitor_rail(${p}_before_lp + ${F} * ${p}_new_bp);
+\t${p}_new_bp = ltc1060_mf10_rail(${p}_before_bp + ${F} * ${p}_tick_hp, ${rail_knee}, ${rail_headroom});
+\t${p}_new_lp = ltc1060_mf10_rail(${p}_before_lp + ${F} * ${p}_new_bp, ${rail_knee}, ${rail_headroom});
 \t// the staircase jumps by the step: from the state the line has reached (the old held one) to the new one
 \t${p}_from_bp = ${p}_ticks > 1 ? ${p}_before_bp : ${p}_bp;
 \t${p}_from_lp = ${p}_ticks > 1 ? ${p}_before_lp : ${p}_lp;
@@ -214,7 +238,7 @@ ${p}_out_bp = ${p}_line_bp + ${p}_residual_gain * (${p}_bp - ${p}_line_bp);
 ${p}_out_lp = ${p}_line_lp + ${p}_residual_gain * (${p}_lp - ${p}_line_lp);
 // HP is the summer: the live input against the states
 ${p}_out_hp = ${p}_x - ${p}_out_lp - ${p}_q * ${p}_out_bp;
-${p}_feedthrough_level = ${feedthrough_amplitude} * ${feedthrough} * ${p}_residual_gain;
+${p}_feedthrough_level = ${feedthrough_amplitude} * ${clock_feedthrough} * ${p}_residual_gain;
 ${p}_tick_jump = ${p}_residual_gain * ${p}_tick_jump + 2 * ${p}_feedthrough_level;
 // the clock's second edge, half a tick after the tick
 ${p}_half_index = floor(${p}_phase_before - 0.5) + 1;
@@ -223,11 +247,14 @@ ${p}_half_time = ${p}_half_crossed > 0 ? (${p}_half_index + 0.5 - ${p}_phase_bef
 ${p}_half_jump = -2 * ${p}_feedthrough_level;
 ${p}_naive = ${lowpass_gain} * ${p}_out_lp + ${bandpass_gain} * ${p}_out_bp + ${highpass_gain} * ${p}_out_hp + ${p}_feedthrough_level * (${p}_phase < 0.5 ? 1 : -1);
 ${p}_previous_tick_input = ${p}_tick_input;
-""", F=repr(F), wrap=TICK_COUNT_WRAP, enhancement=Q_ENHANCEMENT_PER_HZ, lowest_damping=LOWEST_DAMPING,
-            highest_damping=highest_damping(self.clock_ratio), gone=RESIDUAL_GONE_AT,
-            fade=RESIDUAL_GONE_AT - RESIDUAL_FULL_BELOW, feedthrough_amplitude=FEEDTHROUGH_AMPLITUDE,
-            top=self.clock_ratio * HIGHEST_CUTOFF_HZ)
-        return clocked + self.edges.statements() + self.substituted("\n${p}_out = ${p}_edges_out;")
+""", F=repr(F), wrap=TICK_COUNT_WRAP, enhancement=self.character.q_enhancement_per_clock_hz,
+            lowest_damping=LOWEST_DAMPING, highest_damping=highest_damping(self.clock_ratio), gone=RESIDUAL_GONE_AT,
+            fade=RESIDUAL_GONE_AT - RESIDUAL_FULL_BELOW,
+            feedthrough_amplitude=self.character.clock_feedthrough_of_full_scale,
+            top=self.clock_ratio * HIGHEST_CENTER_HZ, rail_knee=self.character.rail_knee_of_full_scale,
+            rail_headroom=1 - self.character.rail_knee_of_full_scale)
+        return clocked + self.edges.statements() + self.substituted("\n${p}_out = ${p}_edges_out * ${full_scale_volts};",
+                                                                    full_scale_volts=self.character.full_scale_volts)
 
     def reset_statements(self):
         """Statements that empty the section (Stop): the integrators and the edges' ring."""
@@ -236,14 +263,14 @@ ${p}_previous_tick_input = ${p}_tick_input;
         return "\n".join(lines) + "\n" + self.edges.restart_statements(["0", "0"])
 
 
-def small_signal_response(frequency_hz, cutoff_hz, damping, clock_ratio=100):
+def small_signal_response(frequency_hz, clock_hz, damping, clock_ratio=100):
     """(LP, BP, HP) at the section's pins for small signals: the tick sequence's z-domain response at the clock, z =
     exp(j 2 pi f / f_clock), with no Q enhancement and no images. What a display draws. Per tick n:
     hp[n] = x - lp[n-1] - q bp[n-1], bp[n] = bp[n-1] + F hp[n], lp[n] = lp[n-1] + F bp[n]; the HP pin between ticks
     is x - lp - q bp with the live input, on average half a tick after the tick (z^(1/2)). So LP + HP (the notch) is
     about -30 dB deep at 100:1, not infinitely: the sampled data's own mismatch."""
     F = 2 * math.sin(math.pi / clock_ratio)
-    clock = clock_ratio * min(max(cutoff_hz, LOWEST_CUTOFF_HZ), HIGHEST_CUTOFF_HZ)
+    clock = min(max(clock_hz, clock_ratio * LOWEST_CENTER_HZ), clock_ratio * HIGHEST_CENTER_HZ)
     z_inverse = complex(math.cos(2 * math.pi * frequency_hz / clock), -math.sin(2 * math.pi * frequency_hz / clock))
     q = min(max(damping, LOWEST_DAMPING), highest_damping(clock_ratio))
     integrator = F / (1 - z_inverse)
@@ -255,14 +282,14 @@ def small_signal_response(frequency_hz, cutoff_hz, damping, clock_ratio=100):
 
 
 def response_script_code():
-    """The ES5 `switchedCapacitorResponse(frequencyHz, cutoffHz, damping, clockRatio)` for a device's displays, with
-    the block's constants filled in (templates/switched-capacitor-response.template.js)."""
+    """The ES5 `ltc1060Mf10SectionResponse(frequencyHz, clockHz, damping, clockRatio)` for a device's displays, with
+    the module's constants filled in (templates/ltc1060-mf10-section-response.template.js)."""
     from m4l_dev.generated_scripts import fill_template, kit_template_text
-    return fill_template(kit_template_text("switched-capacitor-response.template.js"), {
-        "SWITCHED_CAPACITOR_LOWEST_CUTOFF_HZ": repr(LOWEST_CUTOFF_HZ),
-        "SWITCHED_CAPACITOR_HIGHEST_CUTOFF_HZ": repr(HIGHEST_CUTOFF_HZ),
-        "SWITCHED_CAPACITOR_LOWEST_DAMPING": repr(LOWEST_DAMPING),
-        "SWITCHED_CAPACITOR_DAMPING_MARGIN": repr(DAMPING_MARGIN)}, "switched-capacitor-response.template.js")
+    return fill_template(kit_template_text("ltc1060-mf10-section-response.template.js"), {
+        "LTC1060_MF10_LOWEST_CENTER_HZ": repr(LOWEST_CENTER_HZ),
+        "LTC1060_MF10_HIGHEST_CENTER_HZ": repr(HIGHEST_CENTER_HZ),
+        "LTC1060_MF10_LOWEST_DAMPING": repr(LOWEST_DAMPING),
+        "LTC1060_MF10_DAMPING_MARGIN": repr(DAMPING_MARGIN)}, "ltc1060-mf10-section-response.template.js")
 
 
 def highest_damping(clock_ratio=100):

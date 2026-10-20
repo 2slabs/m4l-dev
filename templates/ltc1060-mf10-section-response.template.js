@@ -1,19 +1,19 @@
-// The kit's switched-capacitor block (m4l_dev/gen_switched_capacitor.py) as a display draws it: the section's
+// The kit's LTC1060 / MF10 section (m4l_dev/circuit_modules/ltc1060_mf10_section.py) as a display draws it: the section's
 // small-signal response at its three pins, the tick sequence's z-domain response at the clock (z = e^(j 2 pi f /
-// f_clock)), no Q enhancement, no images. The constants are the block's, filled in by the build.
-var SWITCHED_CAPACITOR_LOWEST_CUTOFF_HZ = /*SWITCHED_CAPACITOR_LOWEST_CUTOFF_HZ*/;
-var SWITCHED_CAPACITOR_HIGHEST_CUTOFF_HZ = /*SWITCHED_CAPACITOR_HIGHEST_CUTOFF_HZ*/;
-var SWITCHED_CAPACITOR_LOWEST_DAMPING = /*SWITCHED_CAPACITOR_LOWEST_DAMPING*/;
-var SWITCHED_CAPACITOR_DAMPING_MARGIN = /*SWITCHED_CAPACITOR_DAMPING_MARGIN*/;
+// f_clock)), no Q enhancement, no images. The constants are the module's, filled in by the build.
+var LTC1060_MF10_LOWEST_CENTER_HZ = /*LTC1060_MF10_LOWEST_CENTER_HZ*/;
+var LTC1060_MF10_HIGHEST_CENTER_HZ = /*LTC1060_MF10_HIGHEST_CENTER_HZ*/;
+var LTC1060_MF10_LOWEST_DAMPING = /*LTC1060_MF10_LOWEST_DAMPING*/;
+var LTC1060_MF10_DAMPING_MARGIN = /*LTC1060_MF10_DAMPING_MARGIN*/;
 
-/** The section's pins at frequencyHz, for a cutoff (Hz), a damping (q = 1/Q) and the clock ratio (50 or 100):
+/** The section's pins at frequencyHz, for a clock (Hz, at the CLK pin), a damping (q = 1/Q) and the clock ratio (50 or 100):
  * {lpRe, lpIm, bpRe, bpIm, hpRe, hpIm}. Per tick: hp = x - z^-1 (lp + q bp), bp = F/(1 - z^-1) hp,
- * lp = F/(1 - z^-1) bp; the HP pin between ticks is x z^(1/2) - lp - q bp (gen_switched_capacitor.py). */
-function switchedCapacitorResponse(frequencyHz, cutoffHz, damping, clockRatio) {
+ * lp = F/(1 - z^-1) bp; the HP pin between ticks is x z^(1/2) - lp - q bp (ltc1060_mf10_section.py). */
+function ltc1060Mf10SectionResponse(frequencyHz, clockHz, damping, clockRatio) {
   var F = 2 * Math.sin(Math.PI / clockRatio);
-  var clock = clockRatio * Math.min(Math.max(cutoffHz, SWITCHED_CAPACITOR_LOWEST_CUTOFF_HZ),
-    SWITCHED_CAPACITOR_HIGHEST_CUTOFF_HZ);
-  var q = Math.min(Math.max(damping, SWITCHED_CAPACITOR_LOWEST_DAMPING), 2 - F - SWITCHED_CAPACITOR_DAMPING_MARGIN);
+  var clock = Math.min(Math.max(clockHz, clockRatio * LTC1060_MF10_LOWEST_CENTER_HZ),
+    clockRatio * LTC1060_MF10_HIGHEST_CENTER_HZ);
+  var q = Math.min(Math.max(damping, LTC1060_MF10_LOWEST_DAMPING), 2 - F - LTC1060_MF10_DAMPING_MARGIN);
   var w = 2 * Math.PI * frequencyHz / clock;
   var zRe = Math.cos(w), zIm = -Math.sin(w);                       // z^-1
   // the integrator F / (1 - z^-1)

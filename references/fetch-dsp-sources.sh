@@ -16,8 +16,6 @@ sources=(
   "downing-terjesen-re201-2016.pdf|https://hajim.rochester.edu/ece/sites/zduan/teaching/ece472/projects/2016/Downing_Terjesen_paper.pdf|c0e25607c04b99d36e0a0489d45df420d4cf86559937ed013540020bc0eceae8"
   "chowdhury-tape-dafx19.pdf|https://dafx.de/paper-archive/2019/DAFx2019_paper_3.pdf|a915d63daee36556a4f267d9a52f07b1000988ecb48013589d926951a10d613c"
   "jos-thiran-allpass.html|https://ccrma.stanford.edu/~jos/pasp/Thiran_Allpass_Interpolators.html|64f53c6e54181a8dbcdaff858df22e18ea045b9f25ed6dd9ab2373f605cd560c"
-  "ltc1060-1060fb.pdf|https://www.komponenten.es.aau.dk/fileadmin/komponenten/Data_Sheet/Switch_Cap/LTC1060.pdf|4114b99dbe5fef8ed1ef7520f69f27209bbbf7cae50a88ef507bd95fb960bf25"
-  "mf10-n.pdf|https://www.ti.com/lit/ds/symlink/mf10-n.pdf|0e837564aa0bc5e6b3f78bd95e3fa45b0bf7c8554989e4f76d9d86b3c876079d"
   "data-knot-dk_reverb_library.genexpr|https://raw.githubusercontent.com/rconstanzo/data-knot/e8ebcecadbf0cade540093ab80d0ea726f325f5f/code/dk_reverb_library.genexpr|208e707616dba19ad5c326497c288d8039ba95b30964eafbc546bbdf4fbf36b4"
 )
 failed=0

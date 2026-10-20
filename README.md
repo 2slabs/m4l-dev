@@ -38,7 +38,7 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
 - `tools/`: `amxd.py` (pack / freeze / unpack / list .amxd files), `es5check.py`, `compare_device_builds.py` (compare
   two builds of a device; exit 0 when what Live sees is the same), `bdf2js.py` (Cozette's BDF to glyphs),
   `max_sandbox.js` (Max's [js] globals for node tests).
-- `references/`: the sources the kit follows (Max, Live, Live's preset format, the DSP blocks' papers: `dsp.md`).
+- `references/`: the sources the kit follows (Max, Live, Live's preset format, the techniques' papers: `dsp.md`; circuits' datasheets: `circuits/`).
 - `architecture/`: how the kit is partitioned and the contracts a device repository keeps.
 
 ## Tests
