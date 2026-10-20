@@ -46,9 +46,16 @@ model; not needed here.
   "HP := (x-g1*s1-s2)*d; // g1=2R+g, d=1/(1+2Rg+g^2) / v1 := g*HP; BP := v1+s1; s1 := BP+v1; / v2 := g*BP; LP := v2+s2; s2 := LP+v2;"
 - §4.5, p. 111 [123], eq. (4.15): "By multiplying the bandpass filter's output by 2R ... we obtain a bandpass filter
   which has a unit gain (and zero phase response) at the cutoff".
+- §3.8, "Other prewarping points", pp. 64–65 [76–77], eq. (3.18): "ω̃c = µ(ωp)/ωp · ωc"; "Equation (3.18) is the
+  generalized prewarping formula, where ωp is the frequency response point of zero detuning ... prewarping at ωp
+  simply means that the cutoff should be multiplied by µ(ωp)/ωp. At ωp = ωc this multiplication reduces to (3.12)."
+  (µ(ω) = (2/T) tan(ωT/2), so g = tan(π fp / sr) · fc / fp.)
+- §3.8, "Bounded cutoff prewarping", p. 67 [79], eq. (3.21): "as the cutoff peak is getting out of the audible range,
+  we stop caring, where exactly it is positioned ... we could fix the prewarping point to the upper boundary of the
+  audible range: ωp = min {ωc, ωmax}, where ωmax is some point around 16kHz."
 
 The block is that tick, with 2R = 1 / Q (the circuit literature's Q, e.g. a unity-gain Sallen-Key's
-Q = ½ √(C1/C2)) and the prewarped g = tan(π fc / sr). Not the switched-capacitor block's LDI (Chamberlin) form,
+Q = ½ √(C1/C2)) and g = tan(π fp / sr) · fc / fp, prewarped at fp (by default the cutoff: g = tan(π fc / sr)). Not the switched-capacitor block's LDI (Chamberlin) form,
 which is a clocked chip's own recursion and is kept for that.
 
 ## Saturator (m4l_dev/gen_saturator.py)

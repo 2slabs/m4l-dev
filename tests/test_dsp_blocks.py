@@ -389,6 +389,59 @@ class StateVariableFilterTests(unittest.TestCase):
         outputs = program.run(8000, [noise])
         self.assertTrue(all(math.isfinite(value) and abs(value) < 1e3 for output in outputs for value in output))
 
+    def prewarped_sine_response(self, cutoff, q, prewarp, frequency, samples=4410):
+        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="cutoff", q="q", prewarp_hz="prewarp")],
+                          {"cutoff": cutoff, "q": q, "prewarp": prewarp}, self.OUTPUTS, samplerate=self.SAMPLERATE)
+        sine = [math.sin(2 * math.pi * frequency * n / self.SAMPLERATE) for n in range(samples)]
+        outputs = program.run(samples, [sine])
+        return [amplitude_at(output[samples // 2:], frequency, self.SAMPLERATE) for output in outputs]
+
+    def test_the_prewarping_point_is_where_the_analog_response_is_exact(self):
+        # an overdamped network heard far below its natural frequency (2sl gate's 292), one past Nyquist, and a
+        # resonant one prewarped off its peak
+        for cutoff, q, prewarp in ((4000.0, 0.2, 700.0), (60000.0, 0.25, 3000.0), (1500.0, 6.0, 5000.0)):
+            def analog(frequency):
+                s = 1j * frequency / cutoff
+                return 1 / (s * s + s / q + 1)
+            at_the_point = small_signal_response(prewarp, cutoff, q, self.SAMPLERATE, prewarp_hz=prewarp)["lowpass"]
+            with self.subTest(cutoff=cutoff, q=q, prewarp=prewarp, claim="exact at the point"):
+                self.assertLess(abs(at_the_point - analog(prewarp)), 1e-9)
+            for frequency in (prewarp / 4, prewarp, min(prewarp * 1.7, 0.4 * self.SAMPLERATE)):
+                expected = small_signal_response(frequency, cutoff, q, self.SAMPLERATE, prewarp_hz=prewarp)
+                measured = self.prewarped_sine_response(cutoff, q, prewarp, frequency)
+                for name, amplitude in zip(("lowpass", "bandpass", "highpass"), measured):
+                    with self.subTest(cutoff=cutoff, q=q, prewarp=prewarp, frequency=frequency, output=name):
+                        self.assertAlmostEqual(20 * math.log10(amplitude), 20 * math.log10(abs(expected[name])),
+                                               delta=0.05)
+
+    def test_a_cutoff_past_nyquist_is_not_clamped(self):
+        # g = tan(pi fp / sr) fc / fp grows past the old tan(0.45 pi) = 6.3: a low-pass at 20 sr with Q 0.1 passes
+        # 1 kHz within 0.01 dB (clamped to 0.45 sr it was -0.21 dB), and a prewarping point past 0.45 sr is held there
+        twenty_sample_rates = 20 * self.SAMPLERATE
+        measured = self.prewarped_sine_response(twenty_sample_rates, 0.1, 0.45 * self.SAMPLERATE, 1000.0)[0]
+        self.assertAlmostEqual(20 * math.log10(measured), 0.0, delta=0.01)
+        held = small_signal_response(1000.0, twenty_sample_rates, 0.1, self.SAMPLERATE, prewarp_hz=self.SAMPLERATE)
+        bounded = small_signal_response(1000.0, twenty_sample_rates, 0.1, self.SAMPLERATE, prewarp_hz=0.45 * self.SAMPLERATE)
+        self.assertEqual(held, bounded)
+        self.assertAlmostEqual(20 * math.log10(measured), 20 * math.log10(abs(bounded["lowpass"])), delta=0.01)
+
+    def test_stable_with_the_cutoff_swept_far_past_nyquist(self):
+        program = harness([StateVariableFilter("svf", input="in1", cutoff_hz="20 + 2e6 * (0.5 + 0.5 * sin(in1 * 300))",
+                                               q="0.05 + 30 * (0.5 + 0.5 * cos(in1 * 170))",
+                                               prewarp_hz="20 + 30000 * (0.5 + 0.5 * sin(in1 * 90))")],
+                          {}, self.OUTPUTS, samplerate=self.SAMPLERATE)
+        noise = [math.sin(n * n * 0.001) for n in range(8000)]
+        outputs = program.run(8000, [noise])
+        self.assertTrue(all(math.isfinite(value) and abs(value) < 1e3 for output in outputs for value in output))
+
+    def test_a_number_input_must_be_finite_and_above_zero(self):
+        for input_name in ("cutoff_hz", "q", "prewarp_hz"):
+            for bad in ("0", "-5", "inf", "nan"):
+                inputs = dict(input="in1", cutoff_hz="1000", q="0.7", prewarp_hz="1000")
+                inputs[input_name] = bad
+                with self.subTest(input=input_name, value=bad), self.assertRaises(BuildError):
+                    StateVariableFilter("svf", **inputs)
+
 
 class SoftClipTests(unittest.TestCase):
     KNEES = (0.8, 0.95)
