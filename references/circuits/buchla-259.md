@@ -182,6 +182,9 @@ Note: the DAFx coefficients (Vs = 6 V) describe the **CA3160 original**, not The
   the character's `cell_rail_volts`), eqs. 8-11 as straight pieces (every cell's fold point, where a node meets its floor, where the
   sum meets the limiter), first-order ADAA with each piece's antiderivative in closed form. Alias floor at Fold 100,
   C5 (between the harmonics, against them): −93 dB with ADAA, −73 dB taken naively (2sl gate's tests/test_gate_dsp.py).
+  Since 2026-10-20: second-order ADAA (piece-wise, references/dsp.md "Antiderivative piecewise-linear shaper"), one step
+  late: a pure sine at 2x 48 kHz, worst alias under 20 kHz, first → second order: 4 V at 3.1 kHz −22.3 → −36.4 dB,
+  8 V at 1.37 kHz −33.7 → −48.7 dB (the module's tests).
 - §3.2's extras: each node floored at −(Vs + 0.5 V) (only cell 1 reaches it, below −8.4 V in; one-sided); the
   limiter as a hard ±5.1 V on the sum before the 1.33 kHz filter (where §3.2 derives its 10.5 V onset; on the
   original it sits after the filter, so it bites somewhat later there); the drive stage's 10.3 kHz roll-off as its
@@ -203,7 +206,7 @@ Note: the DAFx coefficients (Vs = 6 V) describe the **CA3160 original**, not The
 - **Sync (259e/Softube):** soft sync via PLL; hard sync where the Principal resets the Modulation osc; MIDI-note sync resets the MO on note-on. [VERIFIED for Softube] https://cdn.softube.com/user-manuals/Buchla-259e. 261e: MO syncs to the principal or to MIDI note-on. https://buchla.com/product/261e/ [DESIGN] Resetting the MO on note-on is vital for a repeatable techno stab: identical FM phase on every hit.
 - 200-series oscillators track **1.2 V/oct** (not 1 V/oct) with tempco compensation. Triangle-core symmetry errors detune the lowest octave. [SECONDARY] https://www.modularsynthesis.com/roman/buchla259/259cwg.htm
 - The Easel's MO waveforms get "quite distorted" at low frequencies (16 Hz). There are capacitive-coupling tilts on squares. [SECONDARY] https://modularsynthesis.com/buchla/208/buchla_208.htm. Arturia's TAE explicitly models capacitor "bend" of waveforms. [SECONDARY] Arturia manual.
-- **The sine shaper** [DESIGN, 2sl gate SPEC §3.3]: a slight sine impurity (a low-level 3rd harmonic from an imperfect triangle→sine shaper; the repair notes above mention the sine-shape trims). No source gives a unit's number: the module's default drive 0.95 puts the 3rd at −38.4 dB, the 5th at −48 dB, the 7th at −54 dB.
+- **The sine shaper** [DESIGN, 2sl gate SPEC §3.3]: a slight sine impurity (a low-level 3rd harmonic from an imperfect triangle→sine shaper; the repair notes above mention the sine-shape trims). No source gives a unit's number: the module's default drive 0.95 puts the 3rd at −38.4 dB, the 5th at −48 dB, the 7th at −54 dB. The shaped wave's corners (the triangle's peaks) are band-limited in the module (polyBLAMP, found on the exact phase; the sine two steps late): at drive 0.95, 5 kHz, 2x 48 kHz, the worst alias −68.5 → −119 dB; the drive is a run-time character field (2sl drums' Harmonics turns it toward the triangle).
 
 ## 6. The DAFx-17 model, Symmetry and Order (from 2sl gate's research brief, §2.1.1-§2.1.2 there)
 

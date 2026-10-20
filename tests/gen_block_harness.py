@@ -1,6 +1,8 @@
 """The harness every gen block test renders through: a gen~ program around blocks, rendered by our GenExpr renderer
 (m4l_dev/genexpr.py), and the spectral measures the claims are stated in. Standard library only."""
+import cmath
 import math
+from fractions import Fraction
 import os
 import sys
 
@@ -75,3 +77,78 @@ def worst_alias_db(signal, fundamental, harmonics, samplerate, below_hz):
 
 def cents(frequency, reference):
     return 1200 * math.log2(frequency / reference)
+
+
+def magnitude_spectrum(signal):
+    """|DFT| of `signal` (a power-of-two length), bins 0..n/2: an iterative radix-2 FFT, rectangular window."""
+    n = len(signal)
+    if n & (n - 1):
+        raise ValueError(f"magnitude_spectrum: the length must be a power of two, got {n}")
+    values = [complex(value) for value in signal]
+    bits = n.bit_length() - 1
+    for i in range(n):
+        j = int(format(i, f"0{bits}b")[::-1], 2)
+        if j > i:
+            values[i], values[j] = values[j], values[i]
+    size = 2
+    while size <= n:
+        twiddle_step = cmath.exp(-2j * math.pi / size)
+        for start in range(0, n, size):
+            twiddle = 1 + 0j
+            for k in range(size // 2):
+                even, odd = values[start + k], values[start + k + size // 2] * twiddle
+                values[start + k], values[start + k + size // 2] = even + odd, even - odd
+                twiddle *= twiddle_step
+        size *= 2
+    return [abs(value) for value in values[:n // 2 + 1]]
+
+
+def coherent_frequency(frequency, samplerate, length):
+    """(bin, frequency): the odd bin nearest `frequency` in a `length`-point DFT and its frequency. A periodic wave
+    there fills the window whole (no leakage), and its aliases (odd bin x k, folded at length / 2, a power of two)
+    never land on a harmonic's bin."""
+    bin_number = round(frequency * length / samplerate)
+    if bin_number % 2 == 0:
+        bin_number += 1
+    return bin_number, bin_number * samplerate / length
+
+
+def coherent_worst_alias_db(signal, fundamental_bin, samplerate, below_hz):
+    """The loudest bin under `below_hz` that is not a harmonic of `fundamental_bin` (a wave at
+    `coherent_frequency`), dB re the fundamental: every alias, with no leakage from the harmonics."""
+    spectrum = magnitude_spectrum(signal)
+    length = len(signal)
+    harmonics = set(range(fundamental_bin, length // 2 + 1, fundamental_bin))
+    top = int(below_hz * length / samplerate)
+    worst = max(spectrum[k] for k in range(1, top) if k not in harmonics)
+    return 20 * math.log10(worst / spectrum[fundamental_bin])
+
+
+def exact_second_order_mean(pieces, x0, x1, x2):
+    """Second-order ADAA (Bilbao et al. 2017 eq. (15)) of a piecewise-linear transfer [(from x, slope, intercept)]
+    through x0 (newest), x1, x2, in exact rational arithmetic on the pieces: the reference for the kit's GenExpr."""
+    exact = [(Fraction(start) if math.isfinite(start) else None, Fraction(slope), Fraction(intercept))
+             for start, slope, intercept in pieces]
+
+    def second_integral(x):           # from 0, piece by piece, exactly
+        total, first, position = Fraction(0), Fraction(0), Fraction(0)
+        while position != x:
+            if x > position:
+                index = max(i for i, piece in enumerate(exact) if piece[0] is None or piece[0] <= position)
+            else:
+                index = max(i for i, piece in enumerate(exact) if piece[0] is None or piece[0] < position)
+            start, slope, intercept = exact[index]
+            end = exact[index + 1][0] if index + 1 < len(exact) else None
+            if x > position:
+                target = min(x, end) if end is not None else x
+            else:
+                target = max(x, start) if start is not None else x
+            width = target - position
+            total += first * width + slope * ((target ** 3 - position ** 3) / 6 - position ** 2 * width / 2) \
+                + intercept * width ** 2 / 2
+            first += slope * (target ** 2 - position ** 2) / 2 + intercept * width
+            position = target
+        return total
+    x0, x1, x2 = Fraction(x0), Fraction(x1), Fraction(x2)
+    differences = [(second_integral(a) - second_integral(b)) / (a - b) for a, b in ((x0, x1), (x1, x2))]
+    return float(2 * (differences[0] - differences[1]) / (x0 - x2))

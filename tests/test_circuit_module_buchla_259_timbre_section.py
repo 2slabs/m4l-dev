@@ -14,7 +14,8 @@ from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
     cell_node_volts, output_volts, summed_output_volts_unlimited)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
-from gen_block_harness import harness  # noqa: E402
+from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, exact_second_order_mean,  # noqa: E402
+                               harness)
 
 ORIGINAL = Buchla259TimbreSectionCharacter()
 
@@ -115,6 +116,43 @@ class FolderGenExprTests(unittest.TestCase):
             mean = sum(output_volts(bus[i - 1] + (bus[i] - bus[i - 1]) * (k + 0.5) / steps, ORIGINAL)
                        for k in range(steps)) / steps
             self.assertAlmostEqual(out[i], mean, delta=2e-4, msg=i)
+
+    def folder_program(self, drive, frequency, offset=0.0, samplerate=44100.0):
+        """The section on in1 (the sine), Params drive / offset / frequency: out1 the second-order output, out2 the
+        running segment's first-order mean, out3 the bus."""
+        timbre = section()
+        statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n"
+                      + f"out1 = {timbre.output_volts_at('now')};\n"
+                      + f"out2 = {timbre.segment_output_volts('now', timbre.running_point)};\n"
+                      + "out3 = now_folder_input_volts;\n" + timbre.remember_statements("now"))
+        template = (f"/*GEN_BLOCK_FUNCTIONS*/\nParam drive({drive!r});\nParam offset({offset!r});\n"
+                    f"Param frequency({frequency!r});\n/*GEN_BLOCK_DECLARATIONS*/\n/*TIMBRE*/\n" + statements)
+        return GenProgram(gen_code_with_blocks(template, [timbre], "test harness"), 1, 3, samplerate=samplerate)
+
+    def test_the_output_is_second_order_adaa_of_the_folder(self):
+        # each step: Bilbao et al.'s eq. (15) through the last three bus values on the folder's pieces (= the circuit
+        # model, test above), one step late, exact, on a 5 V, 200 Hz sine with a 0.4 V offset
+        frequency, count = 200.0, 300
+        sine = [math.sin(2 * math.pi * frequency * i / 44100) for i in range(count)]
+        out, _, bus = self.folder_program(5.0, frequency, 0.4).run(count, [sine])
+        pieces = section().table.pieces
+        for i in range(2, count):
+            self.assertAlmostEqual(out[i], exact_second_order_mean(pieces, bus[i], bus[i - 1], bus[i - 2]), delta=1e-9,
+                                   msg=i)
+
+    def test_second_order_lowers_the_aliases(self):
+        # a pure sine at 2x 48 kHz, the worst alias under 20 kHz re the fundamental (no leakage: a whole number of
+        # cycles in the window). Measured 2026-10-20, first order -> second: 4 V at 3.1 kHz -22.3 -> -36.4 dB,
+        # 8 V at 1.37 kHz -33.7 -> -48.7 dB (16384 points; the trivial folder: -3.5 and -16.5 dB)
+        rate, length, settle = 96000.0, 8192, 300
+        for drive, frequency, first_order, second_order in ((4.0, 3100.0, -22.3, -36.4), (8.0, 1370.0, -33.7, -48.7)):
+            fundamental_bin, frequency = coherent_frequency(frequency, rate, length)
+            sine = [math.sin(2 * math.pi * frequency * i / rate) for i in range(length + settle)]
+            second, first, _ = self.folder_program(drive, frequency, samplerate=rate).run(length + settle, [sine])
+            measured = [coherent_worst_alias_db(output[settle:], fundamental_bin, rate, 20000) for output in (first, second)]
+            self.assertAlmostEqual(measured[0], first_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, first order")
+            self.assertLess(measured[1], second_order + 1.5, msg=f"{drive} V, {frequency} Hz, second order")
+            self.assertLess(measured[1], measured[0] - 12)
 
     def test_two_units_are_two_folders_in_one_patch(self):
         original, starved = section("original"), section("starved", Buchla259TimbreSectionCharacter(cell_rail_volts=4.5))

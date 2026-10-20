@@ -4,6 +4,7 @@
 library only."""
 import math
 import os
+import random
 import sys
 import unittest
 
@@ -46,7 +47,7 @@ from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetall
 from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
-from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, folded,  # noqa: E402
+from gen_block_harness import (amplitude_at, cents, complex_amplitude_at, exact_second_order_mean, folded,  # noqa: E402
                                frequency_by_zero_crossings, harness, phase_degrees, worst_alias_db)
 
 
@@ -368,6 +369,63 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
         harmonics = range(9, 40, 2)
         self.assertLess(worst_alias_db(antialiased, fundamental, harmonics, self.SAMPLERATE, 10000),
                         worst_alias_db(naive, fundamental, harmonics, self.SAMPLERATE, 10000) - 6)
+
+    # a folder-like table: pieces both ways, a corner where two meet closely, flat outer pieces
+    FOLD = [(-math.inf, 0.0, -1.0), (-2.0, -1.5, -4.0), (-1.0, 1.0, -1.5), (-0.999, 2.0, -0.501),
+            (0.4, -0.5, 0.499), (1.7, 0.0, -0.351)]
+
+    def test_second_order_is_eq_15_exactly_and_well_conditioned(self):
+        table = PiecewiseLinearTable("fold", self.FOLD)
+        self.assertTrue(table.is_continuous)
+        generator = random.Random(259)
+        triples = []
+        for _ in range(300):                             # anywhere, steps from large to tiny
+            x0 = generator.uniform(-3, 3)
+            step = 10 ** generator.uniform(-5, 0.5)
+            triples.append((x0, x0 - step * generator.uniform(-1, 1), x0 - step * generator.uniform(-1, 1)))
+        for corner in (-2.0, -1.0, -0.999, 0.4, 1.7):    # straddling a corner closely, and turning round at one
+            for scale in (1e-2, 1e-4, 1e-5):
+                triples += [(corner + scale, corner - 0.3 * scale, corner - scale),
+                            (corner + scale, corner - 0.7 * scale, corner + 1.3 * scale)]
+        x0s, x1s, x2s = (list(column) for column in zip(*triples))
+        code = "\n".join(table.functions().values()) + f"\nout1 = {table.second_order_mean_call('in1', 'in2', 'in3')};\n"
+        values = GenProgram(code, 3, 1).run(len(triples), [x0s, x1s, x2s])[0]
+        for (x0, x1, x2), value in zip(triples, values):
+            self.assertAlmostEqual(value, exact_second_order_mean(table.pieces, x0, x1, x2), delta=1e-9,
+                                   msg=(x0, x1, x2))
+            self.assertLessEqual(abs(value), 3.0)        # never blows up near a corner (the table stays under 3)
+
+    def test_second_order_is_the_line_on_a_piece_and_lowers_the_aliases_further(self):
+        table = PiecewiseLinearTable("clip", self.CLIP)
+        inside = [0.3 * math.sin(2 * math.pi * 500 * i / self.SAMPLERATE) for i in range(200)]
+        program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)], {},
+                          ["shaper_out"], samplerate=self.SAMPLERATE)
+        out = program.run(len(inside), [inside])[0]
+        for i in range(2, len(inside)):                  # inside one piece: the line at the three's mean, one late
+            self.assertAlmostEqual(out[i], (inside[i] + inside[i - 1] + inside[i - 2]) / 3, places=12)
+        # the hot 3 kHz sine (measured 2026-10-20, worst alias below 10 kHz: naive -38.2, ADAA1 -55.3, ADAA2 -72.6 dB)
+        count, fundamental = 8192, 3000.0
+        hot = [2.0 * math.sin(2 * math.pi * fundamental * i / self.SAMPLERATE) for i in range(count)]
+        harmonics = range(9, 40, 2)
+        worst = {}
+        for order in (1, 2):
+            program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=order)],
+                              {}, ["shaper_out"], samplerate=self.SAMPLERATE)
+            worst[order] = worst_alias_db(program.run(count, [hot])[0][1000:], fundamental, harmonics,
+                                          self.SAMPLERATE, 10000)
+        self.assertLess(worst[2], worst[1] - 15)
+
+    def test_second_order_needs_a_continuous_table(self):
+        jumping = PiecewiseLinearTable("jump", [(-math.inf, 0.0, -1.0), (0.0, 0.0, 1.0)])
+        self.assertFalse(jumping.is_continuous)
+        self.assertNotIn(f"{jumping.function_name}_second_order_mean", jumping.functions())
+        with self.assertRaises(BuildError):
+            jumping.second_order_mean_call("a", "b", "c")
+        with self.assertRaises(BuildError):
+            AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=jumping, order=2)
+        with self.assertRaises(BuildError):
+            AntiderivativePiecewiseLinearShaper("shaper", input="in1",
+                                                table=PiecewiseLinearTable("clip", self.CLIP), order=3)
 
     def test_two_tables_are_two_functions(self):
         one, other = PiecewiseLinearTable("clip", self.CLIP), PiecewiseLinearTable("clip", self.CLIP[:2] + [(0.6, 0.0, 0.6)])

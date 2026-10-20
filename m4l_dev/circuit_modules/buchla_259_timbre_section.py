@@ -18,7 +18,10 @@ taken here on the sum before the tone filter (where §3.2 derives its 10.5 V ons
 
 The transfer is straight pieces (every cell's fold point, where a node meets its floor, where the sum meets the
 limiter): the kit's antiderivative piecewise-linear shaper (a technique) holds it, so the folder is antialiased by
-first-order ADAA with each piece's antiderivative in closed form.
+second-order ADAA (one step late), piece-wise exact. Measured on a pure sine at 2x 48 kHz, the worst alias under
+20 kHz re the fundamental (tests/test_circuit_module_buchla_259_timbre_section.py), first order -> second: 4 V at
+3.1 kHz -22.3 -> -36.4 dB, 8 V at 1.37 kHz -33.7 -> -48.7 dB, 4 V at 410 Hz -55.8 -> -69.8 dB (the trivial folder:
+-3.5, -16.5, -41.8 dB).
 
 Inputs (volts and Hz, per host sample): `drive_volts`, the sine's peak at the folder bus that Timbre sets (DAFx-17
 sweeps 0-10 V; the original's maximum is a factory trim, §3.3); `symmetry_offset_volts`, the DC that Symmetry puts on
@@ -27,11 +30,13 @@ instrument says how it opens); `frequency_hz`, the sine's frequency, at which th
 gain (its phase lag only shifts a static folder's output in time). The sine itself is given at each point the
 instrument evaluates the folder (`point_statements`).
 
-Outputs: the folder's output in volts, as its exact mean over a segment between two points
-(`segment_output_volts`); `output_peak_volts`, about where the sum sits for drives of 0.6-10 V (3.2 V at 6 V rails,
-scaling with them), for an instrument that scales it to its own level. `statements()` (per host sample) latches the
-inputs and the drive stage's gain; the instance's own History `<name>_before_*` is the running segment's last point
-(`remember_statements`), for an instrument that runs the folder on consecutive sub-samples.
+Outputs: the folder's output in volts at a point, second-order ADAA through it and the instance's last two points
+(`output_volts_at(point)`: the folder one step late; the audio's); the folder's exact mean over a segment between
+two points (`segment_output_volts`: first order, for a probe of the output's mean); `output_peak_volts`, about where
+the sum sits for drives of 0.6-10 V (3.2 V at 6 V rails, scaling with them), for an instrument that scales it to its
+own level. `statements()` (per host sample) latches the inputs and the drive stage's gain; the instance's own
+History `<name>_before_*` and `<name>_before_before_*` are its last two points (`remember_statements`), for an
+instrument that runs the folder on consecutive sub-samples.
 
 Not modelled (§4.3): slew (above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft knee
 at low zener current, the 1.45 Hz DC block inside IC31a's summer. The tone filter is linear and fixed: an instrument
@@ -119,11 +124,14 @@ def _breakpoints(character):
     unlimited = sorted(points)
     edges = [-LIMITER_OPEN_VOLTS] + unlimited + [LIMITER_OPEN_VOLTS]
     for low, high in zip(edges, edges[1:]):
-        y_low = summed_output_volts_unlimited(low + 1e-9 * (high - low), character)
-        y_high = summed_output_volts_unlimited(high - 1e-9 * (high - low), character)
+        # the sum is straight between two of its breakpoints: where it meets the limiter, by the line through two
+        # points just inside them
+        inside_low, inside_high = low + 1e-9 * (high - low), high - 1e-9 * (high - low)
+        y_low = summed_output_volts_unlimited(inside_low, character)
+        y_high = summed_output_volts_unlimited(inside_high, character)
         for limit in (character.limiter_volts, -character.limiter_volts):
             if (y_low - limit) * (y_high - limit) < 0:
-                points.add(low + (limit - y_low) / (y_high - y_low) * (high - low))
+                points.add(inside_low + (limit - y_low) / (y_high - y_low) * (inside_high - inside_low))
     return sorted(points)
 
 
@@ -145,9 +153,10 @@ def transfer_pieces(character):
 
 class Buchla259TimbreSection(CircuitModule):
     """The folder's output (volts) at the points an instrument evaluates it: `point_statements(point, sine)` leaves
-    `<point>_folder_input_volts` and `<point>_folder_integral`; `segment_output_volts(point, before)` is the output's
-    exact mean from point `before` to `point`. Inputs `drive_volts`, `symmetry_offset_volts`, `frequency_hz` (per
-    host sample, latched by `statements()`). See the module's docstring."""
+    `<point>_folder_input_volts` and `<point>_folder_integral`; `output_volts_at(point)` is the output there by
+    second-order ADAA, one step late; `segment_output_volts(point, before)` is the output's exact mean from point
+    `before` to `point`. Inputs `drive_volts`, `symmetry_offset_volts`, `frequency_hz` (per host sample, latched by
+    `statements()`). See the module's docstring."""
 
     references_entry = "references/circuits/buchla-259.md"
     character_type = Buchla259TimbreSectionCharacter
@@ -179,7 +188,8 @@ class Buchla259TimbreSection(CircuitModule):
         return self.table.functions()
 
     def declarations(self):
-        return self.substituted("History ${p}_before_folder_input_volts(0), ${p}_before_folder_integral(0);")
+        return self.substituted("History ${p}_before_folder_input_volts(0), ${p}_before_folder_integral(0), "
+                                "${p}_before_before_folder_input_volts(0);")
 
     def statements(self):
         return self.substituted("""// ${p}: the Buchla 259's timbre section, its inputs this sample (kit circuit module: Buchla 259 timbre section)
@@ -195,14 +205,22 @@ ${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_
                 f"{p}_symmetry_offset_volts;\n"
                 f"{point}_folder_integral = {self.table.integral_call(f'{point}_folder_input_volts')};")
 
+    def output_volts_at(self, point):
+        """GenExpr: the folder's output (volts) by second-order ADAA through `point` (it ran `point_statements`) and
+        the instance's last two points: the folder one step late. Then `remember_statements(point)`."""
+        p = self.instance_name
+        return self.table.second_order_mean_call(f"{point}_folder_input_volts", f"{p}_before_folder_input_volts",
+                                                 f"{p}_before_before_folder_input_volts")
+
     def segment_output_volts(self, point, before):
         """GenExpr: the folder's output (volts), its exact mean over the segment from point `before` to `point` (both
-        ran `point_statements`)."""
+        ran `point_statements`): first-order ADAA, for a probe of the output's mean."""
         return self.table.mean_call(f"{point}_folder_input_volts", f"{before}_folder_input_volts",
                                     f"{point}_folder_integral", f"{before}_folder_integral")
 
     def remember_statements(self, point):
-        """Make `point` the running segment's last point (`running_point`)."""
+        """Make `point` the instance's last point (`running_point`), the one before it the last but one."""
         p = self.instance_name
-        return (f"{p}_before_folder_input_volts = {point}_folder_input_volts;\n"
+        return (f"{p}_before_before_folder_input_volts = {p}_before_folder_input_volts;\n"
+                f"{p}_before_folder_input_volts = {point}_folder_input_volts;\n"
                 f"{p}_before_folder_integral = {point}_folder_integral;")

@@ -70,6 +70,17 @@ high oversampling factors" (its intro; the 2sl gate research brief, circuits/buc
 functions and the balanced comparison tree are our construction; tests/test_techniques.py holds them to the Python
 model and measures the aliases against the transfer taken naively.
 
+Second order: the same paper, §II.A eq. (15) [PDF p. 3], "y^n = 2/(x^n − x^(n−2)) ((F2^n − F2^(n−1))/(x^n − x^(n−1)) −
+(F2^(n−1) − F2^(n−2))/(x^(n−1) − x^(n−2)))", and §II.B's fallbacks [PDF p. 4]: (17) for a short step (G1 at the
+midpoint), (18) "D2 G2^n = 2/Δ (G1(x̄^n) + (G2^n − G2(x̄^n))/Δ)" with (19) "x̄^n = (x^(n+1) + x^(n−1))/2,
+Δ^n = x̄^n − x^n" where the outer two inputs nearly meet, and (20) G0 at (x̄ + x^n)/2 where Δ is small too; §IV: "For
+hard clipping, the second- and third-order forms increase SNR by approx. 15 and 30 dB w.r.t. oversampling by factor 6".
+Taking it piece-wise (a line at the three's mean on one piece; the lower piece's line plus the slope change times
+eq. (15) of a ramp in coordinates at the corner across one corner; eq. (15) itself across more) is our construction
+for conditioning: F2 is a cubic of the input, and eq. (15) divides its differences by products of steps that are tiny
+near a corner at a slow input. tests/test_techniques.py holds it to eq. (15) in exact rational arithmetic and
+measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, below 10 kHz: −55.3 → −72.6 dB).
+
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 
 **Bilbao, Esqueda, Parker & Välimäki, "Antiderivative Antialiasing for Memoryless Nonlinearities", IEEE SPL 24(7),
