@@ -29,4 +29,8 @@ block, they're just wrapping it, this is what we're doing)". Level 3, "reorganiz
 4. Drums: bump onto the reorganised kit; then its new voice is built on the 259 module (PLANS/2026-10-20-drum-synth-voice.md
    in 2sl-drums).
 5. Later, as instruments need them, with sources first: Roland (IR3109, BA662), Moog 5U, Serge, a deliberately clinical
-   one.
+   one. The user (2026-10-20): a Mackie desk sim, "so it can sound like a mackie desk" (console channel/summing).
+6. First new instrument: a standalone phaser device (the user, 2026-10-20: "lets start by making a standalone phaser, I
+   can then try to find the water in it by playing with parameters"): the Mu-Tron Bi-Phase as a circuit module on an
+   all-pass technique (references/phaser-mutron-biphase.md, references/allpass-and-diffusion.md). No hardware needed: a
+   sourced circuit sim that sounds good is enough.
