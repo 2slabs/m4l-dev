@@ -17,8 +17,8 @@ loop is exactly 180 degrees at fc), the nonlinear loop solved with no unit delay
 cyclic bidiagonal, so each iteration is one forward sweep and one division (stage i's correction p_i + q_i d4, d4 =
 p4 / (1 - q4), 1 - q4 >= 1 for k >= 0: never singular). NEWTON_ITERATIONS = 2 from the last step's solution (research
 2026-10-20, against RK4 at 64x decimated by a Blackman sinc: 2 iterations are within 0.02 dB of 8 on every harmonic
-below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice: 2, the
-default, or 1) runs it twice a host sample between the kit's halfband oversampler's upsampler and downsampler (3.07
+below 10 kHz; 1 iteration blows up at fc 18 kHz, k 3.9, a hot input). `oversampling` (a wiring choice, required: 2
+or 1) runs it twice a host sample between the kit's halfband oversampler's upsampler and downsampler (3.07
 samples late at low frequencies, HALFBAND_ROUND_TRIP_LATENCY_SAMPLES), or once with no latency. The worst alias of a
 hot sine (drive 10 = 0.52 V at the bases, fc 12 kHz, k 2, 2.5 kHz): -30 dB at 1x, -55 dB at 2x; drive 5, fc 5 kHz, k 3:
 -84 dB at 1x, -127 dB at 2x; at fc 18 kHz, k 3.9, drive 20: -12 dB at 1x, -34 dB at 2x, the aliases made above the
@@ -188,7 +188,7 @@ def control_volts_for_cutoff_hz(cutoff_hz, character):
     return character.volts_per_octave * math.log2(cutoff_hz / cutoff_hz_at_control_volts(0.0, character))
 
 
-def small_signal_response(frequency_hz, cutoff_hz, feedback_gain, sample_rate, character=None, oversampling=2):
+def small_signal_response(frequency_hz, cutoff_hz, feedback_gain, sample_rate, *, oversampling, character=None):
     """The module's complex response for small signals (every tanh's slope 1, no offset), input volts to output volts
     before the coupling high-pass: the TPT ladder at `oversampling` x the host rate (each stage the bilinear one-pole
     at g_i = tan(pi fc / (N sr)) / r_i, the loop 1 / (P^-1 + k)); at 2x, between the halfband upsampler and
@@ -219,7 +219,7 @@ class MoogTransistorLadder(CircuitModule):
     references_entry = "references/circuits/moog-transistor-ladder.md"
     character_type = MoogTransistorLadderCharacter
 
-    def __init__(self, instance_name, *, input_volts, control_volts, emphasis, oversampling=2, character=None):
+    def __init__(self, instance_name, *, input_volts, control_volts, emphasis, oversampling, character=None):
         super().__init__(instance_name, character=character, input_volts=input_volts, control_volts=control_volts,
                          emphasis=emphasis)
         if isinstance(oversampling, bool) or oversampling not in OVERSAMPLINGS:

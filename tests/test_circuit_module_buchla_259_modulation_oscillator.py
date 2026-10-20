@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.circuit_modules.buchla_259_modulation_oscillator import (  # noqa: E402
     WAVES, Buchla259ModulationOscillator)
+from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from gen_block_harness import worst_alias_db  # noqa: E402
@@ -24,7 +25,7 @@ def trivial(phase, wave):
 
 def oscillator_program(wave, frequency, reset="0"):
     """One step a sample; outputs the band-limited wave, the phase, the trivial wave and its integral at the phase."""
-    oscillator = Buchla259ModulationOscillator("mod", frequency_hz=repr(frequency), wave=str(wave))
+    oscillator = Buchla259ModulationOscillator("mod", frequency_hz=repr(frequency), wave=str(wave), oversampling=1)
     template = ("/*GEN_BLOCK_FUNCTIONS*/\nHistory time(0);\n/*GEN_BLOCK_DECLARATIONS*/\n"
                 f"if ({reset} > 0.5) {{\n{oscillator.reset_statements()}\n}}\n/*MOD*/\ntime = time + 1;\n"
                 f"out1 = mod_out;\nout2 = mod_phase;\nout3 = {oscillator.wave_at('mod_phase')};\n"
@@ -66,6 +67,13 @@ class ModulationOscillatorTests(unittest.TestCase):
                     slope = (integral[i] - integral[i - 1]) / (phase[i] - phase[i - 1])
                     self.assertAlmostEqual(slope, 0.5 * (naive[i] + naive[i - 1]), delta=2e-3, msg=(WAVES[wave], i))
             self.assertAlmostEqual(min(abs(v) for v in integral), 0.0, places=3)   # periodic, from 0 at phase 0
+
+    def test_its_oversampling_is_required_and_a_whole_number_of_steps(self):
+        for bad in (0, -1, 1.5, True, "2"):
+            with self.assertRaises(BuildError, msg=bad):
+                Buchla259ModulationOscillator("mod", frequency_hz="1", wave="0", oversampling=bad)
+        with self.assertRaises(TypeError, msg="no default"):
+            Buchla259ModulationOscillator("mod", frequency_hz="1", wave="0")
 
 
 if __name__ == "__main__":

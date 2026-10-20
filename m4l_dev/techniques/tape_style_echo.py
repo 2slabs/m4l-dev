@@ -9,8 +9,8 @@ measured glide ratio and wow band, and its tape is a saturating loop, not a head
 What it promises (tests/test_techniques.py checks each):
 - **On the grid.** Both sides loop at one time T (the glided Time). Each side's loop re-reads its tape at T - D, D
   being the loop's own delay (the diffusion allpasses' lengths, the loop low-pass's group delay at DC, the
-  saturator's LATENCY_SAMPLES), so every repeat lands at n T: the left output reads at T, the right at T + `right_lag_ms`
-  (a fixed Haas offset that doesn't add up). Nothing compounds per round.
+  saturator's latency: half a sample, it runs at the host rate), so every repeat lands at n T: the left output reads
+  at T, the right at T + `right_lag_ms` (a fixed Haas offset that doesn't add up). Nothing compounds per round.
 - **Tape glide.** Time glides like a tape's speed: a one-pole toward the new time (TIME_GLIDE_UP_MS longer,
   TIME_GLIDE_DOWN_MS shorter: the RE-201's ballistics, 1.89 s / 1.07 s, scaled down for a synced echo) whose step is
   limited to HIGHEST_TIME_CHANGE ms per ms, so the read head's speed stays in [0.5, 1.5]: never backwards.
@@ -80,7 +80,8 @@ class TapeStyleEcho(Technique):
                                                / 1000.0)) + 4
         self.saturators = {side: AntiderivativeTanhSaturator(
             f"{instance_name}_{side}_saturator",
-            input=f"{instance_name}_{side}_filtered * {instance_name}_feedback * {instance_name}_saturation_gain")
+            input=f"{instance_name}_{side}_filtered * {instance_name}_feedback * {instance_name}_saturation_gain",
+            oversampling=1)
             for side in ("left", "right")}
 
     def functions(self):
@@ -179,7 +180,7 @@ if (${{stop_pressed}}) {{
 {p}_lowpass_hz = clamp(${{loop_lowpass_hz}}, 20, samplerate * 0.45);
 {p}_highpass_hz = clamp(${{loop_highpass_hz}}, 1, samplerate * 0.45);
 {p}_filters_delay = 2 * samplerate / (twopi * {p}_lowpass_hz * (1 + {p}_highpass_hz / {p}_lowpass_hz))
-	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {AntiderivativeTanhSaturator.LATENCY_SAMPLES!r};
+	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {self.saturators['left'].latency_samples!r};
 {p}_lowpass_pole = 1 - exp(-twopi * {p}_lowpass_hz / samplerate);
 {p}_highpass_pole = 1 - exp(-twopi * {p}_highpass_hz / samplerate);
 {p}_left_loop_delay = {diffusion_delay["left"]} + {p}_filters_delay;

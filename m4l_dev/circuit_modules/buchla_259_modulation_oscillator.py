@@ -9,7 +9,7 @@ band-limited edges technique; the wave is computed `LOOK_AHEAD_SAMPLES` steps ah
 output (that many steps late) is the oscillator now: an FM or AM it drives stays in step with what it modulates.
 
 Inputs: `frequency_hz` (evaluated at every step: a sweep is followed exactly) and `wave`. `oversampling` (a wiring
-choice) is how many steps the instrument runs it per host sample. `reset_statements()` restarts the cycle (a hard
+choice, required) is how many steps the instrument runs it per host sample. `reset_statements()` restarts the cycle (a hard
 sync: a note's start), with nothing of the old wave after it. Each `statements()` is one step: `<name>_out` (-1..1)
 and `<name>_phase` (0..1, the instance's History). `wave_at(phase)` and `wave_integral_at(phase)` are the trivial wave
 and its running integral over a cycle (each wave has zero mean, so the integral is periodic: what a linear FM it
@@ -70,11 +70,11 @@ class Buchla259ModulationOscillator(CircuitModule):
     references_entry = "references/circuits/buchla-259.md"
     character_type = Buchla259ModulationOscillatorCharacter
 
-    def __init__(self, instance_name, *, frequency_hz, wave, oversampling=1, character=None):
+    def __init__(self, instance_name, *, frequency_hz, wave, oversampling, character=None):
         super().__init__(instance_name, character=character, frequency_hz=frequency_hz, wave=wave)
-        if not isinstance(oversampling, int) or oversampling < 1:
-            raise BuildError(f"Buchla259ModulationOscillator {instance_name}: oversampling is a whole number of steps "
-                             f"a sample, got {oversampling!r}")
+        if isinstance(oversampling, bool) or not isinstance(oversampling, int) or oversampling < 1:
+            raise BuildError(f"Buchla259ModulationOscillator {instance_name}: oversampling (required: the "
+                             f"steps the instrument runs it a host sample) is a whole number >= 1, got {oversampling!r}")
         self.oversampling = oversampling
         p, wave_input = instance_name, self.input_expressions["wave"]
         self.edges = BandLimitedEdges(f"{p}_edges", naive=f"{p}_naive")

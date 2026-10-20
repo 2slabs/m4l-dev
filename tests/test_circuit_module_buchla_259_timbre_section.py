@@ -15,7 +15,7 @@ from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,  # noqa: E402
-                               equalised_second_order_outputs, exact_second_order_mean, harness)
+                               equalised_adaa_outputs, exact_second_order_mean, harness)
 
 ORIGINAL = Buchla259TimbreSectionCharacter()
 
@@ -143,7 +143,7 @@ class FolderGenExprTests(unittest.TestCase):
             out, _, bus = self.folder_program(5.0, frequency, 0.4, oversampling=oversampling).run(count, [sine])
             raw_means = [exact_second_order_mean(unit.table.pieces, bus[i], bus[i - 1], bus[i - 2])
                          for i in range(2, count)]
-            equalised = equalised_second_order_outputs(raw_means, unit.equaliser.taps)
+            equalised = equalised_adaa_outputs(raw_means, unit.equaliser.taps)
             for i in range(2 + unit.equaliser.length - 1, count):      # the equaliser's taps all on exact means
                 self.assertAlmostEqual(out[i], equalised[i - 2], delta=1e-9, msg=(oversampling, i))
 

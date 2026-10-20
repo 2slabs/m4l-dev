@@ -61,7 +61,7 @@ which is a clocked chip's own recursion and is kept for that (circuits/ltc1060-m
 
 ## Antiderivative piecewise-linear shaper (m4l_dev/techniques/antiderivative_piecewise_linear_shaper.py)
 
-The same method as the tanh saturator's (above): **Bilbao, Esqueda, Parker & Välimäki 2017**, eq. (5), first-order
+The same method as the tanh saturator's (below): **Bilbao, Esqueda, Parker & Välimäki 2017**, eq. (5), first-order
 ADAA, y = (F1(x) − F1(x_before)) / (x − x_before), with §II.B's midpoint fallback where the step is too small to divide
 by. A piecewise-linear transfer's F1 is closed form piece by piece (each piece's integral is a quadratic), the case
 **Esqueda, Pöntynen, Parker & Bilbao, "Virtual Analog Models of the Lockhart and Serge Wavefolders", Applied Sciences
@@ -82,41 +82,64 @@ near a corner at a slow input. tests/test_techniques.py holds it to eq. (15) in 
 measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, run at 1×, below 10 kHz: −55.3 → −72.6 dB;
 through the 2× equaliser, wrongly at that rate, −69.9).
 
-ADAA2's linear filtering and its equaliser: the same paper, §II.A after eq. (16) [PDF p. 4]: "In practice, though aliasing is
+ADAA2's linear filtering is undone (or not) by the kit's one ADAA equaliser (below, "Antiderivative antialiasing
+equaliser"), the tanh saturator's too. Not chosen: AA-IIR kernels (**La Pastina, D'Angelo & Gabrielli, "Arbitrary-order
+IIR antiderivative antialiasing", DAFx20in21** (`lapastina-dangelo-gabrielli-dafx21.pdf`),
+https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf, the "generalisations" route: a
+Butterworth or Chebyshev kernel, at the cost of complex exponential integrals of the transfer per pole); and the line
+split the tanh saturator used to use, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the
+transfer), the line's whole size at the input's frequency.
+
+## Antiderivative antialiasing equaliser (m4l_dev/techniques/antiderivative_antialiasing_equaliser.py)
+
+ADAA's linear filtering: Bilbao et al. 2017 (above), §II.A after eq. (16) [PDF p. 4]: "In practice, though aliasing is
 indeed suppressed, such methods do introduce a degree of linear filtering to the original signal, and thus all
 evaluation in Sec. IV will be carried out at a 2× oversampled rate"; §IV [PDF p. 5]: "An inherent characteristic of
 this family of methods is that of spectral shaping of the output; though aliasing is suppressed, there can be some
 attenuation of the signal in the high frequency range. Additional linear filtering is one option in this case, as
 suggested in [33], [34] for antialiased oscillators. ... generalisations beyond the nested structures presented here
 could aid in finding antialiasing methods for which such attenuation is reduced." [34] is Välimäki, Pekonen & Nam
-2012 (below, `valimaki-polyblep-jasa2012.pdf`), pp. 978–979 [PDF pp. 5–6], eq. (16): "... amplitudes of the higher harmonics are
-to be restored to the desired level, a post-processing equalizing filter can be used. In practice, a low-order
-filter, which is independent of the fundamental frequency, will suffice ... a second-order linear-phase FIR filter
-expressed as Heq(z) = b0 + b1 z^−1 + b0 z^−2". On a straight piece ADAA2 is the 3-tap mean (1 + z^−1 + z^−2) / 3
-(−1.3 dB at 10 kHz, −5.9 dB at 20 kHz at 96 kHz); a 3-tap equaliser on it reaches only ±0.3 dB to 18 kHz at 96 kHz by
-giving up 0.3 dB at DC, so the technique's is 5 taps, symmetric, equiripple by the Remez exchange (our design; DC
-exactly 1, within ±0.097 dB up to 5/24 of the rate, 20 kHz at 96 kHz; two steps more latency). Not chosen: AA-IIR
-kernels (**La Pastina, D'Angelo & Gabrielli, "Arbitrary-order IIR antiderivative antialiasing", DAFx20in21**
-(`lapastina-dangelo-gabrielli-dafx21.pdf`),
-https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf, the "generalisations" route: a
-Butterworth or Chebyshev kernel, at the cost of complex exponential integrals of the transfer per pole); and the line
-split the tanh saturator used to use, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the transfer), the
-line's whole size at the input's frequency. An equaliser after the transfer lifts an alias as it lifts the harmonics at
-its frequency: the 259 folder at 2× 48 kHz, worst alias under 20 kHz re the fundamental, 4 V at 3.1 kHz −36.4 → −31.5
-dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
+2012 (below, `valimaki-polyblep-jasa2012.pdf`), pp. 978–979 [PDF pp. 5–6], eq. (16): "... amplitudes of the higher
+harmonics are to be restored to the desired level, a post-processing equalizing filter can be used. In practice, a
+low-order filter, which is independent of the fundamental frequency, will suffice ... a second-order linear-phase FIR
+filter expressed as Heq(z) = b0 + b1 z^−1 + b0 z^−2".
 
-The equaliser is per rate (ours, measured 2026-10-20): Bilbao et al. evaluate ADAA2 "at a 2× oversampled rate" (above),
-and at 2× the band the equaliser lifts past the host's Nyquist (+15.9 dB at the 2× Nyquist) is the downsampler's. At
-1× that band is the host's top octave, where the 3-tap mean (a zero at a third of the rate, −9.5 dB at Nyquist) holds
-the aliases down. The 2× design at 1× is flat to 10 kHz but +6.4 dB at 24 kHz; the best 1× 5-tap design (±0.3 dB to
-8.8 kHz, the response never above +1 dB: Nyquist pinned at +1 dB, the outer tap the widest feasible) still lifts the
-aliases by up to +10.5 dB. Worst alias under 20 kHz at 48 kHz, unequalised / best 1× / 2× design: the 259 folder 4 V at
-3.1 kHz −25.3 / −18.6 / −15.5 dB, 8 V at 1.37 kHz −11.0 / −1.4 / +3.5, 4 V at 410 Hz −36.3 / −26.7 / −22.0 (first
-order −6.3, −4.0, −30.4); 2sl drums' voice, worst folded line re the loudest kept, FM metal −49.8 / −43.1 / −39.9, ring
-−52.9 / −44.0 / −38.3, Harmonics 1 at 5 kHz −82.7 / −77.4 / −74.6, Fold 4 V at 410 Hz −48.9 / −40.1 / −35.0, FM bright
-−69.3 / −64.6 / −62.2, Fold 4 V at 3.1 kHz −25.3 / −28.2 / −30.6, Fold 8 V at 1.37 kHz −13.5 / −6.4 / −4.9. So at 1×
-there is no equaliser (the raw mean: −1.3 dB at 5 kHz, −5.9 dB at 10 kHz, never lifted), and a block takes its
-oversampling with no default.
+The kernels (ADAA of a straight line): first order the 2-tap mean (1 + z^−1)/2, zero-phase cos(w/2), half a step late
+(−2.4 dB at 10 kHz at 44.1 kHz); second order the 3-tap mean (1 + z^−1 + z^−2)/3, zero-phase (1 + 2 cos w)/3, one step
+late (−1.3 dB at 10 kHz, −5.9 dB at 20 kHz at 96 kHz). A 3-tap equaliser on the 3-tap mean reaches only ±0.3 dB to
+18 kHz at 96 kHz by giving up 0.3 dB at DC, so the kit's are 5 taps, symmetric, equiripple by the Remez exchange
+(`adaa_equaliser_remez_design`, ours; DC exactly 1; two steps more latency), for either kernel, one design function.
+
+Which equaliser a block runs is a decision per (order, oversampling) (ours, measured 2026-10-20;
+`ADAA_EQUALISER_DECISIONS`):
+
+| order, oversampling | equaliser | product with the kernel | latency (steps) |
+|---|---|---|---|
+| 1, 2× | 5 taps, edge 5/24 of the 2× rate | ±0.0099 dB to the edge (20 kHz at 2× 48 kHz) | 2.5 |
+| 2, 2× | 5 taps, edge 5/24 of the 2× rate | ±0.097 dB to the edge, never above that to the host's Nyquist | 3 |
+| 1, 1× | none | cos(w/2): −2.0 dB at 10 kHz, −5.1 dB at 15 kHz at 48 kHz | 0.5 |
+| 2, 1× | none | (1 + 2 cos w)/3: −1.3 dB at 5 kHz, −5.9 dB at 10 kHz at 48 kHz | 1 |
+
+At 2× the band the equaliser lifts past the host's Nyquist (+15.9 dB at the 2× Nyquist for second order) is the
+downsampler's. At 1× that band is the host's top octave, where the kernel's mean holds the aliases down, and an
+equaliser after the transfer lifts an alias as it lifts the harmonics at its frequency (an alias re the fundamental
+rises by the lift at its own frequency). Measured, worst alias under 20 kHz re the fundamental:
+- Second order (the 259 folder and 2sl drums' voice, at 48 kHz), unequalised / the best 1× 5-tap design (±0.3 dB to
+  8.8 kHz, its response never above +1 dB: Nyquist pinned at +1 dB, the outer tap the widest feasible) / the 2×
+  design at 1×: the 259 folder 4 V at 3.1 kHz −25.3 / −18.6 / −15.5 dB, 8 V at 1.37 kHz −11.0 / −1.4 / +3.5, 4 V at
+  410 Hz −36.3 / −26.7 / −22.0 (first order −6.3, −4.0, −30.4); 2sl drums' voice, worst folded line re the loudest
+  kept, FM metal −49.8 / −43.1 / −39.9, ring −52.9 / −44.0 / −38.3, Harmonics 1 at 5 kHz −82.7 / −77.4 / −74.6, Fold
+  4 V at 410 Hz −48.9 / −40.1 / −35.0, FM bright −69.3 / −64.6 / −62.2, Fold 4 V at 3.1 kHz −25.3 / −28.2 / −30.6,
+  Fold 8 V at 1.37 kHz −13.5 / −6.4 / −4.9: the best 1× design loses in 9 of 10.
+- First order (the tanh saturator, coherent 16384-point DFT, every alias), the raw mean against the 5/24 design at 1×
+  (+6.4 dB at 24 kHz at 48 kHz alone): 60 cases (48 and 44.1 kHz; 410 Hz, 1.37, 3.1, 5 and 8 kHz; drives 1.5, 4, 12;
+  bias 0 and 0.3), 49 above the floor (11 under −150 dB): lifted in 44, by up to +6.2 dB (+5.7 dB at 1.37 kHz drive
+  12, 48 kHz: −41.5 → −35.8 dB; +5.5 dB at 5 kHz drive 12, 44.1 kHz: −20.0 → −14.4); within 0.05 dB in 4 (8 kHz at
+  48 kHz, its worst alias landing where the equaliser is flat); lowered in 1 (8 kHz drive 1.5 at 44.1 kHz,
+  −58.0 → −59.2).
+So at 1× there is no equaliser for either order, and a block takes its oversampling with no default. The 2×
+equaliser at 2× (the 259 folder at 2× 48 kHz, worst alias under 20 kHz, raw → equalised): 4 V at 3.1 kHz −36.4 → −31.5
+dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
 
 ## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
 
@@ -136,12 +159,31 @@ convolution", DAFx-16** (`parker-zavalishin-lebivic-dafx16.pdf`): the method eq.
 particularly simple form" from ([22] there). Higher orders need tanh's second antiderivative (a dilogarithm); not
 used.
 
-The mean is the 2-tap mean (1 + z^−1)/2 on small signals (−2.4 dB at 10 kHz at 44.1 kHz). Its remedy is the one the
-piecewise-linear shaper's second order takes (above: Bilbao et al. §IV "Additional linear filtering", Välimäki,
-Pekonen & Nam 2012 eq. (16), a linear-phase FIR after the mean): 5 symmetric taps, equiripple by the Remez exchange
-(our design; its product with cos(w/2) is 1 at DC and within ±0.0099 dB up to 5/24 of the rate), two samples more
-latency, 2.5 in all. Being linear and after the mean, it is the same filter on everything that goes through, at any
-drive.
+The mean is the 2-tap mean on small signals; after it the kit's ADAA equaliser for first order at the rate it runs at
+(above): at 1× none, at 2× the 5-tap design between the kit's half-band pair (below, "Halfband oversampler"; Bilbao
+et al. evaluate "at a 2× oversampled rate"). Being linear and after the mean, it is the same filter on everything that
+goes through, at any drive. A bias is taken as held over a step (the mean of tanh along x + b, less tanh b, before the
+equaliser and the downsampler, so silence is 0 from the first sample).
+
+Measured 2026-10-20 (tests/test_techniques.py keeps each):
+
+| | 1× | 2× |
+|---|---|---|
+| small signals, 44.1 kHz | cos(w/2): −0.56 dB at 5 kHz, −2.42 at 10 kHz, −6.35 at 15 kHz, −10.9 at 18 kHz, −16.7 at 20 kHz | within 0.05 dB to 20 kHz (−0.050 at 20 kHz) |
+| small signals, 48 kHz | −0.47, −2.01, −5.11, −8.34, −11.7 dB | within 0.01 dB to 20 kHz |
+| latency at 100 Hz | 0.5 samples, linear phase | 4.32 samples (1.25 + the half-band pair's 3.07), not linear phase |
+| worst alias under 20 kHz, 48 kHz (coherent): 1.37 kHz drive 4 / 3.1 kHz drive 4 / 5 kHz drive 4 / 8 kHz drive 12 / 12 kHz drive 4 / 8 kHz drive 2.7 bias 0.3 | −78.6 / −48.9 / −36.7 / −31.7 / −27.9 / −34.9 dB | −157.6 / −97.7 / −78.4 / −46.5 / −48.0 / −64.9 dB |
+| 8 kHz drive 2.7 at 44.1 kHz, worst alias under 10 kHz (naive −23.3; biased: naive −24.6) | −53.2 dB (biased −47.0) | −78.6 dB (biased −77.7) |
+| hot sines (drive 3 and 20, 5–15 kHz, 44.1–96 kHz): the fundamental off tanh's (Fourier series) through the block's linear response | ≤ 0.34 (of 1.27) | ≤ 0.13 |
+| peaks | never above 1 (a mean of tanh) | < 1.74 (the half-band's ringing on a square-ish wave) |
+| CPU a host sample (below): plain / biased | 55–63 / 75–86 ns | 150–171 / 183–209 ns |
+
+CPU (ours, 2026-10-20): the kit renderer's C (`m4l_dev/genexpr.py`'s translation, CPython's libm calls) built at −O2
+instead of the test suite's −O0, 2^20 samples of a hot sweeping sine through preallocated buffers, best of 31, three
+runs (ranges) on an i7-8700 under load (load average ~70 on 12 threads): not Max's gen~ compiler, so a ratio, not a
+budget. A naive tanh(x) is 25–35 ns; the half-band pair alone 17–23 ns; the 259 folder's second-order shaper 50–54 ns
+at 1× (one step), 110–132 ns at 2× (two steps, the 2× equaliser, the downsampler). The 2× saturator is 2.4–2.8× the
+1×.
 
 Replaced (2026-10-20): the split tanh x = x + (tanh x − x), x through a first-order Thiran allpass of half a sample
 (**Smith, *Physical Audio Signal Processing*, "Thiran Allpass Interpolators"**, `jos-thiran-allpass.html`: a1 =

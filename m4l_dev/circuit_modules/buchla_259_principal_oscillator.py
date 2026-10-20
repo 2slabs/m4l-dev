@@ -22,7 +22,7 @@ waves in step with it; an instrument delays what it mixes with the sine (an AM) 
 
 Inputs: `frequency_hz` (the exponential converter's output) and `frequency_modulation_hz` (linear FM, through zero:
 the phase may run backwards), each evaluated at every step, so a fast pitch sweep (a drum's) is followed exactly.
-`oversampling` (a wiring choice) is how many steps the instrument runs it per host sample. `reset_statements()`
+`oversampling` (a wiring choice, required) is how many steps the instrument runs it per host sample. `reset_statements()`
 puts the phase at the start of the cycle (a hard sync: a note's start; it reaches `<name>_sine` LATENCY_STEPS steps
 later, its jump band-limited). Each `statements()` is one step; it leaves the oscillator's phase now: `<name>_phase`
 (0..1, the instance's History), `<name>_phase_before`, `<name>_phase_step` (cycles this step, negative when FM runs
@@ -80,13 +80,13 @@ class Buchla259PrincipalOscillator(CircuitModule):
     runtime_character_fields = ("sine_shaper_drive",)
     latency_steps = LATENCY_STEPS
 
-    def __init__(self, instance_name, *, frequency_hz, frequency_modulation_hz, oversampling=1, character=None,
+    def __init__(self, instance_name, *, frequency_hz, frequency_modulation_hz, oversampling, character=None,
                  character_inputs=None):
         super().__init__(instance_name, character=character, character_inputs=character_inputs,
                          frequency_hz=frequency_hz, frequency_modulation_hz=frequency_modulation_hz)
-        if not isinstance(oversampling, int) or oversampling < 1:
-            raise BuildError(f"Buchla259PrincipalOscillator {instance_name}: oversampling is a whole number of steps "
-                             f"a sample, got {oversampling!r}")
+        if isinstance(oversampling, bool) or not isinstance(oversampling, int) or oversampling < 1:
+            raise BuildError(f"Buchla259PrincipalOscillator {instance_name}: oversampling (required: the "
+                             f"steps the instrument runs it a host sample) is a whole number >= 1, got {oversampling!r}")
         if not 0 < self.character.sine_shaper_drive <= 1:
             raise BuildError(f"Buchla259PrincipalOscillator {instance_name}: the sine shaper's drive is in (0, 1], "
                              f"got {self.character.sine_shaper_drive!r}")

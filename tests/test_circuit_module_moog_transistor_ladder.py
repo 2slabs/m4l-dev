@@ -123,7 +123,7 @@ class EmphasisLawTests(unittest.TestCase):
                                                           (15000.0, 30000.0, 0.8, 44100), (19000.0, 2000.0, 0.0, 96000)):
                     drawn = float(es5.evaluate(script + f"\nmoog_vcf_response({frequency}, {cutoff}, {emphasis}, {rate})"))
                     gain = feedback_gain_at_emphasis(emphasis, character)
-                    module = abs(small_signal_response(frequency, cutoff, gain, rate, character, oversampling))
+                    module = abs(small_signal_response(frequency, cutoff, gain, rate, character=character, oversampling=oversampling))
                     self.assertAlmostEqual(drawn / module, 1.0, places=9, msg=(oversampling, frequency, cutoff))
                     self.assertAlmostEqual(float(es5.evaluate(script + f"\nmoog_vcf_feedback_gain({emphasis})")), gain,
                                            places=12)
@@ -152,7 +152,8 @@ class SmallSignalTests(unittest.TestCase):
                         out = program.run(count, [x])[1][count // 2:]
                         measured = complex_amplitude_at(out, frequency, SAMPLERATE) / complex_amplitude_at(
                             x[count // 2:], frequency, SAMPLERATE)
-                        twin = small_signal_response(frequency, cutoff, gain, SAMPLERATE, character, oversampling)
+                        twin = small_signal_response(frequency, cutoff, gain, SAMPLERATE, character=character,
+                                                     oversampling=oversampling)
                         message = (character, oversampling, cutoff, gain, frequency)
                         self.assertAlmostEqual(20 * math.log10(abs(measured) / abs(twin)), 0.0, delta=0.01, msg=message)
                         self.assertAlmostEqual(math.degrees(cmath.phase(measured / twin)), 0.0, delta=0.3, msg=message)
@@ -281,7 +282,7 @@ class LargeSignalTests(unittest.TestCase):
         self.assertLess(aliases[2], -53)
 
     def test_a_reset_empties_the_ladder(self):
-        block = MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0")
+        block = MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0", oversampling=2)
         for state in ("moog_s1 = 0;", "moog_x4 = 0;", "moog_coupling_s = 0;", "moog_up_stage_0_in_before = 0;",
                       "moog_down_stage_7_out_before = 0;"):
             self.assertIn(state, block.reset_statements())
@@ -299,11 +300,13 @@ class BuildTests(unittest.TestCase):
                     dict(emphasis_pot_audio_taper_at_half_rotation=0.5), dict(regeneration_onset_emphasis=0.0),
                     dict(emphasis_tap_gain=0.0), dict(base_volts_per_input_volt=math.inf)):
             with self.assertRaises(BuildError, msg=bad):
-                MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0",
+                MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0", oversampling=2,
                                      character=MoogTransistorLadderCharacter(**bad))
         for oversampling in (0, 1.5, True, 4):
             with self.assertRaises(BuildError, msg=oversampling):
                 MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0", oversampling=oversampling)
+        with self.assertRaises(TypeError, msg="oversampling is required: no default"):
+            MoogTransistorLadder("moog", input_volts="in1", control_volts="0", emphasis="0")
 
 
 if __name__ == "__main__":

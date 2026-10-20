@@ -18,8 +18,8 @@ taken here on the sum before the tone filter (where §3.2 derives its 10.5 V ons
 
 The transfer is straight pieces (every cell's fold point, where a node meets its floor, where the sum meets the
 limiter): the kit's antiderivative piecewise-linear shaper (a technique) holds it, so the folder is antialiased by
-second-order ADAA, piece-wise exact, and the technique's equaliser for the unit's `oversampling` after it (a wiring
-choice, required: at 2x its 3-tap mean undone to within +-0.1 dB up to 20 kHz at 2x 48 kHz, three steps late in all;
+second-order ADAA, piece-wise exact, and the kit's ADAA equaliser for second order at the unit's `oversampling` after
+it (`AntiderivativeAntialiasingEqualiser`, order 2; a wiring choice, required: at 2x its 3-tap mean undone to within +-0.1 dB up to 20 kHz at 2x 48 kHz, three steps late in all;
 at 1x none, one step late, -5.9 dB at 10 kHz at 48 kHz, the technique's measurements). Measured on a pure sine at 2x 48 kHz,
 the worst alias under 20 kHz re the fundamental (tests/test_circuit_module_buchla_259_timbre_section.py), first order
 -> second (raw) -> second equalised: 4 V at 3.1 kHz -22.3 -> -36.4 -> -31.5 dB, 8 V at 1.37 kHz -33.7 -> -48.7 -> -45.8
@@ -40,7 +40,7 @@ through its oversampling's equaliser (`output_statements(point)`, then `output_v
 segment between two points (`segment_output_volts`: first order, for a probe of the output's mean); `output_peak_volts`, about where
 the sum sits for drives of 0.6-10 V (3.2 V at 6 V rails, scaling with them), for an instrument that scales it to its
 own level. `statements()` (per host sample) latches the inputs and the drive stage's gain; the instance's own
-History `<name>_before_*` and `<name>_before_before_*` are its last two points and `<name>_raw_mean_before_*` its
+History `<name>_before_*` and `<name>_before_before_*` are its last two points and `<name>_equaliser_raw_mean_before_*` its
 last raw ADAA2 means (`remember_statements`), for an instrument that runs the folder on consecutive sub-samples.
 
 Not modelled (§4.3): slew (above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft knee
@@ -52,7 +52,8 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
-from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import PiecewiseLinearTable, second_order_equaliser
+from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
+from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import PiecewiseLinearTable
 
 # sheet 3A = DAFx-17 Table 1: (Rk1 in, Rk2 feedback, Rk3 to the summer), cells 1-5
 CELL_RESISTORS = [
@@ -176,7 +177,9 @@ class Buchla259TimbreSection(CircuitModule):
         self.table = PiecewiseLinearTable("buchla_259_folder", transfer_pieces(self.character))
         # the points a host sample (a wiring choice, required: ADAA2's equaliser is designed for the rate it runs at)
         self.oversampling = oversampling
-        self.equaliser = second_order_equaliser(oversampling, f"Buchla259TimbreSection {instance_name}")
+        self.equaliser = AntiderivativeAntialiasingEqualiser(f"{instance_name}_equaliser", order=2,
+                                                             oversampling=oversampling,
+                                                             who=f"Buchla259TimbreSection {instance_name}")
         # output_volts_at: ADAA2 centred on the point before, then the equaliser for this oversampling
         self.latency_steps = self.equaliser.latency_steps
         self._points_with_output = set()        # output_statements wrote these points' outputs
@@ -201,14 +204,10 @@ class Buchla259TimbreSection(CircuitModule):
         functions.update(self.equaliser.functions())
         return functions
 
-    def _raw_mean_history_names(self):
-        """The Histories of the instance's last raw ADAA2 means the equaliser takes, newest first."""
-        return [f"{self.instance_name}_raw_mean_before_{age}" for age in range(1, self.equaliser.length)]
-
     def declarations(self):
         return self.substituted("History ${p}_before_folder_input_volts(0), ${p}_before_folder_integral(0), "
                                 "${p}_before_before_folder_input_volts(0)") + \
-            "".join(f", {name}(0)" for name in self._raw_mean_history_names()) + ";"
+            "".join(f", {declaration}" for declaration in self.equaliser.history_declarations()) + ";"
 
     def statements(self):
         return self.substituted("""// ${p}: the Buchla 259's timbre section, its inputs this sample (kit circuit module: Buchla 259 timbre section)
@@ -234,7 +233,7 @@ ${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_
                                                      f"{p}_before_before_folder_input_volts")
         return (f"{point}_folder_raw_mean = {raw_mean};\n"
                 f"{point}_folder_output_volts = "
-                f"{self.equaliser.call([f'{point}_folder_raw_mean'] + self._raw_mean_history_names())};")
+                f"{self.equaliser.output_expression(f'{point}_folder_raw_mean')};")
 
     def output_volts_at(self, point):
         """GenExpr: the folder's output (volts) at `point`, `latency_steps` steps late: what
@@ -257,10 +256,8 @@ ${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_
         if point not in self._points_with_output:
             raise BuildError(f"Buchla259TimbreSection {self.instance_name}: remember_statements({point!r}) before "
                              f"output_statements({point!r}): the equaliser's raw means would skip a point")
-        raw_means = self._raw_mean_history_names()
-        shifts = "".join(f"{raw_means[age]} = {raw_means[age - 1]};\n" for age in range(len(raw_means) - 1, 0, -1))
-        keep = shifts + (f"{raw_means[0]} = {point}_folder_raw_mean;\n" if raw_means else "")
-        return (keep +
-                f"{p}_before_before_folder_input_volts = {p}_before_folder_input_volts;\n"
-                f"{p}_before_folder_input_volts = {point}_folder_input_volts;\n"
-                f"{p}_before_folder_integral = {point}_folder_integral;")
+        lines = [self.equaliser.remember_statements(f"{point}_folder_raw_mean"),
+                 f"{p}_before_before_folder_input_volts = {p}_before_folder_input_volts;",
+                 f"{p}_before_folder_input_volts = {point}_folder_input_volts;",
+                 f"{p}_before_folder_integral = {point}_folder_integral;"]
+        return "\n".join(line for line in lines if line)

@@ -38,10 +38,15 @@ class ShapedSineTests(unittest.TestCase):
         for i in range(64):
             self.assertAlmostEqual(shaped_sine(i / 64, perfect), math.sin(2 * math.pi * i / 64), places=12)
         with self.assertRaises(BuildError):
-            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0",
+            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0", oversampling=1,
                                          character=Buchla259PrincipalOscillatorCharacter(sine_shaper_drive=1.2))
-        with self.assertRaises(BuildError):
-            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0", oversampling=0)
+
+    def test_its_oversampling_is_required_and_a_whole_number_of_steps(self):
+        for bad in (0, -1, 1.5, True, "2"):
+            with self.assertRaises(BuildError, msg=bad):
+                Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0", oversampling=bad)
+        with self.assertRaises(TypeError, msg="no default"):
+            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0")
 
 
 def oscillator_program(frequency_hz="frequency", frequency_modulation_hz="fm", oversampling=1, reset="0",
@@ -123,7 +128,8 @@ class PhaseTests(unittest.TestCase):
                                    places=12)
 
     def test_it_sits_in_the_harness(self):
-        harness([Buchla259PrincipalOscillator("osc", frequency_hz="100", frequency_modulation_hz="0")], {}, ["osc_sine"])
+        harness([Buchla259PrincipalOscillator("osc", frequency_hz="100", frequency_modulation_hz="0", oversampling=1)], {},
+                ["osc_sine"])
 
 
 class SineShaperDriveTests(unittest.TestCase):
@@ -138,7 +144,7 @@ class SineShaperDriveTests(unittest.TestCase):
 
     def test_only_the_drive_moves_at_run_time(self):
         with self.assertRaises(BuildError):
-            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0",
+            Buchla259PrincipalOscillator("o", frequency_hz="1", frequency_modulation_hz="0", oversampling=1,
                                          character_inputs={"symmetry": "1"})
 
     def measured_aliases(self, drive, frequency, oversampling):
