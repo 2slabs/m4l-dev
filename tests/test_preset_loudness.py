@@ -88,6 +88,12 @@ class EffectTests(unittest.TestCase):
         self.assertEqual(preset_loudness.effect_inputs(self.rate, 8.0, ("pad", "drums")),
                          {name: full[name] for name in ("pad", "drums")})
 
+    def test_a_short_chords_and_kick_is_the_start_of_the_long_one(self):
+        # every beat's kick is there however short the input (a loop variable once shadowed the length)
+        short = preset_loudness._chords_and_kick(self.rate, 2.0)
+        long = preset_loudness._chords_and_kick(self.rate, 8.0)
+        self.assertEqual(short, long[:len(short)])
+
     def test_a_bad_input_choice_fails(self):
         with self.assertRaisesRegex(BuildError, "unknown: \\['kazoo'\\]"):
             preset_loudness.effect_inputs(self.rate, 2.0, ("kazoo",))

@@ -203,12 +203,12 @@ def _beat_seconds():
     return 60.0 / BEATS_PER_MINUTE
 
 
-def _drums(rate, draws, seconds):
+def _drums(rate, draws, input_seconds):
     """A kick on every beat, a snare on 2 and 4, closed hats on the 16ths with an open hat on the off-beat."""
-    out = [0.0] * int(seconds * rate)
+    out = [0.0] * int(input_seconds * rate)
     beat = _beat_seconds()
     kick = _kick(rate)
-    for number in range(int(seconds / beat)):
+    for number in range(int(input_seconds / beat)):
         _add_at(out, kick, int(number * beat * rate))
         if number % 2 == 1:
             _add_at(out, _noise_burst(rate, 0.2, 0.06, 0.35, draws, 800, tone_hz=190), int(number * beat * rate))
@@ -221,13 +221,13 @@ def _drums(rate, draws, seconds):
     return out
 
 
-def _bass(rate, draws, seconds):
+def _bass(rate, draws, input_seconds):
     """A 16th-note saw bassline on C1..Bb1, plucked (150 ms decay), the bar repeated."""
-    out = [0.0] * int(seconds * rate)
+    out = [0.0] * int(input_seconds * rate)
     pattern = [24, None, 24, 36, None, 24, 27, None, 24, None, 31, 24, None, 34, 24, None]
     step = _beat_seconds() / 4
     length = int(step * 0.9 * rate)
-    for bar in range(int(seconds / (16 * step))):
+    for bar in range(int(input_seconds / (16 * step))):
         for index, pitch in enumerate(pattern):
             if pitch is None:
                 continue
@@ -239,11 +239,11 @@ def _bass(rate, draws, seconds):
     return out
 
 
-def _pad(rate, draws, seconds):
+def _pad(rate, draws, input_seconds):
     """Detuned saw chords (Cm7, Abmaj7, Bb7, Gm7), a bar each, a slow attack and release, softened above 2.5 kHz."""
-    out = [0.0] * int(seconds * rate)
+    out = [0.0] * int(input_seconds * rate)
     chords = [[48, 51, 55, 58], [44, 48, 51, 55], [46, 50, 53, 56], [43, 46, 50, 53]]
-    seconds_each = seconds / len(chords)
+    seconds_each = input_seconds / len(chords)
     length = int(seconds_each * rate)
     for number, pitches in enumerate(chords):
         for pitch in pitches:
@@ -261,20 +261,20 @@ def _pad(rate, draws, seconds):
     return out
 
 
-def _chords_and_kick(rate, seconds):
+def _chords_and_kick(rate, input_seconds):
     """The kit's chord phrase (m7 on C3, Ab2, Bb2) as saws at the seeded start phases, every bar, a kick every beat."""
-    out = [0.0] * int(seconds * rate)
+    out = [0.0] * int(input_seconds * rate)
     bar = 4 * _beat_seconds()
     start_phases = oscillator_start_phases()
     events = chord_phrase("m7", 4)
-    for bar_number in range(int(seconds / bar)):
+    for bar_number in range(int(input_seconds / bar)):
         for (seconds, pitches), (end_seconds, _) in zip(events[0::2], events[1::2]):
             length = int(round((end_seconds - seconds) * rate))
             for pitch in pitches:
                 note = _polyblep_saw(440.0 * 2 ** ((pitch - 69) / 12), length, rate, next(start_phases), 0.08)
                 _add_at(out, note, int(round((bar_number * bar + seconds) * rate)))
     kick = _kick(rate)
-    for number in range(int(seconds / _beat_seconds())):
+    for number in range(int(input_seconds / _beat_seconds())):
         _add_at(out, kick, int(number * _beat_seconds() * rate))
     return out
 
