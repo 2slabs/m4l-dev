@@ -104,7 +104,7 @@ class RenderedChannelTests(unittest.TestCase):
     def test_a_reset_darkens_the_cell(self):
         block = Buchla292LowPassGateChannel("lpg", input="in1", led_current_amps="led", attack_ms="1", decay_ms="185",
                                             mode="1", resonance="0")
-        self.assertIn(f"lpg_current = {TYPICAL.led_current_floor_amps!r};", block.reset_statements())
+        self.assertIn(f"lpg_cell_current = {TYPICAL.led_current_floor_amps!r};", block.reset_statements())
         self.assertIn("lpg_network_s1 = 0;", block.reset_statements())
 
 

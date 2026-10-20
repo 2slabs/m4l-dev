@@ -199,8 +199,9 @@ time to a specified value is decreased").
 The technique is 2sl gate 0.3.2's vactrol (vactrol-and-lpg.md §5, our model on the above): attack a one-pole toward the
 drive; release `dI/dt = −c (I² − Id²)` stepped `I ← (I + c dt Id²)/(1 + c dt I)` (recombination at a rate ∝ n²: a
 reading of the physics, unverified for any cell), which with eq. (39) gives the measured power-law turn-off; the law
-and the times are the caller's. 2sl gate's version floors the drive at the driver's minimum current; this one floors
-the state, so `release_ms` is exactly the undriven time from `release_from_amps` to `release_to_amps`.
+and the times are the caller's. Undriven, `release_ms` is exactly the time from `release_from_amps` to
+`release_to_amps`. The Buchla 292 channel (circuits/buchla-292-low-pass-gate.md, the VTL5C3/2's constants; moved onto
+this block bit for bit) and the Mu-Tron Bi-Phase (circuits/mutron-bi-phase.md, its own UNVERIFIED constants) use it.
 
 ## gen~ (what Max accepts)
 

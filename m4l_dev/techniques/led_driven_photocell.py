@@ -3,7 +3,9 @@ asymmetric memory: quick to light, slow to go dark (references/dsp.md, "LED-driv
 vactrol, a Bi-Phase "photo-mod", a Uni-Vibe's lamp-lit cells: no part is claimed here; the law's constants and the
 times are the caller's (a circuit module's character).
 
-State: the cell's effective LED current I (amps), held at or above `darkest_current_amps` (the cell's dark floor).
+State: the cell's effective LED current I (amps), starting dark (`darkest_current_amps`). The drive is the caller's
+(a driver's current, >= 0); the resistance reads I no darker than `darkest_current_amps` (a driver's floor, the dark
+end of the law), while I itself goes on falling undriven (the cell keeps darkening, catalog note 3).
 - Light rising (drive Id > I): a one-pole toward Id with time constant `attack_ms` (2sl gate 0.3.2's vactrol attack).
 - Light falling (Id <= I): dI/dt = -c (I^2 - Id^2), stepped semi-implicitly, I <- (I + c dt Id^2) / (1 + c dt I):
   unconditionally stable, monotone, never past Id. Released from I0 into the dark, 1/I = 1/I0 + c t, so with the law
@@ -17,7 +19,7 @@ State: the cell's effective LED current I (amps), held at or above `darkest_curr
 
 The drive, the attack and the release time are GenExpr inputs (a caller may move them: a hit's strength, a Decay
 knob); the law and the release span are numbers fixed at build. Outputs: `<name>_current` (A), `<name>_resistance`
-(Ohm). 2sl gate's vactrol (src/gate_dsp.py, 0.3.2) is this law and this memory; the 292 module can be built on this.
+(Ohm). The Buchla 292 module's vactrol and the Mu-Tron Bi-Phase's cells are this block, each with its own constants.
 """
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
@@ -57,17 +59,22 @@ class LedDrivenPhotocell(Technique):
 
     def statements(self):
         return self.substituted("""// ${p}: LED-driven photocell (kit technique: LED-driven photocell)
-${p}_drive = max(${drive_current_amps}, 0);
+${p}_drive = ${drive_current_amps};
+// its effective LED current, toward the drive (turn-on) or recombining (turn-off)
 if (${p}_drive > ${p}_current) {
-\t${p}_current = ${p}_current + (${p}_drive - ${p}_current) * smoothing_coefficient(${attack_ms}, samplerate);
+	${p}_current = ${p}_current + (${p}_drive - ${p}_current) * smoothing_coefficient(${attack_ms}, samplerate);
 } else {
-\t// dI/dt = -c (I^2 - Id^2), semi-implicit: stable, never past the drive; held at the darkest current
-\t${p}_release_step = ${span} / max(${release_ms} * samplerate / 1000, 1);
-\t${p}_current = max((${p}_current + ${p}_release_step * ${p}_drive * ${p}_drive) / (1 + ${p}_release_step * ${p}_current), ${dark});
+	// dI/dt = -c (I^2 - Id^2), semi-implicit: stable, monotone, never past the drive
+	${p}_release_step = ${span} / mstosamps(${release_ms});
+	${p}_current = (${p}_current + ${p}_release_step * ${p}_drive * ${p}_drive) / (1 + ${p}_release_step * ${p}_current);
 }
-${p}_resistance = ${scale} * pow(${p}_current, -${exponent}) + ${floor};""",
+${p}_resistance = ${scale} * pow(max(${p}_current, ${dark}), -${exponent}) + ${floor};""",
                                 dark=self.darkest_current_amps, span=self.release_span, scale=self.law_scale_ohms,
                                 exponent=self.law_exponent, floor=self.law_floor_ohms)
+
+    def reset_statements(self):
+        """The cell dark."""
+        return self.substituted("${p}_current = ${dark};\n", dark=self.darkest_current_amps)
 
     def resistance_at(self, current_amps):
         """The steady resistance (Ohm) at a constant drive."""

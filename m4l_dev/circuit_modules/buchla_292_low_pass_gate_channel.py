@@ -3,7 +3,8 @@ VTL5C3/2) and the audio network around the photocell, after Parker & D'Angelo, "
 Lowpass-Gate", DAFx-13, with the measured VTL5C3/2 turn-off (Najnudel et al., DAFx-23)
 (references/circuits/buchla-292-low-pass-gate.md).
 
-The vactrol (§5). State: the effective LED current I (amps). The LED's drive current `led_current_amps` comes from
+The vactrol (§5), the kit's LED-driven photocell technique with the VTL5C3/2's constants. State: the effective LED
+current I (amps). The LED's drive current `led_current_amps` comes from
 the channel's control circuit (a log-amp LED driver, held to [10.1 uA, 40 mA]: the character's floor and ceiling).
 - Turn-on (drive > I): a one-pole toward the drive with time constant `attack_ms` (the cell's turn-on: 2.5-3 ms to 63 %
   at full drive, longer at reduced drive: catalog note 4; the instrument gives the time).
@@ -33,6 +34,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell
 from m4l_dev.techniques.zero_delay_state_variable_filter import ZeroDelayStateVariableFilter
 
 # DAFx-13 Table 1
@@ -126,6 +128,14 @@ class Buchla292LowPassGateChannel(CircuitModule):
                          attack_ms=attack_ms, decay_ms=decay_ms, mode=mode, resonance=resonance)
         check_the_lowpass_mode_stays_damped(self.character)
         p = instance_name
+        character = self.character
+        self.cell = LedDrivenPhotocell(f"{p}_cell", drive_current_amps=led_current_amps, attack_ms=attack_ms,
+                                       release_ms=decay_ms, law_scale_ohms=character.photocell_fit_scale,
+                                       law_exponent=character.photocell_fit_exponent,
+                                       law_floor_ohms=character.photocell_fit_floor_ohms,
+                                       darkest_current_amps=character.led_current_floor_amps,
+                                       release_from_amps=character.led_current_ceiling_amps,
+                                       release_to_amps=led_current_at_resistance(DECAY_END_RESISTANCE, character))
         self.network = ZeroDelayStateVariableFilter(f"{p}_network", input=f"{p}_input", cutoff_hz=f"{p}_natural_hz",
                                                     q=f"{p}_q", prewarp_hz=f"{p}_prewarp_hz")
 
@@ -133,22 +143,15 @@ class Buchla292LowPassGateChannel(CircuitModule):
         return self.network.functions()
 
     def declarations(self):
-        return self.substituted("History ${p}_current(${floor});\n",
-                                floor=self.character.led_current_floor_amps) + self.network.declarations()
+        return self.cell.declarations() + "\n" + self.network.declarations()
 
     def statements(self):
         character = self.character
         return self.substituted("""// ${p}: a Buchla 292 low pass gate channel (kit circuit module: Buchla 292 low pass gate channel)
 ${p}_input = ${input};
-${p}_led_current = ${led_current_amps};
-// the vactrol: its effective LED current, toward the drive (turn-on) or recombining (turn-off)
-if (${p}_led_current > ${p}_current) {
-	${p}_current = ${p}_current + (${p}_led_current - ${p}_current) * smoothing_coefficient(${attack_ms}, samplerate);
-} else {
-	${p}_release_step = ${release_span} / mstosamps(${decay_ms});
-	${p}_current = (${p}_current + ${p}_release_step * ${p}_led_current * ${p}_led_current) / (1 + ${p}_release_step * ${p}_current);
-}
-${p}_resistance_ohms = ${fit_scale} * pow(max(${p}_current, ${floor}), -${fit_exponent}) + ${fit_floor};
+// the vactrol
+""") + self.cell.statements() + self.substituted("""
+${p}_resistance_ohms = ${p}_cell_resistance;
 // the network: H(s) = 1 / (alpha1 + alpha2 s + alpha3 s^2) in every mode
 ${p}_mode = ${mode};
 ${p}_r_alpha = ${p}_mode < 0.5 ? ${r_alpha_vca} : ${r_alpha_both};
@@ -169,9 +172,7 @@ ${p}_q = sqrt(${p}_alpha1 * ${p}_alpha3) / ${p}_alpha2;
 ${p}_corner_term = ${p}_alpha2 * ${p}_alpha2 - 2 * ${p}_alpha1 * ${p}_alpha3;
 ${p}_corner_hz = sqrt(2 * ${p}_alpha1 * ${p}_alpha1 / (${p}_corner_term + sqrt(${p}_corner_term * ${p}_corner_term + 4 * ${p}_alpha1 * ${p}_alpha1 * ${p}_alpha3 * ${p}_alpha3))) / 6.283185307;
 ${p}_prewarp_hz = min(${p}_corner_hz, ${prewarp_highest});
-""", release_span=release_span(character), fit_scale=character.photocell_fit_scale,
-            floor=character.led_current_floor_amps, fit_exponent=character.photocell_fit_exponent,
-            fit_floor=character.photocell_fit_floor_ohms, r_alpha_vca=R_ALPHA["vca"], r_alpha_both=R_ALPHA["both"],
+""", r_alpha_vca=R_ALPHA["vca"], r_alpha_both=R_ALPHA["both"],
             c3_lowpass=C3_LOWPASS, c1=C1, c2=C2, resonance_share=character.highest_resonance_share_of_stable,
             prewarp_highest=PREWARP_HIGHEST_HZ) + self.network.statements() + self.substituted("""
 ${p}_out = ${p}_network_lowpass * ${p}_dc_gain * (${p}_mode < 0.5 ? ${vca_gain} : 1);""",
@@ -179,5 +180,4 @@ ${p}_out = ${p}_network_lowpass * ${p}_dc_gain * (${p}_mode < 0.5 ? ${vca_gain} 
 
     def reset_statements(self):
         """The cell dark and the network empty (a Stop)."""
-        return self.substituted("${p}_current = ${floor};\n", floor=self.character.led_current_floor_amps) + \
-            self.network.reset_statements()
+        return self.cell.reset_statements() + self.network.reset_statements()
