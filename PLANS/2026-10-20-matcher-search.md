@@ -89,3 +89,15 @@ strands of 2000 with population 14 (1000 global renders each) cannot. The radial
 doubling), its population scored in parallel by 6 processes, the same 12 000 renders (70 % global, 30 % refinement
 from its best at step 0.05), the current score, targets 0-7. Prediction: >= 3 / 8 recovered (baseline 0 / 4 on these),
 median best <= 3.
+
+### H3a result: refuted
+
+0 / 3 (targets 0-2, stopped). The large population's global phase ended at 9.1, 7.8, 11.4 (the six strands' global
+phases reach ~5-8), refinement brought them to 4.9, 5.8, 8.3. A large population does not find the basin.
+
+## H6. Basin of attraction: from how far does a local search come back?
+
+CMA-ES (default population, step = r) started at the truth moved by RMS r per coordinate (all 31, random direction),
+3000 renders, the current score; targets 0-3. Prediction: back to <= truth + 0.25 from r 0.02 in >= 3 / 4, from
+r 0.05 in 2 / 4, from r 0.1 in <= 1 / 4, from r 0.2 in 0 / 4. If even r 0.02 fails, the score is a needle at the
+local scale and no global search can be the fix; the score (or the parameter axes) must change.
