@@ -1088,6 +1088,11 @@ def check(code, num_inputs=None, num_outputs=None):
 # 1.2 s and 3.4 s.
 
 COMPILER_FLAGS = ("-O0", "-std=c99", "-fPIC", "-shared", "-ffp-contract=off", "-fno-fast-math", "-fno-builtin")
+# A program rendered thousands of times (the patch matcher's voice) is built at -O2 instead: the build's extra seconds
+# pay off within a match, and with the same floating-point flags the samples are the same bits (measured 2026-10-20 on
+# the 2sl drums synth voice: -O0, -O2 and -O3 renders identical; 34.5 -> 19.1 ms a 0.55 s hit; tests/test_patch_matcher.py
+# holds the fixture voice to it; m4l_dev/genexpr_export.py relies on the same for plugins).
+OPTIMISED_COMPILER_FLAGS = ("-O2",) + COMPILER_FLAGS[1:]
 
 C_PRELUDE = r"""
 #include <math.h>
@@ -1562,9 +1567,10 @@ class NoiseState(ctypes.Structure):
     _fields_ = [("words", ctypes.c_uint32 * 624), ("index", ctypes.c_int32)]
 
 
-def load_render_function(c_source):
-    """The compiled genexpr_render of `c_source` (m4l_dev/c_library_cache.py builds, caches and loads it)."""
-    library = load_c_library(c_source, COMPILER_FLAGS)
+def load_render_function(c_source, optimised=False):
+    """The compiled genexpr_render of `c_source` (m4l_dev/c_library_cache.py builds, caches and loads it), at
+    OPTIMISED_COMPILER_FLAGS when `optimised` (the same samples, built slower, rendered faster)."""
+    library = load_c_library(c_source, OPTIMISED_COMPILER_FLAGS if optimised else COMPILER_FLAGS)
     render = library.genexpr_render
     render.restype = None
     render.argtypes = [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -1594,7 +1600,7 @@ def buffer_address(double_array):
 # ----------------------------------------------------------------------------
 
 class GenProgram:
-    def __init__(self, code, num_inputs, num_outputs, samplerate=44100.0, seed=1):
+    def __init__(self, code, num_inputs, num_outputs, samplerate=44100.0, seed=1, optimised=False):
         self.samplerate = float(samplerate)
         self.num_inputs = num_inputs
         self.num_outputs = num_outputs
@@ -1616,7 +1622,7 @@ class GenProgram:
         self._delay_positions = (ctypes.c_long * max(1, len(info.delays)))()
         self._noise_state = NoiseState()
         self.c_source = c_source
-        self._render = load_render_function(c_source)
+        self._render = load_render_function(c_source, optimised)
         self.set_seed(seed)
 
     def set_seed(self, seed):

@@ -12,13 +12,18 @@ reads REFERENCE_LOUDNESS_LUFS: the score ignores level. Then (m4l_dev/patch_matc
             where both are on the floor are left out
   envelope  the same over a peak-follower envelope of the squared hit (instant attack, 50 ms release, read every
             2.5 ms): the attack's fine timing, which no FFT size here resolves
-  pitch     the weighted mean |pitch error| in semitones (capped at 12) of YIN pitch tracks (decimated to ~12 kHz,
-            10 ms hop), each target frame weighted by how tonal and how loud it is; spectral distances order pitch
-            differences badly (references/sound-matching.md), hence a pitch term of its own. A hit with no tonal
-            frame (a hat) has no pitch term.
+  centroid  the mean |difference| in semitones of each frame's log2-frequency spectral centroid (the whole-hit
+            log-mel spectrograms, floored as above), each target frame weighted by its level: cell by cell spectral
+            distances order pitch and brightness differences badly, the log spectral centroid orders them
+            perfectly and smoothly (references/sound-matching.md, D)
   Why these and not DDSP's six sizes etc.: patch_match_features.c's comments, each with its measurement.
 
-  score = spectral + ENVELOPE_WEIGHT * envelope + PITCH_WEIGHT * pitch          (0 for identical hits; "dB-like")
+  score = spectral + ENVELOPE_WEIGHT * envelope + CENTROID_WEIGHT * centroid    (0 for identical hits; "dB-like")
+
+No pitch tracker: a YIN pitch term (until 2026-10-20) flipped between dips of YIN's difference function on folded,
+modulated or noisy tones under a 0.1 % move of a parameter, each flip costing up to 12 semitones, which made the score
+a needle around the truth (PLANS/2026-10-20-matcher-search.md, H5); the fixture voice's recovery rose from 85 % with it
+to 100 % with the centroid term instead.
 
 A silent candidate scores SILENT_CANDIDATE_SCORE (the worst); a candidate holding a NaN or infinity is a voice bug and
 raises. Standard library + the system C compiler (the analysis is C, built once into the kit's cache, as
@@ -38,7 +43,9 @@ PREROLL_SECONDS = 0.002
 ANALYSIS_SECONDS_LIMIT = 2.0
 REFERENCE_LOUDNESS_LUFS = -20.0
 ENVELOPE_WEIGHT = 1.0
-PITCH_WEIGHT = 1.0
+# per semitone of centroid difference: an octave costs 3, as much as a clearly different spectrum (measured on the
+# fixture voice: 100 % recovery at 0.25, PLANS/2026-10-20-matcher-search.md)
+CENTROID_WEIGHT = 0.25
 SILENT_CANDIDATE_SCORE = 1000.0
 
 FEATURES_SOURCE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "patch_match_features.c")
@@ -116,20 +123,18 @@ def onset_index(samples):
 class ScoreComponents:
     spectral_db: float
     envelope_db: float
-    pitch_semitones: float
-    target_tonal_fraction: float
+    centroid_semitones: float
     silent: bool = False
 
     @property
     def score(self):
         if self.silent:
             return SILENT_CANDIDATE_SCORE
-        return self.spectral_db + ENVELOPE_WEIGHT * self.envelope_db + PITCH_WEIGHT * self.pitch_semitones
+        return self.spectral_db + ENVELOPE_WEIGHT * self.envelope_db + CENTROID_WEIGHT * self.centroid_semitones
 
     def as_dict(self):
         return {"score": self.score, "spectral_db": self.spectral_db, "envelope_db": self.envelope_db,
-                "pitch_semitones": self.pitch_semitones, "target_tonal_fraction": self.target_tonal_fraction,
-                "silent": self.silent}
+                "centroid_semitones": self.centroid_semitones, "silent": self.silent}
 
 
 class MatchTarget:
@@ -159,7 +164,7 @@ class MatchTarget:
         self.candidate_length = self.analysis_length + int(round(self.CANDIDATE_LATENCY_SECONDS * self.rate))
         self.features, self.gain = self._analyse(signal, description)
         self._scratch = array.array("d", bytes(8 * len(self.features)))
-        self._components = array.array("d", [0.0] * 4)
+        self._components = array.array("d", [0.0] * 3)
 
     def _analyse(self, signal, description, into=None):
         library = features_library()
@@ -184,7 +189,7 @@ class MatchTarget:
             raise BuildError(f"{description}: no samples")
         features, _ = self._analyse(signal, description, into=self._scratch)
         if features is None:
-            return ScoreComponents(0.0, 0.0, 0.0, 0.0, silent=True)
+            return ScoreComponents(0.0, 0.0, 0.0, silent=True)
         status = features_library().match_distance(_address(self.features), _address(features), self.analysis_length,
                                                    self.rate, _address(self._components))
         if status != MATCH_OK:

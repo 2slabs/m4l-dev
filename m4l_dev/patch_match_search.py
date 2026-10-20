@@ -3,10 +3,14 @@ for a target hit, by rendering and scoring candidates (Genopatch's guess, render
 warm start).
 
 Several independent strands (Genopatch grows four; six here by default), each in its own process:
-  1. global: CMA-ES (Hansen's tutorial, its default settings) from a random point of the unit cube with step
-     GLOBAL_STEP, restarted from a new random point with twice the population when it has converged or stalls (IPOP);
-  2. refinement: CMA-ES from the strand's best with step REFINEMENT_STEP (Genopatch's restart "using the currently
-     loaded patch as the search base").
+  1. global: CMA-ES (Hansen's tutorial, its default settings) over the continuous and integer parameters from a random
+     point of the unit cube with step GLOBAL_STEP, restarted from a new random point with twice the population when it
+     has converged or stalls (IPOP);
+  2. a sweep of the enums at the strand's best: each one tried at every choice, the rest held (an enum's choices are
+     unordered: a filter mode, a shift register's pattern; on a CMA-ES axis any step lands on an unrelated choice and
+     selection learns nothing, PLANS/2026-10-20-matcher-search.md H6 / H7);
+  3. refinement: CMA-ES from the strand's best with step REFINEMENT_STEP (Genopatch's restart "using the currently
+     loaded patch as the search base"), in two halves with an enum sweep after each when the voice has enums.
 The search runs in an unbounded space folded onto the unit cube (a triangle wave: 1.2 -> 0.8, -0.1 -> 0.1), so CMA-ES
 needs no bound handling and every candidate is in range; MatchedParameter maps the unit cube to Param values.
 
@@ -29,6 +33,10 @@ from m4l_dev.patch_match_score import MatchTarget
 
 GLOBAL_STEP = 0.3
 REFINEMENT_STEP = 0.05
+# a run has converged when its distribution's longest axis is under this (unit cube): a global run restarts, a
+# refinement stops
+GLOBAL_CONVERGED_STEP = 1e-3
+REFINEMENT_CONVERGED_STEP = 1e-5
 # a global run restarts when its best has improved by less than this (score units) over its last
 # 10 + 30 n / lambda generations (the tutorial's TolStagnation-like window): local minima are common (measured on the
 # fixture drum voice: converged runs end anywhere from the truth's score to 2.5 x it)
@@ -240,49 +248,114 @@ def _say(settings, message):
         print(message, file=sys.stderr, flush=True)
 
 
+# an enum whose first this many other choices all score exactly the held choice's score is silent in this setting
+# (the metal source's pattern while white noise plays): its other choices are not rendered
+INACTIVE_ENUM_PROBES = 4
+
+
+def discrete_sweep(objective, voice, units, discrete_indices, budget, passes):
+    """Each enum in turn tried at every one of its choices, the others held; the best kept. Repeated until a pass
+    changes nothing, `passes` are done, or the next enum's choices would pass the budget. An enum found inactive
+    (INACTIVE_ENUM_PROBES choices scoring exactly the held one) is left. Returns the best units."""
+    best_units = list(units)
+    best_score = objective(best_units)
+    for _ in range(passes):
+        changed = False
+        for index in discrete_indices:
+            parameter = voice.parameters[index]
+            held_value = parameter.value_of_unit(best_units[index])
+            candidates = [unit for unit in discrete_units_of(parameter) if parameter.value_of_unit(unit) != held_value]
+            if objective.evaluations + len(candidates) > budget:
+                return best_units
+            held_score, unchanged_probes = best_score, 0
+            for position, unit in enumerate(candidates):
+                trial = list(best_units)
+                trial[index] = unit
+                score = objective(trial)
+                if score == held_score:
+                    unchanged_probes += 1
+                    if unchanged_probes == position + 1 == INACTIVE_ENUM_PROBES:
+                        break
+                if score < best_score:
+                    best_score, best_units, changed = score, trial, True
+        if not changed:
+            break
+    return best_units
+
+
+def discrete_units_of(parameter):
+    """The unit-cube points of an enum's choices (the middle of each one's share)."""
+    if parameter.kind != "enum":
+        raise BuildError(f"parameter '{parameter.name}' is {parameter.kind}, only an enum is swept")
+    return [(index + 0.5) / len(parameter.choices) for index in range(len(parameter.choices))]
+
+
+def run_continuous_search(objective, start_units, continuous_indices, step, random_source, budget, converged_step,
+                          population=None, stall_improvement=None):
+    """CMA-ES over the continuous and integer parameters only (the enums held at start_units' values) until its largest
+    axis is under converged_step, it stalls (when stall_improvement is given) or the budget is spent. Returns the
+    search object."""
+    def full_units(continuous_point):
+        units = list(start_units)
+        for index, value in zip(continuous_indices, continuous_point):
+            units[index] = value
+        return units
+    search = CovarianceMatrixAdaptation([start_units[index] for index in continuous_indices], step, random_source,
+                                       population)
+    stall_window = 10 + int(math.ceil(30 * len(continuous_indices) / search.population))
+    best_by_generation = []
+    while objective.evaluations + search.population <= budget:
+        scores = [objective(full_units(candidate)) for candidate in search.ask()]
+        search.tell(scores)
+        best_by_generation.append(min([min(scores)] + best_by_generation[-1:]))
+        if search.largest_axis_step() < converged_step or search.condition() > 1e14:
+            break
+        if (stall_improvement is not None and len(best_by_generation) > stall_window
+                and best_by_generation[-stall_window - 1] - best_by_generation[-1] < stall_improvement):
+            break
+    return search
+
+
 def run_strand(voice, target_samples, rate, settings, strand):
-    """One strand: global CMA-ES with IPOP restarts, then refinement from its best. Picklable entry point."""
+    """One strand: global CMA-ES over the continuous and integer parameters with IPOP restarts (each from a random
+    point, its enums too); a sweep of the enums at the strand's best; refinement of the rest from it in two halves,
+    a sweep after each. Picklable entry point."""
     started = time.time()
     random_source = random.Random(f"patch-match/{settings.seed}/{strand}")
     target = MatchTarget(target_samples, rate)
     objective = CandidateObjective(voice, target)
     budget = settings.evaluations_per_strand
     global_budget = budget - int(round(settings.refinement_fraction * budget))
+    # an enum's choices are unordered (a filter mode, a shift register's pattern): swept, never a CMA-ES axis; an
+    # integer is an ordered count and is searched with the continuous parameters, rounded by its MatchedParameter
+    continuous_indices = [index for index, parameter in enumerate(voice.parameters) if parameter.kind != "enum"]
+    discrete_indices = [index for index, parameter in enumerate(voice.parameters) if parameter.kind == "enum"]
     population = None
     restarts = -1
-    if CovarianceMatrixAdaptation([0.5] * voice.dimension, GLOBAL_STEP, random_source).population > global_budget:
-        raise BuildError(f"{global_budget} global evaluations per strand are under one CMA-ES population for "
-                              f"{voice.dimension} parameters: give more evaluations")
     while objective.evaluations < global_budget:
         restarts += 1
         start = [random_source.random() for _ in range(voice.dimension)]
-        search = CovarianceMatrixAdaptation(start, GLOBAL_STEP, random_source, population)
-        population = search.population * 2           # the next restart's (IPOP)
-        stall_window = 10 + int(math.ceil(30 * voice.dimension / search.population))
-        run_best_by_generation = []
-        _say(settings, f"strand {strand}: global run {restarts}, population {search.population}, "
-                       f"{objective.evaluations} evaluations, best {objective.best_score:.3f}")
-        while objective.evaluations + search.population <= global_budget:
-            candidates = search.ask()
-            scores = [objective(candidate) for candidate in candidates]
-            search.tell(scores)
-            run_best_by_generation.append(min([min(scores)] + run_best_by_generation[-1:]))
-            converged = search.largest_axis_step() < 1e-3
-            stalled = (len(run_best_by_generation) > stall_window
-                       and run_best_by_generation[-stall_window - 1] - run_best_by_generation[-1] < settings.stall_improvement)
-            if converged or stalled or search.condition() > 1e14:
-                break
-        else:
+        if not continuous_indices:
+            objective(start)
+            break
+        search = run_continuous_search(objective, start, continuous_indices, GLOBAL_STEP, random_source,
+                                       global_budget, GLOBAL_CONVERGED_STEP, population, settings.stall_improvement)
+        population = search.population * 2
+        if objective.evaluations + search.population > global_budget:
             break
     global_best_score = objective.best_score
-    refinement_start = objective.best_units
-    _say(settings, f"strand {strand}: refining from {global_best_score:.3f} after {objective.evaluations} evaluations")
-    refinement = CovarianceMatrixAdaptation(refinement_start, REFINEMENT_STEP, random_source)
-    while objective.evaluations + refinement.population <= budget:
-        candidates = refinement.ask()
-        refinement.tell([objective(candidate) for candidate in candidates])
-        if refinement.largest_axis_step() < 1e-5:
-            break
+    if discrete_indices:
+        discrete_sweep(objective, voice, objective.best_units, discrete_indices, budget, passes=2)
+    # refinement: with discrete parameters, two halves with a sweep after each (a refined continuous best can prefer
+    # another switch or pattern); without, one run
+    remaining = budget - objective.evaluations
+    phase_ends = [objective.evaluations + remaining // 2, budget] if discrete_indices else [budget]
+    for phase_end in phase_ends:
+        if continuous_indices:
+            run_continuous_search(objective, objective.best_units, continuous_indices, REFINEMENT_STEP, random_source,
+                                  phase_end, REFINEMENT_CONVERGED_STEP)
+        if discrete_indices:
+            discrete_sweep(objective, voice, objective.best_units, discrete_indices, budget, passes=1)
     _say(settings, f"strand {strand}: done, best {objective.best_score:.3f} after {objective.evaluations} evaluations")
     return StrandResult(strand=strand, best_units=objective.best_units,
                         best_values=voice.values_of_units(objective.best_units),

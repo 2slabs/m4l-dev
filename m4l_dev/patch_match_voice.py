@@ -2,7 +2,8 @@
 parameters' search ranges, how it is triggered) and the map from the search's unit cube to parameter values.
 
 A voice is plain data (picklable: the search's worker processes get it whole). Rendering one hit: a fresh GenProgram
-(no state from the hit before), the fixed values, the searched values, the noise seed (gen~'s noise() and, through the
+(no state from the hit before; built at -O2, genexpr.OPTIMISED_COMPILER_FLAGS: a match renders one program thousands
+of times), the fixed values, the searched values, the noise seed (gen~'s noise() and, through the
 voice's seed Param, the kit's seeded techniques), the trigger on its input, the other inputs at zero, the audio
 output's samples.
 """
@@ -18,8 +19,9 @@ KINDS = ("continuous", "integer", "enum")
 
 @dataclass(frozen=True)
 class MatchedParameter:
-    """One searched Param: a continuous range on a linear or log scale, integers in a range, or an enum (the Param
-    values it takes, in order). Make one with `continuous`, `integer` or `enum`."""
+    """One searched Param: a continuous range on a linear or log scale, integers in a range (an ordered count: searched
+    with the continuous ones, rounded), or an enum (the Param values it takes: choices in no order of sound, each
+    tried in turn by the search's sweep, patch_match_search.py). Make one with `continuous`, `integer` or `enum`."""
     name: str
     minimum: float
     maximum: float
@@ -177,7 +179,8 @@ class MatchedVoice:
 
     def render(self, values_by_name, num_samples, rate):
         """One hit: `num_samples` of the audio output at `rate`, the searched Params at `values_by_name`."""
-        program = GenProgram(self.gen_code, self.num_inputs, self.num_outputs, samplerate=rate, seed=self.noise_seed)
+        program = GenProgram(self.gen_code, self.num_inputs, self.num_outputs, samplerate=rate, seed=self.noise_seed,
+                             optimised=True)
         for fixed_name, fixed_value in self.fixed_values:
             program.set_param(fixed_name, fixed_value)
         if self.noise_seed_param:

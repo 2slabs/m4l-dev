@@ -3,9 +3,10 @@
  * EBU Tech 3341's loudest 400 ms window), and turned into features:
  *   - a log-mel spectrogram at each of several FFT sizes (the multi-scale spectral comparison of DDSP / Parallel
  *     WaveGAN, on a mel scale),
- *   - an amplitude envelope in dB (a peak follower: the attack's fine timing),
- *   - a YIN pitch track (f0, aperiodicity, level per frame) for the tonal part of a hit.
- * match_distance compares two feature vectors of the same analysis length and rate.
+ *   - an amplitude envelope in dB (a peak follower: the attack's fine timing).
+ * match_distance compares two feature vectors of the same analysis length and rate: the spectrograms cell by cell, the
+ * envelopes, and each frame's log-frequency spectral centroid (the ordering of pitch and brightness, which a cell by
+ * cell distance lacks).
  * Built by patch_match_score.py with the system C compiler into the kit's cache; plain C99, no fast-math.
  * Every layout decision lives here (match_feature_size): Python never computes an offset.
  */
@@ -36,25 +37,16 @@ static const long MEL_BAND_COUNTS[RESOLUTION_COUNT] = {48, 40, 32, 24};
 #define ENVELOPE_RELEASE_SECONDS 0.05
 #define ENVELOPE_HOP_SECONDS 0.0025
 
-#define PITCH_WINDOW_SECONDS 0.02
-#define PITCH_HOP_SECONDS 0.01
-#define PITCH_LOWEST_HZ 25.0
-#define PITCH_HIGHEST_HZ 2000.0
-#define PITCH_ANALYSIS_RATE 12000.0     /* YIN runs on the hit decimated to about this rate (whole factor) */
-#define PITCH_THRESHOLD 0.3             /* YIN suggests 0.1 ("not critical"); 0.3: see pitch_track */
-
 #define DECIBEL_OF_ZERO -200.0
 
 /* the distance's choices */
 #define SPECTRAL_DYNAMIC_RANGE_DB 70.0  /* cells more than this under the target's loudest cell are "floor" */
 #define ENVELOPE_DYNAMIC_RANGE_DB 70.0
-/* how much a target frame's pitch counts: 1 under FULLY_TONAL, 0 over NOT_TONAL, linear between, times the same ramp
- * on its level (1 within TONAL_RANGE_DB of the loudest frame, 0 at twice that). Soft, so a frame on the edge of
- * tonal does not flip the score between two renders of one sound with different noise. */
-#define FULLY_TONAL_APERIODICITY 0.1
-#define NOT_TONAL_APERIODICITY 0.3
-#define TONAL_RANGE_DB 20.0
-#define PITCH_ERROR_CAP_SEMITONES 12.0  /* a wrong pitch costs at most an octave per frame */
+/* the centroid term: a target frame counts fully within CENTROID_FULL_RANGE_DB of the loudest frame (its floored
+ * mel power, per resolution), not at all CENTROID_ZERO_RANGE_DB under it, linearly between: a frame of the decay's
+ * floor has no meaningful centroid */
+#define CENTROID_FULL_RANGE_DB 20.0
+#define CENTROID_ZERO_RANGE_DB 40.0
 
 enum {
     MATCH_OK = 0,
@@ -147,25 +139,7 @@ static long resolution_frames(long analysis_length, double rate, int resolution)
 }
 
 static long envelope_hop(double rate) { long hop = lround(ENVELOPE_HOP_SECONDS * rate); return hop < 1 ? 1 : hop; }
-static long pitch_hop(double rate) { long hop = lround(PITCH_HOP_SECONDS * rate); return hop < 1 ? 1 : hop; }
-static long pitch_window(double rate) { long w = lround(PITCH_WINDOW_SECONDS * rate); return w < 2 ? 2 : w; }
-static long pitch_longest_lag(double rate) { return (long)ceil(rate / PITCH_LOWEST_HZ); }
-static long pitch_shortest_lag(double rate) { long lag = (long)floor(rate / PITCH_HIGHEST_HZ); return lag < 2 ? 2 : lag; }
-
-static long pitch_decimation(double rate) { long factor = (long)floor(rate / PITCH_ANALYSIS_RATE); return factor < 1 ? 1 : factor; }
-
-static long pitch_fft_size(double rate)
-{
-    long needed = 2 * pitch_window(rate) + pitch_longest_lag(rate);
-    long size = 1;
-    while (size < needed) {
-        size <<= 1;
-    }
-    return size;
-}
-
-/* the feature vector: per resolution [frames x bands] dB, then envelope [frames] dB, then pitch [frames x 3]
- * (f0 Hz or 0, aperiodicity, level dB) */
+/* the feature vector: per resolution [frames x bands] dB, then envelope [frames] dB */
 long match_feature_size(long analysis_length, double rate)
 {
     if (analysis_length <= 0 || !(rate > 0)) {
@@ -176,7 +150,6 @@ long match_feature_size(long analysis_length, double rate)
         size += resolution_frames(analysis_length, rate, resolution) * MEL_BAND_COUNTS[resolution];
     }
     size += frames_of(analysis_length, envelope_hop(rate));
-    size += 3 * frames_of(analysis_length, pitch_hop(rate));
     return size;
 }
 
@@ -275,6 +248,22 @@ static void mel_bands_of_power(const double *power, long bins, double bin_hertz,
     }
 }
 
+/* a resolution's mel triangle edges (bands + 2 of them, Hz): band b spans edges[b] .. edges[b + 2], centred on
+ * edges[b + 1] */
+static void mel_band_edges(double rate, int resolution, double *edges)
+{
+    long size = FFT_SIZES[resolution];
+    long bands = MEL_BAND_COUNTS[resolution];
+    double bin_hertz = rate / (double)size;
+    double lowest = MEL_LOWEST_HZ > MEL_LOWEST_BIN * bin_hertz ? MEL_LOWEST_HZ : MEL_LOWEST_BIN * bin_hertz;
+    double highest = MEL_HIGHEST_HZ < 0.5 * rate ? MEL_HIGHEST_HZ : 0.5 * rate;
+    double lowest_mel = hertz_to_mel(lowest);
+    double highest_mel = hertz_to_mel(highest);
+    for (long edge = 0; edge < bands + 2; edge++) {
+        edges[edge] = mel_to_hertz(lowest_mel + (highest_mel - lowest_mel) * (double)edge / (double)(bands + 1));
+    }
+}
+
 static int log_mel_spectrogram(const double *aligned, long length, double rate, int resolution, double *out,
                                double *real, double *imaginary)
 {
@@ -284,10 +273,6 @@ static int log_mel_spectrogram(const double *aligned, long length, double rate, 
     long frames = resolution_frames(length, rate, resolution);
     long bins = size / 2 + 1;
     double bin_hertz = rate / (double)size;
-    double lowest = MEL_LOWEST_HZ > MEL_LOWEST_BIN * bin_hertz ? MEL_LOWEST_HZ : MEL_LOWEST_BIN * bin_hertz;
-    double highest = MEL_HIGHEST_HZ < 0.5 * rate ? MEL_HIGHEST_HZ : 0.5 * rate;
-    double lowest_mel = hertz_to_mel(lowest);
-    double highest_mel = hertz_to_mel(highest);
     double *edges = (double *)malloc(sizeof(double) * (size_t)(bands + 2));
     double *window = (double *)malloc(sizeof(double) * (size_t)size);
     double *power = (double *)malloc(sizeof(double) * (size_t)bins);
@@ -295,9 +280,7 @@ static int log_mel_spectrogram(const double *aligned, long length, double rate, 
         free(edges); free(window); free(power);
         return MATCH_OUT_OF_MEMORY;
     }
-    for (long edge = 0; edge < bands + 2; edge++) {
-        edges[edge] = mel_to_hertz(lowest_mel + (highest_mel - lowest_mel) * (double)edge / (double)(bands + 1));
-    }
+    mel_band_edges(rate, resolution, edges);
     for (long index = 0; index < size; index++) {
         window[index] = 0.5 - 0.5 * cos(2.0 * M_PI * (double)index / (double)size);   /* periodic Hann */
     }
@@ -349,140 +332,6 @@ static void amplitude_envelope(const double *aligned, long length, double rate, 
     }
 }
 
-/* YIN (de Cheveigne & Kawahara 2002): the difference function from one cross-correlation by FFT, the cumulative mean
- * normalised difference, the first dip under the absolute threshold (else the global minimum), parabolic
- * interpolation. Per frame: f0 (Hz), aperiodicity (the normalised difference at the chosen lag), level (dB of the
- * frame's mean square). The threshold is 0.3, not YIN's 0.1: on noisy hits (measured: the fixture drum voice, noise
- * 0.84, a 357 Hz tone) frames whose dip was over 0.1 fell to the global minimum, a subharmonic (178, 89 Hz), and which
- * one changed with the noise's realisation; the first dip under 0.3 is the tone. */
-static int pitch_track(const double *full_rate_signal, long full_length, double full_rate, double *out)
-{
-    /* decimated first (Hann-windowed sinc low-pass at 0.8 of the new Nyquist, 8 x factor + 1 taps): pitches up to
-     * PITCH_HIGHEST_HZ need no more, and the transforms get factor^2 cheaper */
-    long factor = pitch_decimation(full_rate);
-    double rate = full_rate / (double)factor;
-    long length = full_length / factor;
-    double *aligned = (double *)malloc(sizeof(double) * (size_t)(length > 0 ? length : 1));
-    long half_taps = 4 * factor;
-    double *taps = (double *)malloc(sizeof(double) * (size_t)(2 * half_taps + 1));
-    if (aligned == NULL || taps == NULL) {
-        free(aligned); free(taps);
-        return MATCH_OUT_OF_MEMORY;
-    }
-    double cutoff = 0.8 * 0.5 / (double)factor, tap_total = 0.0;
-    for (long tap = -half_taps; tap <= half_taps; tap++) {
-        double sinc = tap == 0 ? 1.0 : sin(2.0 * M_PI * cutoff * (double)tap) / (2.0 * M_PI * cutoff * (double)tap);
-        double hann = 0.5 + 0.5 * cos(M_PI * (double)tap / (double)(half_taps + 1));
-        taps[tap + half_taps] = factor == 1 ? (tap == 0 ? 1.0 : 0.0) : sinc * hann;
-        tap_total += taps[tap + half_taps];
-    }
-    for (long index = 0; index < length; index++) {
-        double sum = 0.0;
-        for (long tap = -half_taps; tap <= half_taps; tap++) {
-            long source = index * factor + tap;
-            if (source >= 0 && source < full_length) {
-                sum += taps[tap + half_taps] * full_rate_signal[source];
-            }
-        }
-        aligned[index] = sum / tap_total;
-    }
-    free(taps);
-    long full_hop = pitch_hop(full_rate);
-    long window = pitch_window(rate);
-    long longest_lag = pitch_longest_lag(rate);
-    long shortest_lag = pitch_shortest_lag(rate);
-    long size = pitch_fft_size(rate);
-    long frames = frames_of(full_length, full_hop);
-    long span = window + longest_lag;
-    double *frame_real = (double *)malloc(sizeof(double) * (size_t)size);
-    double *frame_imaginary = (double *)malloc(sizeof(double) * (size_t)size);
-    double *span_real = (double *)malloc(sizeof(double) * (size_t)size);
-    double *span_imaginary = (double *)malloc(sizeof(double) * (size_t)size);
-    double *squares = (double *)malloc(sizeof(double) * (size_t)(span + 1));
-    double *normalised = (double *)malloc(sizeof(double) * (size_t)(longest_lag + 2));
-    if (!frame_real || !frame_imaginary || !span_real || !span_imaginary || !squares || !normalised) {
-        free(frame_real); free(frame_imaginary); free(span_real); free(span_imaginary); free(squares); free(normalised);
-        free(aligned);
-        return MATCH_OUT_OF_MEMORY;
-    }
-    for (long frame = 0; frame < frames; frame++) {
-        long start = frame * full_hop / factor;
-        squares[0] = 0.0;
-        for (long index = 0; index < size; index++) {
-            long source = start + index;
-            double value = (index < span && source < length) ? aligned[source] : 0.0;
-            span_real[index] = index < window ? value : 0.0;   /* the frame in the real part, */
-            span_imaginary[index] = value;                     /* the span in the imaginary part: one FFT for both */
-            if (index < span) {
-                squares[index + 1] = squares[index] + value * value;
-            }
-        }
-        double frame_energy = squares[window];
-        double *result = out + 3 * frame;
-        result[2] = decibels_of_power(frame_energy / (double)window);
-        if (!(frame_energy > 0.0)) {
-            result[0] = 0.0;
-            result[1] = 1.0;
-            continue;
-        }
-        fft_in_place(span_real, span_imaginary, size);
-        /* F = (Z[k] + conj Z[-k]) / 2, S = (Z[k] - conj Z[-k]) / 2i; correlation r(lag) = sum_j frame[j] span[j + lag]
-         * is the inverse transform of conj(F) S, done as the forward transform of its conjugate */
-        for (long index = 0; index < size; index++) {
-            long mirror = (size - index) % size;
-            double zr = span_real[index], zi = span_imaginary[index], wr = span_real[mirror], wi = span_imaginary[mirror];
-            double f_real = 0.5 * (zr + wr), f_imaginary = 0.5 * (zi - wi);
-            double s_real = 0.5 * (zi + wi), s_imaginary = -0.5 * (zr - wr);
-            frame_real[index] = f_real * s_real + f_imaginary * s_imaginary;
-            frame_imaginary[index] = -(f_real * s_imaginary - f_imaginary * s_real);
-        }
-        fft_in_place(frame_real, frame_imaginary, size);
-        double running_sum = 0.0;
-        normalised[0] = 1.0;
-        for (long lag = 1; lag <= longest_lag; lag++) {
-            double correlation = frame_real[lag] / (double)size;
-            double lagged_energy = squares[lag + window] - squares[lag];
-            double difference = frame_energy + lagged_energy - 2.0 * correlation;
-            if (difference < 0.0) {
-                difference = 0.0;
-            }
-            running_sum += difference;
-            normalised[lag] = running_sum > 0.0 ? difference * (double)lag / running_sum : 1.0;
-        }
-        long chosen = -1;
-        for (long lag = shortest_lag; lag < longest_lag; lag++) {
-            if (normalised[lag] < PITCH_THRESHOLD) {
-                while (lag + 1 < longest_lag && normalised[lag + 1] < normalised[lag]) {
-                    lag++;
-                }
-                chosen = lag;
-                break;
-            }
-        }
-        if (chosen < 0) {
-            chosen = shortest_lag;
-            for (long lag = shortest_lag; lag < longest_lag; lag++) {
-                if (normalised[lag] < normalised[chosen]) {
-                    chosen = lag;
-                }
-            }
-        }
-        double refined = (double)chosen;
-        if (chosen > shortest_lag && chosen + 1 < longest_lag) {
-            double before = normalised[chosen - 1], at = normalised[chosen], after = normalised[chosen + 1];
-            double curvature = before - 2.0 * at + after;
-            if (curvature > 0.0) {
-                refined += 0.5 * (before - after) / curvature;
-            }
-        }
-        result[0] = rate / refined;
-        result[1] = normalised[chosen];
-    }
-    free(aligned);
-    free(frame_real); free(frame_imaginary); free(span_real); free(span_imaginary); free(squares); free(normalised);
-    return MATCH_OK;
-}
-
 /* signal -> features. The analysed hit is `analysis_length` samples from `preroll` before the onset (zeros before the
  * signal's start), scaled so its loudest 400 ms reads reference_lufs. *gain_out: the gain applied (for the A/B file).
  * Returns MATCH_SILENT when the signal is silent, MATCH_NOT_FINITE when it holds a NaN or infinity. */
@@ -502,9 +351,7 @@ int match_analyse(const double *signal, long length, double rate, double onset_t
     if (onset < 0) {
         return MATCH_SILENT;
     }
-    long pitch_size = pitch_fft_size(rate / (double)pitch_decimation(rate));
-    long largest_size = FFT_SIZES[0] > pitch_size ? FFT_SIZES[0] : pitch_size;
-    if (prepare_twiddles(largest_size) != MATCH_OK) {
+    if (prepare_twiddles(FFT_SIZES[0]) != MATCH_OK) {
         return MATCH_OUT_OF_MEMORY;
     }
     double *aligned = (double *)malloc(sizeof(double) * (size_t)analysis_length);
@@ -537,8 +384,6 @@ int match_analyse(const double *signal, long length, double rate, double onset_t
     }
     if (status == MATCH_OK) {
         amplitude_envelope(aligned, analysis_length, rate, cursor);
-        cursor += frames_of(analysis_length, envelope_hop(rate));
-        status = pitch_track(aligned, analysis_length, rate, cursor);
     }
     free(aligned); free(real); free(imaginary);
     return status;
@@ -569,8 +414,68 @@ static double floored_mean_difference(const double *target, const double *candid
     return cells > 0 ? total / (double)cells : 0.0;
 }
 
-/* components_out: [spectral dB, envelope dB, pitch semitones (the weighted mean), the target's tonal weight per frame].
- * The spectral term is the mean over resolutions of each resolution's floored mean difference. */
+/* The log-frequency spectral centroid term of one resolution's [frames x bands] dB block, accumulated into *total and
+ * *weight_total: per frame, both spectra floored at the target block's loudest cell minus the spectral range (as the
+ * spectral term floors them), each band's power at the log2 of its centre frequency, the centroid's difference in
+ * semitones, weighted by the target frame's level. Turian & Henry 2020 (references/sound-matching.md, D): the log2
+ * spectral centroid ordered pitch differences perfectly at +-30 and +-600 cents where cell by cell spectral
+ * distances did not; it is a smooth function of the hit, so a derivative-free search can follow it. */
+static int accumulate_centroid_term(const double *target, const double *candidate, long frames, long bands,
+                                    const double *log2_centres, double *total, double *weight_total)
+{
+    long count = frames * bands;
+    double loudest_cell = DECIBEL_OF_ZERO;
+    for (long index = 0; index < count; index++) {
+        if (target[index] > loudest_cell) {
+            loudest_cell = target[index];
+        }
+    }
+    double floor_db = loudest_cell - SPECTRAL_DYNAMIC_RANGE_DB;
+    double *frame_levels = (double *)malloc(sizeof(double) * (size_t)(frames > 0 ? frames : 1));
+    if (frame_levels == NULL) {
+        return MATCH_OUT_OF_MEMORY;
+    }
+    double loudest_frame = DECIBEL_OF_ZERO;
+    for (long frame = 0; frame < frames; frame++) {
+        double power = 0.0;
+        for (long band = 0; band < bands; band++) {
+            double t = target[frame * bands + band];
+            power += pow(10.0, (t > floor_db ? t : floor_db) / 10.0);
+        }
+        frame_levels[frame] = decibels_of_power(power);
+        if (frame_levels[frame] > loudest_frame) {
+            loudest_frame = frame_levels[frame];
+        }
+    }
+    for (long frame = 0; frame < frames; frame++) {
+        double weight = (frame_levels[frame] - (loudest_frame - CENTROID_ZERO_RANGE_DB))
+                        / (CENTROID_ZERO_RANGE_DB - CENTROID_FULL_RANGE_DB);
+        weight = weight < 0.0 ? 0.0 : (weight > 1.0 ? 1.0 : weight);
+        if (weight <= 0.0) {
+            continue;
+        }
+        double target_power = 0.0, target_moment = 0.0, candidate_power = 0.0, candidate_moment = 0.0;
+        for (long band = 0; band < bands; band++) {
+            double t = target[frame * bands + band];
+            double c = candidate[frame * bands + band];
+            double tp = pow(10.0, (t > floor_db ? t : floor_db) / 10.0);
+            double cp = pow(10.0, (c > floor_db ? c : floor_db) / 10.0);
+            target_power += tp;
+            target_moment += tp * log2_centres[band];
+            candidate_power += cp;
+            candidate_moment += cp * log2_centres[band];
+        }
+        double difference = target_moment / target_power - candidate_moment / candidate_power;
+        *total += weight * 12.0 * fabs(difference);
+        *weight_total += weight;
+    }
+    free(frame_levels);
+    return MATCH_OK;
+}
+
+/* components_out: [spectral dB, envelope dB, centroid semitones]. The spectral term is the mean over resolutions of
+ * each resolution's floored mean difference; the centroid term is the level-weighted mean over the frames of the
+ * whole-hit resolutions (the attack-only ones are left out: their few frames would count as much as a long one's). */
 int match_distance(const double *target, const double *candidate, long analysis_length, double rate,
                    double *components_out)
 {
@@ -578,53 +483,35 @@ int match_distance(const double *target, const double *candidate, long analysis_
         return MATCH_BAD_ARGUMENT;
     }
     long offset = 0;
-    double spectral = 0.0;
+    double spectral = 0.0, centroid_total = 0.0, centroid_weight = 0.0;
+    double edges[64 + 2], log2_centres[64];
     for (int resolution = 0; resolution < RESOLUTION_COUNT; resolution++) {
-        long count = resolution_frames(analysis_length, rate, resolution) * MEL_BAND_COUNTS[resolution];
+        long frames = resolution_frames(analysis_length, rate, resolution);
+        long bands = MEL_BAND_COUNTS[resolution];
+        long count = frames * bands;
         spectral += floored_mean_difference(target + offset, candidate + offset, count, SPECTRAL_DYNAMIC_RANGE_DB);
+        if (FFT_SIZES[resolution] >= ATTACK_ONLY_BELOW_SIZE) {
+            if (bands > 64) {
+                return MATCH_BAD_ARGUMENT;
+            }
+            mel_band_edges(rate, resolution, edges);
+            for (long band = 0; band < bands; band++) {
+                log2_centres[band] = log2(edges[band + 1]);
+            }
+            int status = accumulate_centroid_term(target + offset, candidate + offset, frames, bands, log2_centres,
+                                                  &centroid_total, &centroid_weight);
+            if (status != MATCH_OK) {
+                return status;
+            }
+        }
         offset += count;
     }
     spectral /= (double)RESOLUTION_COUNT;
     long envelope_frames = frames_of(analysis_length, envelope_hop(rate));
     double envelope = floored_mean_difference(target + offset, candidate + offset, envelope_frames,
                                               ENVELOPE_DYNAMIC_RANGE_DB);
-    offset += envelope_frames;
-    long pitch_frames = frames_of(analysis_length, pitch_hop(rate));
-    const double *target_pitch = target + offset;
-    const double *candidate_pitch = candidate + offset;
-    double loudest_frame = DECIBEL_OF_ZERO;
-    for (long frame = 0; frame < pitch_frames; frame++) {
-        if (target_pitch[3 * frame + 2] > loudest_frame) {
-            loudest_frame = target_pitch[3 * frame + 2];
-        }
-    }
-    double pitch_total = 0.0, weight_total = 0.0;
-    for (long frame = 0; frame < pitch_frames; frame++) {
-        const double *t = target_pitch + 3 * frame;
-        const double *c = candidate_pitch + 3 * frame;
-        double tonal_weight = (NOT_TONAL_APERIODICITY - t[1]) / (NOT_TONAL_APERIODICITY - FULLY_TONAL_APERIODICITY);
-        double level_weight = (t[2] - (loudest_frame - 2.0 * TONAL_RANGE_DB)) / TONAL_RANGE_DB;
-        tonal_weight = tonal_weight < 0.0 ? 0.0 : (tonal_weight > 1.0 ? 1.0 : tonal_weight);
-        level_weight = level_weight < 0.0 ? 0.0 : (level_weight > 1.0 ? 1.0 : level_weight);
-        double weight = t[0] > 0.0 ? tonal_weight * level_weight : 0.0;
-        if (weight <= 0.0) {
-            continue;
-        }
-        /* the candidate's best period whether or not it is tonal there: noise where the target sings costs its
-         * (random) pitch error, at most the cap */
-        double error = PITCH_ERROR_CAP_SEMITONES;
-        if (c[0] > 0.0) {
-            error = fabs(12.0 * log2(c[0] / t[0]));
-            if (error > PITCH_ERROR_CAP_SEMITONES) {
-                error = PITCH_ERROR_CAP_SEMITONES;
-            }
-        }
-        pitch_total += weight * error;
-        weight_total += weight;
-    }
     components_out[0] = spectral;
     components_out[1] = envelope;
-    components_out[2] = weight_total > 0.0 ? pitch_total / weight_total : 0.0;
-    components_out[3] = pitch_frames > 0 ? weight_total / (double)pitch_frames : 0.0;
+    components_out[2] = centroid_weight > 0.0 ? centroid_total / centroid_weight : 0.0;
     return MATCH_OK;
 }

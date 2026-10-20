@@ -101,7 +101,7 @@ def main(argv):
         return 1
     print(f"score {result.best_score:.3f} ({result.best_components['spectral_db']:.2f} dB spectral, "
           f"{result.best_components['envelope_db']:.2f} dB envelope, "
-          f"{result.best_components['pitch_semitones']:.2f} semitones pitch) in {result.seconds:.0f} s")
+          f"{result.best_components['centroid_semitones']:.2f} semitones centroid) in {result.seconds:.0f} s")
     for name, value in result.best_values.items():
         print(f"  {name} = {value:.6g}")
     print(f"wrote {arguments.out}, {match_wave_path}, {target_wave_path}")

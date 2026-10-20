@@ -1,5 +1,5 @@
 """The patch matcher (architecture/patch-matcher.md): its score orders hits the way they obviously sound, its parts
-are what they claim (loudness = m4l_dev/bs1770.py's, alignment, pitch in semitones), its search is CMA-ES and
+are what they claim (loudness = m4l_dev/bs1770.py's, alignment, the centroid term's ordering), its search is CMA-ES and
 deterministic, its voice spec and WAV files fail loudly. Fast: the parameter-recovery validation is the opt-in
 tests/test_patch_matcher_recovery.py."""
 import dataclasses
@@ -24,6 +24,7 @@ from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
 from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
                                         match_patch, symmetric_eigendecomposition)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
+from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.patch_match_voice import MatchedParameter, MatchedVoice  # noqa: E402
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise  # noqa: E402
 from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
@@ -80,16 +81,17 @@ class ScoreTests(unittest.TestCase):
                   for factor in (1.0, 1.1, 1.5, 3.0)]
         self.assertEqual(scores, sorted(scores), scores)
 
-    def test_the_pitch_term_is_the_pitch_difference_in_semitones(self):
-        target = MatchTarget(decaying_sine(110.0), RATE)
-        components = target.components(decaying_sine(110.0 * 2 ** (2 / 12)))
-        self.assertAlmostEqual(components.pitch_semitones, 2.0, delta=0.05)
-        self.assertGreater(components.target_tonal_fraction, 0.5)
-
-    def test_a_hit_without_a_pitch_has_no_pitch_term(self):
-        hat_target = MatchTarget(render(HAT), RATE)
-        components = hat_target.components(render(HAT, voice=dataclasses.replace(FIXTURE_DRUM_VOICE, noise_seed=5)))
-        self.assertLess(components.target_tonal_fraction, 0.05)
+    def test_the_centroid_term_orders_detunings_smoothly(self):
+        # it grows with the detuning, never jumps (a pitch tracker's octave flip did), and is 0 for the same hit
+        sine_target = MatchTarget(decaying_sine(110.0), RATE)
+        sine_terms = [sine_target.components(decaying_sine(110.0 * 2 ** (semitones / 12))).centroid_semitones
+                      for semitones in (0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 12.0)]
+        self.assertEqual(sine_terms[0], 0.0)
+        self.assertEqual(sine_terms, sorted(sine_terms), sine_terms)
+        self.assertLess(sine_terms[1], 0.1, sine_terms)
+        kick_terms = [self.kick_target.components(render({**KICK, "pitch_hz": KICK["pitch_hz"] * 2 ** (semitones / 12)}))
+                      .centroid_semitones for semitones in (0.25, 1.0, 3.0, 6.0, 12.0)]
+        self.assertEqual(kick_terms, sorted(kick_terms), kick_terms)
 
     def test_silence_and_broken_hits(self):
         self.assertEqual(self.kick_target.score([0.0] * RATE), patch_match_score.SILENT_CANDIDATE_SCORE)
@@ -141,6 +143,15 @@ class VoiceTests(unittest.TestCase):
 
     def test_a_render_has_no_memory_of_the_one_before(self):
         self.assertEqual(render(KICK, 0.1), render(KICK, 0.1))
+
+    def test_the_optimised_build_renders_the_same_samples(self):
+        # the voice renders at -O2 (genexpr.OPTIMISED_COMPILER_FLAGS); the floating-point flags make it the -O0 bits
+        voice = dataclasses.replace(FIXTURE_DRUM_VOICE, fixed_values=())
+        program = GenProgram(voice.gen_code, voice.num_inputs, voice.num_outputs, samplerate=RATE, seed=voice.noise_seed)
+        for name, value in KICK.items():
+            program.set_param(name, value)
+        trigger = [1.0] + [0.0] * (RATE // 2 - 1)
+        self.assertEqual(program.run(RATE // 2, [trigger])[0], render(KICK, 0.5))
 
     def test_the_noise_seed_reaches_the_kits_seeded_noise_through_the_seed_param(self):
         # a voice whose noise is the kit's SeededWhiteNoise, seeded by its Param "seed": the matched voice's seed
@@ -210,6 +221,20 @@ class SearchTests(unittest.TestCase):
         self.assertEqual([score for _, score in curve], sorted((score for _, score in curve), reverse=True))
         again = match_patch(voice, target_samples, RATE, dataclasses.replace(settings, workers=2))
         self.assertEqual(again.best_values, result.best_values)
+
+    def test_an_enum_is_swept_on_every_choice_not_searched_as_a_continuum(self):
+        # an enum's choices in no order of sound: the search tries each one at its best continuous setting
+        voice = dataclasses.replace(
+            FIXTURE_DRUM_VOICE, name="fixture drum: pitch and a decay choice",
+            parameters=(MatchedParameter.continuous("pitch_hz", 30, 400, "log"),
+                        MatchedParameter.enum("decay_ms", (600.0, 60.0, 180.0, 1200.0))),
+            fixed_values=tuple((name, value) for name, value in KICK.items() if name not in ("pitch_hz", "decay_ms")))
+        truth = {"pitch_hz": 72.0, "decay_ms": 180.0}
+        target_samples = render(truth, 0.4, voice=voice)
+        result = match_patch(voice, target_samples, RATE,
+                             SearchSettings(strands=1, evaluations_per_strand=200, seed=3, workers=1))
+        self.assertEqual(result.best_values["decay_ms"], 180.0, result.as_dict())
+        self.assertAlmostEqual(result.best_values["pitch_hz"] / truth["pitch_hz"], 1.0, delta=0.01)
 
 
 class WaveFileTests(unittest.TestCase):
