@@ -158,3 +158,28 @@ initial scales per variable as C's diagonal (Fig. 6 footnote: "should not disagr
 Test, r 0.1, the 23 benign parameters, no pitch term, 3000 renders, targets 0-3: V1 active weights; V2 V1 + C's
 diagonal from a central-difference probe (2n renders; per-axis scale ~ 1 / slope, clipped to a 100x span).
 Prediction: V1 at 3000 renders reaches what the current CMA-ES reached at 8000 (median ~0.8); V2 better than V1.
+
+### H9 result: refuted
+
+At 2500 renders from r 0.1 (benign 23, no pitch term): kit CMA-ES 0.52-2.11, active 0.97-2.03, active + probe-scaled
+diagonal 1.51-6.07 (worse: the probe's large steps on flat axes throw it off). Neither changes the speed.
+
+### Side measurements
+
+- 1-D multimodality along pitch_sweep_semitones: a pure swept sine (noise, click, fold, strip, harmonics and pitch mod
+  off) is unimodal on targets 0 and 4 (1 minimum in 201 points; 9 and 19 as drawn) and still 17 on target 1 (a 37 Hz
+  tone: the 1024-point FFT and the envelope see its cycle's phase, as the kit's own comments measured for kicks).
+  Summed over 8 targets x 6 parameters: 256 minima (no pitch term); 1024-point FFT attack-only 241; envelope term
+  off 169; both 139.
+- The YIN pitch term costs the toy voice too: its recovery (20 targets, kit aa62cc6, renderer -O2) is 85 % with it,
+  95 % with PITCH_WEIGHT 0, 100 % with the pitch term replaced by a log2 spectral centroid difference (Turian & Henry
+  2020, references/sound-matching.md D: "log2(Spectral Centroid) 0.515 / 1.000 / 1.000", perfect pitch ordering at
+  +-30 and +-600 cents, for derivative-free search), 0.25 per semitone, per frame of the 4096 / 2048 / 1024 log-mel
+  spectrograms, weighted by the target frame's level.
+
+## P1. The package so far, on the drums voice
+
+The score's pitch term replaced by the log-centroid term; the search holds enums and integers out of CMA-ES's vector
+and sweeps every one of their values at the strand's best after each global run and between two refinement halves;
+6 x 2000 renders. Prediction: 2 / 8 (from 0 / 8): the discrete fix and the needle's removal help, the slow
+continuous remainder still limits.
