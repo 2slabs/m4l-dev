@@ -40,21 +40,36 @@ through its oversampling's equaliser (`output_statements(point)`, then `output_v
 segment between two points (`segment_output_volts`: first order, for a probe of the output's mean); `output_peak_volts`, about where
 the sum sits for drives of 0.6-10 V (3.2 V at 6 V rails, scaling with them), for an instrument that scales it to its
 own level. `statements()` (per host sample) latches the inputs and the drive stage's gain; the instance's own
-History `<name>_before_*` and `<name>_before_before_*` are its last two points and `<name>_equaliser_raw_mean_before_*` its
+History `<name>_before_*` and `<name>_before_before_*` are its last two points' inputs and `<name>_equaliser_raw_mean_before_*` its
 last raw ADAA2 means (`remember_statements`), for an instrument that runs the folder on consecutive sub-samples.
+
+The rail at run time (`character_inputs={"cell_rail_volts": ...}`, volts, within RUNTIME_CELL_RAIL_VOLTS: the
+CA3160's operating supply, 5-16 V across its two pins, so +-2.5 to +-8 V; the instrument keeps it there, and a unit
+whose rail moves fails the build if its range isn't inside it): what scales with the rail moves with it, every cell's
+fold point (Rk1/Rk2) Vs and the node floor, -(Vs + 0.5 V); what is fixed in volts stays, the limiter's +-5.1 V (a
+zener and two diodes) and the 0.5 V under the rail (the CA3160's input range), and so do the inputs (the drive and
+Symmetry's offset, the instrument's volts). Over that range the transfer keeps its pieces in one order, their slopes
+fixed and their starts and intercepts in proportion to the rail (the limiter's crossings too: they lie on pieces whose
+intercepts move so); the build measures that motion at the range's ends, checks it against the model across it, and
+the table moves by it (the shaper's `PiecewiseLinearMotion`), the shift the rail less the character's. At the
+character's rail the code computes the numbers' unit to the bit. ADAA2 needs no smoothing of it: each mean is taken on
+the table of its own call (no antiderivative kept across samples), so the output moves with the rail as the transfer
+does; a jump in the rail is a jump in the transfer, as in the drive. `first_fold_volts` and `output_peak_volts` stay
+the character's (an instrument's fixed scaling).
 
 Not modelled (§4.3): slew (above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft knee
 at low zener current, the 1.45 Hz DC block inside IC31a's summer. The tone filter is linear and fixed: an instrument
 that sums several units may run it once on their sum (TONE_FILTER_HZ).
 """
 import dataclasses
+import functools
 import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
 from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
-from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import PiecewiseLinearTable
+from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import PiecewiseLinearMotion, PiecewiseLinearTable
 
 # sheet 3A = DAFx-17 Table 1: (Rk1 in, Rk2 feedback, Rk3 to the summer), cells 1-5
 CELL_RESISTORS = [
@@ -71,6 +86,13 @@ DRIVE_STAGE_HZ = generated_number(1.0 / (2 * math.pi * 33e3 * 470e-12))     # IC
 TONE_FILTER_HZ = generated_number(1.0 / (2 * math.pi * RF2 * TONE_CAPACITOR))   # RF2 x C: the circuit's 1.33 kHz one-pole
 OUTPUT_PEAK_VOLTS_AT_6_VOLT_RAILS = 3.2                    # the sum's peak for drives of 0.6-10 V (DAFx-17's sweep)
 LIMITER_OPEN_VOLTS = 1e3                                   # the outermost pieces are measured out to here
+# The rail a unit may move to at run time (volts, each side): the CA3160's operating supply, 5 to 16 V across V+ and V-
+# (Intersil FN976.4; circuit §3.1)
+RUNTIME_CELL_RAIL_VOLTS = (2.5, 8.0)
+# Rails between the range's ends where the build checks the moving table against the model
+RAIL_MOTION_CHECKS = 12
+# How far the moved folder may be from the model at a checked rail (volts out)
+RAIL_MOTION_TOLERANCE_VOLTS = 1e-8
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,24 +180,90 @@ def transfer_pieces(character):
     return pieces
 
 
+def _pieces_value(pieces, x):
+    """The transfer `pieces` [(from x, slope, intercept)] at `x`."""
+    _, slope, intercept = pieces[max(i for i, piece in enumerate(pieces) if piece[0] <= x)]
+    return slope * x + intercept
+
+
+@functools.lru_cache(maxsize=None)
+def rail_motion(character):
+    """The transfer's motion with the rail across RUNTIME_CELL_RAIL_VOLTS, about `character`'s: (start rates,
+    intercept rates) per piece, volts a volt of rail, measured from the model at the range's ends (the same pieces and
+    slopes there) and checked against it at RAIL_MOTION_CHECKS rails between: the moved table's transfer is the
+    model's, at every breakpoint of either and between. (Under the limiter, where the transfer is flat, the sum's own
+    breakpoints change order with the rail: those are no corners of the transfer, and move with the next corner.)
+    Fails the build where the model doesn't move so."""
+    low, high = RUNTIME_CELL_RAIL_VOLTS
+    at = {rail: transfer_pieces(dataclasses.replace(character, cell_rail_volts=rail)) for rail in (low, high)}
+    nominal = transfer_pieces(character)
+    if not all(len(pieces) == len(nominal) and all(abs(a[1] - b[1]) <= 1e-9 * max(1.0, abs(b[1]))
+                                                     for a, b in zip(pieces, nominal)) for pieces in at.values()):
+        raise BuildError(f"Buchla259TimbreSection: the folder's pieces change across the rail's run-time range "
+                         f"{RUNTIME_CELL_RAIL_VOLTS}: its table can't move with the rail")
+    start_rates = [0.0] + [(b[0] - a[0]) / (high - low) for a, b in zip(at[low][1:], at[high][1:])]
+    intercept_rates = [(b[2] - a[2]) / (high - low) for a, b in zip(at[low], at[high])]
+    # a breakpoint inside a straight run (under the limiter: the same line on both sides) is no corner of the
+    # transfer, and its place between the ends need not be in proportion: it moves with the next corner up (or the
+    # last one, at the top), so the run keeps its order and stays inside the straight run
+    def same_line(index):
+        (_, left_slope, left_intercept), (_, slope, intercept) = nominal[index - 1], nominal[index]
+        return abs(left_slope - slope) <= 1e-9 * max(1.0, abs(slope)) and \
+            abs(left_intercept - intercept) <= 1e-9 * max(1.0, abs(intercept))
+    corners = [index for index in range(1, len(nominal)) if not same_line(index)]
+    for index in range(1, len(nominal)):
+        if index not in corners:
+            start_rates[index] = start_rates[min((c for c in corners if c > index), default=max(corners))]
+    for check in range(1, RAIL_MOTION_CHECKS + 1):
+        rail = low + (high - low) * check / (RAIL_MOTION_CHECKS + 1)
+        shift = rail - character.cell_rail_volts
+        model = dataclasses.replace(character, cell_rail_volts=rail)
+        moved = [(start + start_rate * shift, slope, intercept + intercept_rate * shift)
+                 for (start, slope, intercept), start_rate, intercept_rate
+                 in zip(nominal, start_rates, intercept_rates)]
+        corners = [piece[0] for piece in moved[1:]] + _breakpoints(model)
+        points = [corner + nudge for corner in corners for nudge in (-1e-6, 0.0, 1e-6)] + \
+            [x / 4 for x in range(-200, 201)]
+        error, where = max((abs(_pieces_value(moved, x) - output_volts(x, model)), x) for x in points)
+        if error > RAIL_MOTION_TOLERANCE_VOLTS:
+            raise BuildError(f"Buchla259TimbreSection: at a {rail:g} V rail the moved folder is {error:g} V off the "
+                             f"model at {where:g} V in: its table can't move with the rail")
+    return tuple(start_rates), tuple(intercept_rates)
+
+
 class Buchla259TimbreSection(CircuitModule):
     """The folder's output (volts) at the points an instrument evaluates it: `point_statements(point, sine)` leaves
     `<point>_folder_input_volts` and `<point>_folder_integral`; `output_statements(point)` then
     `output_volts_at(point)` is the output there by second-order ADAA, equalised, `latency_steps` late; `segment_output_volts(point, before)` is the output's exact mean from point
     `before` to `point`. Inputs `drive_volts`, `symmetry_offset_volts`, `frequency_hz` (per host sample, latched by
-    `statements()`). See the module's docstring."""
+    `statements()`); the rail at run time by `character_inputs`. See the module's docstring."""
 
     references_entry = "references/circuits/buchla-259.md"
     character_type = Buchla259TimbreSectionCharacter
+    runtime_character_fields = ("cell_rail_volts",)
 
     def __init__(self, instance_name, *, drive_volts, symmetry_offset_volts, frequency_hz, oversampling,
-                 character=None):
-        super().__init__(instance_name, character=character, drive_volts=drive_volts,
-                         symmetry_offset_volts=symmetry_offset_volts, frequency_hz=frequency_hz)
+                 character=None, character_inputs=None):
+        super().__init__(instance_name, character=character, character_inputs=character_inputs,
+                         drive_volts=drive_volts, symmetry_offset_volts=symmetry_offset_volts,
+                         frequency_hz=frequency_hz)
         if not 0 < self.character.cell_rail_volts:
             raise BuildError(f"Buchla259TimbreSection {instance_name}: the cells' rail must be above 0 V, got "
                              f"{self.character.cell_rail_volts!r}")
-        self.table = PiecewiseLinearTable("buchla_259_folder", transfer_pieces(self.character))
+        self.rail_moves = "cell_rail_volts" in self.character_inputs
+        motion = None
+        if self.rail_moves:
+            low, high = RUNTIME_CELL_RAIL_VOLTS
+            if not low <= self.character.cell_rail_volts <= high:
+                raise BuildError(f"Buchla259TimbreSection {instance_name}: a rail that moves at run time moves about "
+                                 f"the character's, which must be in {RUNTIME_CELL_RAIL_VOLTS}, got "
+                                 f"{self.character.cell_rail_volts!r}")
+            start_rates, intercept_rates = rail_motion(self.character)
+            motion = PiecewiseLinearMotion(
+                shift=f"{instance_name}_cell_rail_shift_volts", start_rates=start_rates,
+                intercept_rates=intercept_rates,
+                shift_range=(low - self.character.cell_rail_volts, high - self.character.cell_rail_volts))
+        self.table = PiecewiseLinearTable("buchla_259_folder", transfer_pieces(self.character), motion=motion)
         # the points a host sample (a wiring choice, required: ADAA2's equaliser is designed for the rate it runs at)
         self.oversampling = oversampling
         self.equaliser = AntiderivativeAntialiasingEqualiser(f"{instance_name}_equaliser", order=2,
@@ -207,7 +295,7 @@ class Buchla259TimbreSection(CircuitModule):
         return functions
 
     def declarations(self):
-        return self.substituted("History ${p}_before_folder_input_volts(0), ${p}_before_folder_integral(0), "
+        return self.substituted("History ${p}_before_folder_input_volts(0), "
                                 "${p}_before_before_folder_input_volts(0)") + \
             "".join(f", {declaration}" for declaration in self.equaliser.history_declarations()) + ";"
 
@@ -215,7 +303,9 @@ class Buchla259TimbreSection(CircuitModule):
         return self.substituted("""// ${p}: the Buchla 259's timbre section, its inputs this sample (kit circuit module: Buchla 259 timbre section)
 ${p}_drive_volts = ${drive_volts};
 ${p}_drive_stage_gain = 1 / sqrt(1 + pow(${frequency_hz} / ${drive_stage_hz}, 2));
-${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_STAGE_HZ)
+${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_STAGE_HZ) + (
+            f"\n{self.instance_name}_cell_rail_shift_volts = {self.character_term('cell_rail_volts')} - "
+            f"{self.character.cell_rail_volts!r};" if self.rail_moves else "")
 
     def point_statements(self, point, sine):
         """At one point: the folder bus (the drive stage's sine and Symmetry's offset) and the folder's antiderivative
@@ -247,9 +337,13 @@ ${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_
 
     def segment_output_volts(self, point, before):
         """GenExpr: the folder's output (volts), its exact mean over the segment from point `before` to `point` (both
-        ran `point_statements`): first-order ADAA, for a probe of the output's mean."""
+        ran `point_statements`, or `before` is `running_point`): first-order ADAA, for a probe of the output's mean.
+        The running point's antiderivative is taken again here, on this sample's table (a moving rail's: never one
+        kept from a sample before)."""
+        before_integral = (self.table.integral_call(f"{before}_folder_input_volts") if before == self.running_point
+                           else f"{before}_folder_integral")
         return self.table.mean_call(f"{point}_folder_input_volts", f"{before}_folder_input_volts",
-                                    f"{point}_folder_integral", f"{before}_folder_integral")
+                                    f"{point}_folder_integral", before_integral)
 
     def remember_statements(self, point):
         """Make `point` the instance's last point (`running_point`), the one before it the last but one, and its raw
@@ -260,6 +354,5 @@ ${p}_symmetry_offset_volts = ${symmetry_offset_volts};""", drive_stage_hz=DRIVE_
                              f"output_statements({point!r}): the equaliser's raw means would skip a point")
         lines = [self.equaliser.remember_statements(f"{point}_folder_raw_mean"),
                  f"{p}_before_before_folder_input_volts = {p}_before_folder_input_volts;",
-                 f"{p}_before_folder_input_volts = {point}_folder_input_volts;",
-                 f"{p}_before_folder_integral = {point}_folder_integral;"]
+                 f"{p}_before_folder_input_volts = {point}_folder_input_volts;"]
         return "\n".join(line for line in lines if line)

@@ -84,6 +84,11 @@ near a corner at a slow input. tests/test_techniques.py holds it to eq. (15) in 
 measures the aliases against first order (a hot 3 kHz clip at 44.1 kHz, run at 1×, below 10 kHz: −55.3 → −72.6 dB;
 through the 2× equaliser, wrongly at that rate, −69.9).
 
+A table that moves at run time (a circuit's rail moving its breakpoints: `PiecewiseLinearMotion`) is our
+construction too: the paper's formulas take one transfer; ours takes each sample's eq. (15) on the transfer as it is
+at that sample (the piece-wise form keeps no antiderivative across samples), so a moving table is ADAA2 of its
+present transfer, which moves continuously with it.
+
 ADAA2's linear filtering is undone (or not) by the kit's one ADAA equaliser (below, "Antiderivative antialiasing
 equaliser"), the tanh saturator's too. Not chosen: AA-IIR kernels (**La Pastina, D'Angelo & Gabrielli, "Arbitrary-order
 IIR antiderivative antialiasing", DAFx20in21** (`lapastina-dangelo-gabrielli-dafx21.pdf`),

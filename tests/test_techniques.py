@@ -19,7 +19,7 @@ from m4l_dev.techniques.antiderivative_antialiasing_equaliser import (  # noqa: 
     ADAA_EQUALISER_EDGE_AT_2X, AntiderivativeAntialiasingEqualiser, adaa_equaliser_decision, adaa_equaliser_remez_design,
     checked_equaliser_taps)
 from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
-    AntiderivativePiecewiseLinearShaper, PiecewiseLinearTable)
+    AntiderivativePiecewiseLinearShaper, PiecewiseLinearMotion, PiecewiseLinearTable)
 from m4l_dev.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,  # noqa: E402
                                                               AntiderivativeTanhSaturatorLinearTwin)
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
@@ -774,6 +774,77 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
             self.assertAlmostEqual(value, exact_second_order_mean(table.pieces, x0, x1, x2), delta=1e-9,
                                    msg=(x0, x1, x2))
             self.assertLessEqual(abs(value), 3.0)        # never blows up near a corner (the table stays under 3)
+
+    # FOLD moving with a shift: its corners spread (the outer ones faster), its pieces meeting at every shift
+    FOLD_START_RATES = (0.0, -0.4, -0.2, -0.2, 0.1, 0.3)
+
+    def meeting_rates(self, start_rates, first=0.25):
+        """Intercept rates that keep FOLD's pieces meeting at their moving starts, the first piece's `first`."""
+        rates = [first]
+        for (_, left_slope, _), (_, slope, _), start_rate in zip(self.FOLD, self.FOLD[1:], start_rates[1:]):
+            rates.append(rates[-1] + (left_slope - slope) * start_rate)
+        return tuple(rates)
+
+    def motion(self, start_rates=FOLD_START_RATES, intercept_rates=None, shift="s", shift_range=(-0.5, 0.5)):
+        return PiecewiseLinearMotion(shift=shift, start_rates=start_rates, shift_range=shift_range,
+                                     intercept_rates=intercept_rates or self.meeting_rates(start_rates))
+
+    def moving_fold(self, shift="in4"):
+        return PiecewiseLinearTable("fold", self.FOLD, motion=self.motion(shift=shift))
+
+    def test_a_moving_table_is_the_still_table_at_each_shift(self):
+        # value, integral and ADAA2 of the moving table at shift s = those of the still table of its pieces at s (a
+        # still table rounds its pieces to 10 digits: 1e-8; ADAA2 1e-9, eq. (15) exactly on pieces_at(s)), at every
+        # shift in its range
+        table = self.moving_fold()
+        generator = random.Random(260)
+        rows = []
+        for _ in range(200):
+            x0 = generator.uniform(-3, 3)
+            step = 10 ** generator.uniform(-4, 0.5)
+            rows.append((x0, x0 - step * generator.uniform(-1, 1), x0 - step * generator.uniform(-1, 1),
+                         generator.uniform(-0.5, 0.5)))
+        x0s, x1s, x2s, shifts = (list(column) for column in zip(*rows))
+        code = "\n".join(table.functions().values()) + (
+            f"\nout1 = {table.value_call('in1')};\nout2 = {table.integral_call('in1')};\n"
+            f"out3 = {table.second_order_mean_call('in1', 'in2', 'in3')};\n")
+        values, integrals, means = GenProgram(code, 4, 3).run(len(rows), [x0s, x1s, x2s, shifts])
+        for (x0, x1, x2, shift), value, integral, mean in zip(rows, values, integrals, means):
+            still = PiecewiseLinearTable("still", table.pieces_at(shift))
+            self.assertAlmostEqual(value, still.value(x0), delta=1e-8, msg=(x0, shift))
+            self.assertAlmostEqual(integral, still.integral(x0), delta=1e-8, msg=(x0, shift))
+            self.assertAlmostEqual(mean, exact_second_order_mean(table.pieces_at(shift), x0, x1, x2), delta=1e-9,
+                                   msg=(x0, x1, x2, shift))
+        for shift in (-0.5, 0.0, 0.5):                   # the pieces meet at every shift
+            pieces = table.pieces_at(shift)
+            for (_, left_slope, left_intercept), (start, slope, intercept) in zip(pieces, pieces[1:]):
+                self.assertAlmostEqual(left_slope * start + left_intercept, slope * start + intercept, delta=1e-12)
+
+    def test_a_moving_table_at_shift_0_is_the_still_tables_bits(self):
+        # every constant is written as the still table's double plus shift x the rest: at shift 0 the same bits
+        moving, still = self.moving_fold("0"), PiecewiseLinearTable("fold", self.FOLD)
+        generator = random.Random(261)
+        x0s = [generator.uniform(-3, 3) for _ in range(300)]
+        x1s = [x - 10 ** generator.uniform(-4, 0) for x in x0s]
+        x2s = [x - 10 ** generator.uniform(-4, 0) for x in x1s]
+        outputs = []
+        for table in (moving, still):
+            code = "\n".join(table.functions().values()) + (
+                f"\nout1 = {table.value_call('in1')};\nout2 = {table.integral_call('in1')};\n"
+                f"out3 = {table.second_order_mean_call('in1', 'in2', 'in3')};\n")
+            outputs.append(GenProgram(code, 3, 3).run(len(x0s), [x0s, x1s, x2s]))
+        self.assertEqual(outputs[0], outputs[1])
+
+    def test_a_motion_that_breaks_the_table_fails_the_build(self):
+        PiecewiseLinearTable("fold", self.FOLD, motion=self.motion())          # the one above builds
+        for broken in (
+                self.motion(start_rates=(0.0, -0.4, -0.2, 0.0, 0.1, 0.3)),     # -0.999 passes -1 at the range's end
+                self.motion(intercept_rates=self.meeting_rates(self.FOLD_START_RATES)[:3] + (0.4, 0.6, 0.45)),  # parting
+                self.motion(start_rates=(0.0, -0.4, -0.2, -0.2, -2.0, 0.3)),   # 0.4 crosses 0
+                self.motion(shift_range=(0.1, 0.5)),                             # no shift 0 in the range
+                self.motion(start_rates=(0.1, -0.4, -0.2, -0.2, 0.1, 0.3))):    # the first piece's start moving
+            with self.assertRaises(BuildError, msg=broken):
+                PiecewiseLinearTable("fold", self.FOLD, motion=broken)
 
     def test_either_order_is_the_equalised_mean_of_a_line_on_a_piece_at_either_oversampling(self):
         # inside one piece: the line at the mean of the two (first order) or three (second) inputs, through ADAA's

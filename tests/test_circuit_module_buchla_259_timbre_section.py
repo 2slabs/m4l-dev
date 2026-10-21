@@ -2,6 +2,7 @@
 the circuit (DAFx-17 eqs. 8-11 with the original's extras, references/circuits/buchla-259.md §3), and the GenExpr it
 writes against the Python model, through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
 import cmath
+import dataclasses
 import math
 import os
 import sys
@@ -11,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
-    DRIVE_STAGE_HZ, TONE_FILTER_HZ, Buchla259TimbreSection, Buchla259TimbreSectionCharacter, cell_fold_point_volts,
-    cell_node_volts, output_volts, summed_output_volts_unlimited)
+    DRIVE_STAGE_HZ, RUNTIME_CELL_RAIL_VOLTS, TONE_FILTER_HZ, Buchla259TimbreSection, Buchla259TimbreSectionCharacter,
+    cell_fold_point_volts, cell_node_volts, output_volts, summed_output_volts_unlimited, transfer_pieces)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.techniques.halfband_oversampler import HalfbandDownsampler, HalfbandLinearPhaseDownsampler  # noqa: E402
@@ -22,10 +23,10 @@ from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, comp
 ORIGINAL = Buchla259TimbreSectionCharacter()
 
 
-def section(name="timbre", character=None, oversampling=2):
+def section(name="timbre", character=None, oversampling=2, character_inputs=None):
     """A unit wired as the instruments wire it (2x unless a test says)."""
     return Buchla259TimbreSection(name, drive_volts="drive", symmetry_offset_volts="offset", frequency_hz="frequency",
-                                  oversampling=oversampling, character=character)
+                                  oversampling=oversampling, character=character, character_inputs=character_inputs)
 
 
 class FolderModelTests(unittest.TestCase):
@@ -267,6 +268,74 @@ class FolderGenExprTests(unittest.TestCase):
         harness([original, starved], {"drive": 1.0, "offset": 0.0, "frequency": 100.0},
                 ["original_drive_stage_gain + starved_drive_stage_gain"])
 
+
+
+class RunTimeRailTests(unittest.TestCase):
+    """The rail moved at run time (`character_inputs={"cell_rail_volts": ...}`): the circuit at every rail, the
+    numbers' unit at the character's, ADAA2 sound while it moves."""
+
+    def program(self, character_inputs, drive, frequency, offset=0.0, oversampling=2, samplerate=44100.0):
+        """The section on in1 (the sine), the rail in2 when it moves: out1 the output, out2 the bus, out3 the running
+        segment's first-order mean."""
+        timbre = section(oversampling=oversampling, character_inputs=character_inputs)
+        statements = ("sine = in1;\n" + timbre.point_statements("now", "sine") + "\n" + timbre.output_statements("now")
+                      + f"\nout1 = {timbre.output_volts_at('now')};\nout2 = now_folder_input_volts;\n"
+                      + f"out3 = {timbre.segment_output_volts('now', timbre.running_point)};\n"
+                      + timbre.remember_statements("now"))
+        template = (f"/*GEN_BLOCK_FUNCTIONS*/\nParam drive({drive!r});\nParam offset({offset!r});\n"
+                    f"Param frequency({frequency!r});\n/*GEN_BLOCK_DECLARATIONS*/\n/*TIMBRE*/\n" + statements)
+        return timbre, GenProgram(gen_code_with_blocks(template, [timbre], "test harness"), 2, 3,
+                                  samplerate=samplerate)
+
+    def test_the_characters_rail_renders_the_numbers_unit_bit_for_bit(self):
+        # a hot, offset fold (every corner, the floor and the limiter): the rail at 6 V moving = the still unit
+        count = 2000
+        sine = [math.sin(2 * math.pi * 300 * i / 88200) for i in range(count)]
+        _, still = self.program(None, 11.0, 300.0, 0.6)
+        _, moving = self.program({"cell_rail_volts": "in2"}, 11.0, 300.0, 0.6)
+        self.assertEqual(still.run(count, [sine, [6.0] * count]), moving.run(count, [sine, [6.0] * count]))
+
+    def test_a_moving_rail_is_the_circuit_at_each_samples_rail(self):
+        # the rail swept across its whole range and back while a 9 V sine folds (1x: no equaliser, the raw mean): each
+        # sample's output is eq. (15) through the bus's last three values on the model's own table at that sample's
+        # rail (a separate still table per rail: the moving one is never the reference); the running segment is the
+        # model's mean at its rail too (the antiderivative taken again on its table)
+        low, high = RUNTIME_CELL_RAIL_VOLTS
+        count = 400
+        sine = [math.sin(2 * math.pi * 523 * i / 44100) for i in range(count)]
+        rails = [low + (high - low) * (1 - abs(1 - 2 * i / (count - 1))) for i in range(count)]
+        timbre, program = self.program({"cell_rail_volts": "in2"}, 9.0, 523.0, 0.4, oversampling=1)
+        out, bus, segment = program.run(count, [sine, rails])
+        for i in range(2, count):
+            character = dataclasses.replace(ORIGINAL, cell_rail_volts=rails[i])
+            self.assertAlmostEqual(out[i], exact_second_order_mean(transfer_pieces(character), bus[i], bus[i - 1],
+                                                                   bus[i - 2]), delta=1e-7, msg=(i, rails[i]))
+            steps = 200
+            mean = sum(output_volts(bus[i - 1] + (bus[i] - bus[i - 1]) * (k + 0.5) / steps, character)
+                       for k in range(steps)) / steps
+            self.assertAlmostEqual(segment[i], mean, delta=5e-4, msg=(i, rails[i]))
+
+    def test_a_rail_jump_steps_the_output_as_the_transfer_does(self):
+        # a held bus (DC: the drive 0, the offset 4.2 V) while the rail jumps 3 -> 7.5 V and back: ADAA2 keeps no
+        # antiderivative across samples, so each sample is the transfer at its rail, no spike between
+        timbre, program = self.program({"cell_rail_volts": "in2"}, 0.0, 300.0, 4.2, oversampling=1)
+        rails = [3.0] * 10 + [7.5] * 10 + [3.0] * 10
+        out, bus, segment = program.run(len(rails), [[0.0] * len(rails), rails])
+        for i in range(2, len(rails)):
+            expected = output_volts(4.2, dataclasses.replace(ORIGINAL, cell_rail_volts=rails[i]))
+            self.assertAlmostEqual(out[i], expected, delta=1e-7, msg=i)      # the table's 10-digit pieces
+            self.assertAlmostEqual(segment[i], expected, delta=1e-7, msg=i)
+        self.assertGreater(abs(out[12] - out[5]), 0.5)          # the rail does move the fold
+
+    def test_a_moving_rail_keeps_to_the_cells_supply(self):
+        # it moves about the character's rail, inside the CA3160's 5-16 V supply (+-2.5 to +-8 V)
+        self.assertEqual(RUNTIME_CELL_RAIL_VOLTS, (2.5, 8.0))
+        section(character=Buchla259TimbreSectionCharacter(cell_rail_volts=4.5), character_inputs={"cell_rail_volts": "r"})
+        with self.assertRaises(BuildError):
+            section(character=Buchla259TimbreSectionCharacter(cell_rail_volts=9.0),
+                    character_inputs={"cell_rail_volts": "r"})
+        with self.assertRaises(BuildError):
+            section(character_inputs={"limiter_zener_volts": "z"})      # the limiter is fixed in volts
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

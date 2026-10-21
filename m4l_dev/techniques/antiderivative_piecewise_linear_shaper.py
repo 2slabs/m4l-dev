@@ -54,7 +54,20 @@ that runs a mean at several points a sample (an oscillator's sub-samples, a look
 expressions directly: for second order, the raw mean at each point and an `AntiderivativeAntialiasingEqualiser` (order 2) over
 it and its kept means. `AntiderivativePiecewiseLinearShaper` is the plain use: one signal in, its ADAA1 or ADAA2 mean
 equalised for its oversampling out.
+
+A table can move at run time with one quantity (`PiecewiseLinearMotion`: a circuit's rail, which moves its
+breakpoints): each piece's start and intercept change in proportion to a shift (a GenExpr expression, 0 at the pieces
+as given), its slope does not, over a stated range of the shift in which the pieces keep their order (the build
+checks it at both ends: in proportion, so in between too). Every constant the functions hold is then a polynomial in
+the shift (a start and an intercept degree 1, the antiderivatives' constants at a piece's start degree 2 and 3,
+computed exactly), written so that at shift 0 it evaluates to the very double the still table writes (c0 + shift x
+(...)), and every function takes the shift as its last argument. ADAA2 keeps no antiderivative from one sample to the
+next (each mean is taken through three inputs on the table of its own call), so a moving table never mixes two
+tables in one quotient: the output is ADAA2 of the transfer as it is at that call, and moves with it continuously.
+First order's mean does take a kept antiderivative (`integral_before`): a caller of a moving table computes it again
+at the current shift.
 """
+import dataclasses
 import hashlib
 import math
 from fractions import Fraction
@@ -106,6 +119,46 @@ adaa2_ramp(u0, u1, u2) {
 }
 
 
+@dataclasses.dataclass(frozen=True)
+class PiecewiseLinearMotion:
+    """A table's pieces moving with one run-time quantity: `shift` (GenExpr, 0 at the pieces as given) moves piece i's
+    start by start_rates[i] and its intercept by intercept_rates[i] per unit, its slope not at all, for shifts in
+    `shift_range` (low, high), where the pieces must keep their order. The first piece's start rate is 0 (it starts at
+    -inf); the other intercepts' rates the table computes again exactly, so the pieces meet at every shift (the given
+    ones must agree with that: the build fails otherwise)."""
+    shift: str
+    start_rates: tuple
+    intercept_rates: tuple
+    shift_range: tuple
+
+
+# Where the given intercept rates may differ from the ones continuity asks for, per unit of shift (relative to the
+# larger of 1 and the rate): more, and the motion the caller measured is not one where its pieces meet.
+MOTION_CONTINUITY_TOLERANCE = 1e-6
+
+
+def _polynomial_add(a, b):
+    """Coefficient tuples (lowest power first) added."""
+    length = max(len(a), len(b))
+    return tuple((a[k] if k < len(a) else 0) + (b[k] if k < len(b) else 0) for k in range(length))
+
+
+def _polynomial_multiply(a, b):
+    product = [Fraction(0)] * (len(a) + len(b) - 1)
+    for i, x in enumerate(a):
+        for j, y in enumerate(b):
+            product[i + j] += x * y
+    return tuple(product)
+
+
+def _polynomial_scale(a, factor):
+    return tuple(coefficient * factor for coefficient in a)
+
+
+def _polynomial_subtract(a, b):
+    return _polynomial_add(a, _polynomial_scale(b, -1))
+
+
 class PiecewiseLinearTable:
     """A transfer as straight pieces: `pieces` is [(from x, slope, intercept)], sorted, the first from -inf. Its
     GenExpr functions are named `<base_name>_<digest of the pieces>`.
@@ -114,9 +167,13 @@ class PiecewiseLinearTable:
     the same on every machine: the starts, the slopes and the first intercept rounded; a continuous table's other
     intercepts then computed exactly (Fractions) so each piece meets the last where it starts, as given; the
     antiderivatives' constants computed exactly from the pieces. Rounding those too would open gaps at the corners,
-    which the ADAA quotients divide by tiny steps."""
+    which the ADAA quotients divide by tiny steps.
 
-    def __init__(self, base_name, pieces):
+    With `motion` (a PiecewiseLinearMotion) the pieces move with its shift (the module docstring): its rates rounded
+    the same way, the other intercepts' rates computed exactly; `pieces` are the table at shift 0, which the Python
+    methods (`value`, `integral`, ...) compute; `pieces_at(shift)` gives it elsewhere."""
+
+    def __init__(self, base_name, pieces, motion=None):
         if not pieces or pieces[0][0] != -math.inf:
             raise BuildError(f"PiecewiseLinearTable {base_name}: the first piece must start at -inf, got {pieces[:1]}")
         starts = [piece[0] for piece in pieces]
@@ -134,8 +191,130 @@ class PiecewiseLinearTable:
                 self.pieces[index] = (start, slope, generated_number(meeting - Fraction(slope) * Fraction(start)))
         self.exact_pieces = [tuple(value if value == -math.inf else Fraction(value) for value in piece)
                              for piece in self.pieces]
-        digest = hashlib.sha256(repr(self.pieces).encode()).hexdigest()[:8]
+        self.motion = motion
+        self.start_rates, self.intercept_rates = self._rates(base_name, motion)
+        digest = hashlib.sha256(repr((self.pieces, self.start_rates, self.intercept_rates) if motion else
+                                      self.pieces).encode()).hexdigest()[:8]
         self.function_name = f"{base_name}_{digest}"
+        # the functions' last argument and every call's (a moving table: its shift)
+        self._shift_argument = ", shift" if motion else ""
+        self._shift_call = f", {motion.shift}" if motion else ""
+        self._polynomials = self._constant_polynomials()
+
+    def _rates(self, base_name, motion):
+        """The motion's rates per piece, rounded (starts, the first intercept) or computed exactly so the pieces meet
+        at every shift (the other intercepts); none moving, all 0. Fails the build on a motion that doesn't fit."""
+        count = len(self.pieces)
+        if motion is None:
+            return [0.0] * count, [Fraction(0)] * count
+        who = f"PiecewiseLinearTable {base_name}"
+        if len(motion.start_rates) != count or len(motion.intercept_rates) != count:
+            raise BuildError(f"{who}: the motion needs a start rate and an intercept rate for each of the {count} pieces")
+        if motion.start_rates[0] != 0:
+            raise BuildError(f"{who}: the first piece starts at -inf, its start can't move")
+        if not self.is_continuous:
+            raise BuildError(f"{who}: only a continuous table can move")
+        low, high = motion.shift_range
+        if not low <= 0 <= high or low == high:
+            raise BuildError(f"{who}: the shift's range {motion.shift_range} must hold 0 (the pieces as given)")
+        start_rates = [0.0] + [generated_number(rate) for rate in motion.start_rates[1:]]
+        intercept_rates = [Fraction(generated_number(motion.intercept_rates[0]))]
+        for index in range(1, count):
+            left_slope, slope = Fraction(self.pieces[index - 1][1]), Fraction(self.pieces[index][1])
+            # the pieces meet at the moving start: (left slope - slope) x start rate = intercept rate - left's
+            rate = intercept_rates[-1] + (left_slope - slope) * Fraction(start_rates[index])
+            if abs(float(rate) - motion.intercept_rates[index]) > MOTION_CONTINUITY_TOLERANCE * max(1.0, abs(float(rate))):
+                raise BuildError(f"{who}: piece {index}'s intercept moves at {motion.intercept_rates[index]!r} a unit, "
+                                 f"but meeting the piece before at its moving start needs {float(rate)!r}")
+            intercept_rates.append(rate)
+        for end in (low, high):
+            starts = [start + rate * end for (start, _, _), rate in zip(self.pieces[1:], start_rates[1:])]
+            if any(b <= a for a, b in zip(starts, starts[1:])):
+                raise BuildError(f"{who}: at shift {end!r} the pieces' starts are out of order: the motion holds "
+                                 f"only where they keep it")
+            if any((start > 0) != (piece[0] > 0) or (start < 0) != (piece[0] < 0)
+                   for start, piece in zip(starts, self.pieces[1:])):
+                raise BuildError(f"{who}: at shift {end!r} a piece's start crosses 0, where the antiderivatives "
+                                 f"start: the motion holds only where none does")
+        return start_rates, intercept_rates
+
+    def pieces_at(self, shift):
+        """The table's pieces [(from x, slope, intercept)] at `shift` (floats), in Python."""
+        return [(start if start == -math.inf else start + start_rate * shift, slope,
+                 float(Fraction(intercept) + intercept_rate * Fraction(shift)))
+                for (start, slope, intercept), start_rate, intercept_rate
+                in zip(self.pieces, self.start_rates, self.intercept_rates)]
+
+    def _constant_polynomials(self):
+        """Each piece's constants as exact polynomials in the shift (coefficient tuples, lowest power first): its
+        start, intercept, start squared and cubed, and the first and second antiderivatives from 0 at its start (the
+        first piece's at the second's start, its anchor). Still, every polynomial is its constant alone."""
+        exact = self.exact_pieces
+        starts = [None] + [(Fraction(start), Fraction(rate)) for (start, _, _), rate
+                           in zip(exact[1:], self.start_rates[1:])]
+        intercepts = [(Fraction(intercept), rate) for (_, _, intercept), rate in zip(exact, self.intercept_rates)]
+        zero = (Fraction(0),)
+        # the piece holding 0 (its start at or under 0): the antiderivatives start there
+        holding_zero = max(index for index, piece in enumerate(exact) if piece[0] == -math.inf or piece[0] <= 0)
+
+        def over_piece(index, a, b, first_at_a):
+            """The first and second antiderivatives' growth over piece `index` from a to b (polynomials)."""
+            slope, intercept = Fraction(exact[index][1]), intercepts[index]
+            width = _polynomial_subtract(b, a)
+            a_squared, b_squared = _polynomial_multiply(a, a), _polynomial_multiply(b, b)
+            first = _polynomial_add(_polynomial_scale(_polynomial_subtract(b_squared, a_squared), slope / 2),
+                                    _polynomial_multiply(intercept, width))
+            cubes = _polynomial_subtract(_polynomial_multiply(b_squared, b), _polynomial_multiply(a_squared, a))
+            second = _polynomial_add(
+                _polynomial_add(_polynomial_multiply(first_at_a, width),
+                                _polynomial_scale(_polynomial_subtract(_polynomial_scale(cubes, Fraction(1, 6)),
+                                                                       _polynomial_scale(_polynomial_multiply(
+                                                                           a_squared, width), Fraction(1, 2))),
+                                                  slope)),
+                _polynomial_scale(_polynomial_multiply(intercept, _polynomial_multiply(width, width)), Fraction(1, 2)))
+            return first, second
+        first_at, second_at = {}, {}
+        for index in range(holding_zero + 1, len(exact)):              # rightwards from 0
+            a = zero if index - 1 == holding_zero else starts[index - 1]
+            first_a = zero if index - 1 == holding_zero else first_at[index - 1]
+            second_a = zero if index - 1 == holding_zero else second_at[index - 1]
+            first, second = over_piece(index - 1, a, starts[index], first_a)
+            first_at[index], second_at[index] = _polynomial_add(first_a, first), _polynomial_add(second_a, second)
+        for index in range(holding_zero, 0, -1):                       # leftwards from 0
+            b = zero if index == holding_zero else starts[index + 1]
+            first_b = zero if index == holding_zero else first_at[index + 1]
+            second_b = zero if index == holding_zero else second_at[index + 1]
+            first, _ = over_piece(index, starts[index], b, zero)
+            first_at[index] = _polynomial_subtract(first_b, first)
+            _, second = over_piece(index, starts[index], b, first_at[index])
+            second_at[index] = _polynomial_subtract(second_b, second)
+        polynomials = []
+        for index in range(len(exact)):
+            anchor = 1 if index == 0 else index                         # the first piece is anchored at its end
+            start = starts[anchor]
+            polynomials.append({
+                "start": start, "intercept": intercepts[index],
+                "start_squared": _polynomial_multiply(start, start),
+                "start_cubed": _polynomial_multiply(_polynomial_multiply(start, start), start),
+                "integral": first_at[anchor], "second_integral": second_at[anchor]})
+        return polynomials
+
+    def _written(self, polynomial):
+        """GenExpr for a polynomial in the shift: its constant as the still table writes it (generated_number of the
+        exact value), and, moving, the rest Horner's way after it, so at shift 0 it is that double exactly."""
+        coefficients = list(polynomial)
+        while len(coefficients) > 1 and coefficients[-1] == 0:
+            coefficients.pop()
+        written = [repr(generated_number(Fraction(coefficient))) for coefficient in coefficients]
+        if len(written) == 1:
+            return written[0]
+        rest = written[-1]
+        for coefficient in reversed(written[1:-1]):
+            rest = f"{coefficient} + shift * ({rest})"
+        return f"({written[0]} + shift * ({rest}))"
+
+    def _constant(self, index, name):
+        return self._written(self._polynomials[index][name])
 
     def value(self, x):
         """The transfer at `x`, in Python."""
@@ -196,7 +375,7 @@ class PiecewiseLinearTable:
         if len(indices) == 1:
             return leaf(indices[0])
         middle = len(indices) // 2
-        return (f"(x < {self.pieces[indices[middle]][0]!r} ? {self._tree(indices[:middle], leaf)} : "
+        return (f"(x < {self._constant(indices[middle], 'start')} ? {self._tree(indices[:middle], leaf)} : "
                 f"{self._tree(indices[middle:], leaf)})")
 
     @staticmethod
@@ -213,32 +392,32 @@ class PiecewiseLinearTable:
         (a continuous table) ADAA2 through three."""
         name = self.function_name
 
+        shift = self._shift_argument
+
         def value(index):
-            _, slope, intercept = self.pieces[index]
-            return f"({slope!r} * x + {intercept!r})"
+            slope = self.pieces[index][1]
+            return f"({slope!r} * x + {self._constant(index, 'intercept')})"
 
         def integral(index):
-            start, slope, intercept = self.pieces[index]
-            if start == -math.inf:                      # anchor the first piece at its end instead
-                start = self.pieces[1][0]
-            start, slope, intercept = Fraction(start), Fraction(slope), Fraction(intercept)
-            return (f"({generated_number(self.integral(start, exact=True))!r} + {generated_number(slope / 2)!r} * "
-                    f"(x * x - {generated_number(start * start)!r}) + {generated_number(intercept)!r} * "
-                    f"(x - {generated_number(start)!r}))")
+            slope = Fraction(self.pieces[index][1])
+            return (f"({self._constant(index, 'integral')} + {generated_number(slope / 2)!r} * "
+                    f"(x * x - {self._constant(index, 'start_squared')}) + {self._constant(index, 'intercept')} * "
+                    f"(x - {self._constant(index, 'start')}))")
         indices = list(range(len(self.pieces)))
+        moving = (f", moving with its shift (its last argument)" if self.motion else "")
         functions = {
-            name: f"""// a piecewise-linear transfer, {len(self.pieces)} straight pieces (kit technique: antiderivative piecewise-linear shaper)
-{name}(x) {{
+            name: f"""// a piecewise-linear transfer, {len(self.pieces)} straight pieces{moving} (kit technique: antiderivative piecewise-linear shaper)
+{name}(x{shift}) {{
 \treturn {self._tree(indices, value)};
 }}""",
             f"{name}_integral": f"""// its antiderivative from 0, closed form per piece
-{name}_integral(x) {{
+{name}_integral(x{shift}) {{
 \treturn {self._tree(indices, integral)};
 }}""",
             f"{name}_mean": f"""// its exact mean along the straight line from x_before to x (first-order ADAA), given the integral at both ends
-{name}_mean(x, x_before, integral, integral_before) {{
+{name}_mean(x, x_before, integral, integral_before{shift}) {{
 \tdifference = x - x_before;
-\treturn abs(difference) > {ILL_CONDITIONED_STEP!r} ? (integral - integral_before) / difference : {name}(0.5 * (x + x_before));
+\treturn abs(difference) > {ILL_CONDITIONED_STEP!r} ? (integral - integral_before) / difference : {name}(0.5 * (x + x_before){shift});
 }}""",
         }
         if self.is_continuous:
@@ -250,16 +429,16 @@ class PiecewiseLinearTable:
         name = self.function_name
         eps = ILL_CONDITIONED_STEP
 
+        shift = self._shift_argument
+
         def second_integral(index):
-            start, slope, intercept = self.pieces[index]
-            if start == -math.inf:                      # anchor the first piece at its end instead
-                start = self.pieces[1][0]
-            start, slope, intercept = Fraction(start), Fraction(slope), Fraction(intercept)
-            number = {name: repr(generated_number(value)) for name, value in (
-                ("second_integral", self.second_integral(start, exact=True)),
-                ("integral", self.integral(start, exact=True)), ("start", start), ("slope", slope),
-                ("start_cubed", start * start * start), ("half_start_squared", start * start / 2),
-                ("half_intercept", intercept / 2))}
+            polynomials = self._polynomials[index]
+            number = {name: self._written(polynomials[name]) for name in (
+                "second_integral", "integral", "start", "start_cubed")}
+            number["slope"] = repr(generated_number(Fraction(self.pieces[index][1])))
+            number["half_start_squared"] = self._written(_polynomial_scale(polynomials["start_squared"],
+                                                                           Fraction(1, 2)))
+            number["half_intercept"] = self._written(_polynomial_scale(polynomials["intercept"], Fraction(1, 2)))
             return (f"({number['second_integral']} + {number['integral']} * (x - {number['start']}) + "
                     f"{number['slope']} * ((x * x * x - {number['start_cubed']}) / 6 - {number['half_start_squared']} * "
                     f"(x - {number['start']})) + {number['half_intercept']} * (x - {number['start']}) * "
@@ -267,11 +446,11 @@ class PiecewiseLinearTable:
         functions = dict(SHARED_SECOND_ORDER_FUNCTIONS)
         functions.update({
             f"{name}_second_integral": f"""// its second antiderivative from 0, closed form per piece
-{name}_second_integral(x) {{
+{name}_second_integral(x{shift}) {{
 \treturn {self._tree(indices, second_integral)};
 }}""",
             f"{name}_piece": f"""// which of its pieces holds x (0 = the first)
-{name}_piece(x) {{
+{name}_piece(x{shift}) {{
 \treturn {self._tree(indices, lambda index: repr(float(index)))};
 }}""",
             f"{name}_slope_of": f"""// piece i's slope
@@ -279,35 +458,35 @@ class PiecewiseLinearTable:
 \treturn {self._index_tree(indices, lambda index: repr(self.pieces[index][1]))};
 }}""",
             f"{name}_intercept_of": f"""// piece i's intercept
-{name}_intercept_of(i) {{
-\treturn {self._index_tree(indices, lambda index: repr(self.pieces[index][2]))};
+{name}_intercept_of(i{shift}) {{
+\treturn {self._index_tree(indices, lambda index: self._constant(index, 'intercept'))};
 }}""",
             f"{name}_start_of": f"""// where piece i starts (i >= 1)
-{name}_start_of(i) {{
-\treturn {self._index_tree(indices[1:], lambda index: repr(self.pieces[index][0]))};
+{name}_start_of(i{shift}) {{
+\treturn {self._index_tree(indices[1:], lambda index: self._constant(index, 'start'))};
 }}""",
             f"{name}_difference": f"""// its second antiderivative's difference quotient from b to a (Bilbao et al. 2017 eq. (11), fallback (17))
-{name}_difference(a, b) {{
-\treturn abs(a - b) > {eps!r} ? ({name}_second_integral(a) - {name}_second_integral(b)) / (a - b) : {name}_integral(0.5 * (a + b));
+{name}_difference(a, b{shift}) {{
+\treturn abs(a - b) > {eps!r} ? ({name}_second_integral(a{shift}) - {name}_second_integral(b{shift})) / (a - b) : {name}_integral(0.5 * (a + b){shift});
 }}""",
             f"{name}_second_order_mean": f"""// second-order ADAA through x0 (newest), x1, x2: one sample late; piece-wise, so exact on a piece and well-conditioned at a corner
-{name}_second_order_mean(x0, x1, x2) {{
-\tpiece_0 = {name}_piece(x0);
-\tpiece_1 = {name}_piece(x1);
-\tpiece_2 = {name}_piece(x2);
+{name}_second_order_mean(x0, x1, x2{shift}) {{
+\tpiece_0 = {name}_piece(x0{shift});
+\tpiece_1 = {name}_piece(x1{shift});
+\tpiece_2 = {name}_piece(x2{shift});
 \tlowest = min(piece_0, min(piece_1, piece_2));
 \thighest = max(piece_0, max(piece_1, piece_2));
-\ty = {name}_slope_of(lowest) * (x0 + x1 + x2) / 3 + {name}_intercept_of(lowest);
+\ty = {name}_slope_of(lowest) * (x0 + x1 + x2) / 3 + {name}_intercept_of(lowest{shift});
 \tif (highest > lowest + 1.5) {{
 \t\tif (abs(x0 - x2) > {eps!r}) {{
-\t\t\ty = 2 * ({name}_difference(x0, x1) - {name}_difference(x1, x2)) / (x0 - x2);
+\t\t\ty = 2 * ({name}_difference(x0, x1{shift}) - {name}_difference(x1, x2{shift})) / (x0 - x2);
 \t\t}} else {{
 \t\t\tmiddle = 0.5 * (x0 + x2);
 \t\t\tdelta = middle - x1;
-\t\t\ty = 2 / delta * ({name}_integral(middle) + ({name}_second_integral(x1) - {name}_second_integral(middle)) / delta);
+\t\t\ty = 2 / delta * ({name}_integral(middle{shift}) + ({name}_second_integral(x1{shift}) - {name}_second_integral(middle{shift})) / delta);
 \t\t}}
 \t}} else if (highest > lowest + 0.5) {{
-\t\tcorner = {name}_start_of(highest);
+\t\tcorner = {name}_start_of(highest{shift});
 \t\ty = y + ({name}_slope_of(highest) - {name}_slope_of(lowest)) * adaa2_ramp(x0 - corner, x1 - corner, x2 - corner);
 \t}}
 \treturn y;
@@ -316,14 +495,14 @@ class PiecewiseLinearTable:
         return functions
 
     def value_call(self, x_expression):
-        return f"{self.function_name}({x_expression})"
+        return f"{self.function_name}({x_expression}{self._shift_call})"
 
     def integral_call(self, x_expression):
-        return f"{self.function_name}_integral({x_expression})"
+        return f"{self.function_name}_integral({x_expression}{self._shift_call})"
 
     def mean_call(self, x_expression, x_before_expression, integral_expression, integral_before_expression):
         return (f"{self.function_name}_mean({x_expression}, {x_before_expression}, {integral_expression}, "
-                f"{integral_before_expression})")
+                f"{integral_before_expression}{self._shift_call})")
 
     def second_order_mean_call(self, x_expression, x_before_expression, x_before_before_expression):
         """GenExpr: ADAA2's raw mean through the three inputs (newest first), one sample late; the audio is
@@ -332,7 +511,7 @@ class PiecewiseLinearTable:
             raise BuildError(f"PiecewiseLinearTable {self.function_name}: second-order ADAA needs a continuous "
                              f"table, and its pieces jump where they meet")
         return (f"{self.function_name}_second_order_mean({x_expression}, {x_before_expression}, "
-                f"{x_before_before_expression})")
+                f"{x_before_before_expression}{self._shift_call})")
 
 
 class AntiderivativePiecewiseLinearShaper(Technique):

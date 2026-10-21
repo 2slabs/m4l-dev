@@ -195,6 +195,11 @@ Note: the DAFx coefficients (Vs = 6 V) describe the **CA3160 original**, not The
   no fold, no offset). Linear in Fold [DESIGN]: no source gives the 2N3958's Rds against the Timbre voltage.
 - Not modelled: slew (§3.2.7, above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft
   knee at low zener current, the 1.45 Hz block (the voice's predicted DC does that job).
+- The rail at run time [DESIGN, 2026-10-21, for 2sl gate's Rails]: `cell_rail_volts` may move, within ±2.5..8 V (the
+  CA3160's 5–16 V operating supply, §3.1). With it move every fold point (§4.2 item 1) and the node floor, −(Vs + 0.5 V);
+  fixed in volts stay the limiter (±5.1 V), the 0.5 V of the CA3160's input range, and the drive and Symmetry's offset
+  (the instrument's). Starved-supply behaviour below the CA3160's 8.3 V bias regulation (§3.1) and a TL07x's softer
+  knee (§4.2 item 2) are not modelled: a lower rail here is the ideal cell's clip, lower.
 
 ## 5. The oscillators (from 2sl gate's research brief, §2.3 and §2.5 there)
 
