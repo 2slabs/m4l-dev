@@ -14,7 +14,12 @@ The user's rule (2026-10-21): "the build should be the same, but the tests aren'
 - **Exact stays exact where the claim is a value, not a sound**: silence that must be exactly 0 (an idle voice), a
   constant, integers and discrete states (indices, counts, gate states, a seeded draw's numbers in the brain), one
   value of the renderer's arithmetic against Python's (tests/test_genexpr.py: the translation, value by value), a
-  latency in samples. Two sequences of samples compared with each other are renders.
+  latency in samples, and the first sample at which a change reaches the output (2sl stab's latency probe: two
+  runs of one program on one machine share every bit until the change, so the first differing sample is a time,
+  measured exactly). Every other pair of sample sequences compared with each other is two renders.
+- **Accuracy bounds stay**: a test holding a block to its equation or to a twin within a bound on each sample far
+  over the last bits and far under the comparator's (1e-9 on a signal near 1) claims more than "the same sound" and
+  keeps its bound; another machine's last bits (1e-16) pass it.
 
 ## The measure
 

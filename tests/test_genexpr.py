@@ -410,14 +410,19 @@ class SpeedTests(unittest.TestCase):
         body.append("out1 = a297;")
         code = "\n".join(lines + body)
         program = GenProgram(code, 1, 1)
+        program.run(1, [0.1])                       # the C built and loaded first: the one run below times rendering
         num_samples = 20000
-        started = time.perf_counter()
+        # one run on this thread's CPU clock (the render is a ctypes call on it), the machine's load read first and
+        # reported with it (architecture/testing.md, "Timing tests")
+        load_report = f"1-minute load {os.getloadavg()[0]:.2f} on {os.cpu_count()} cores"
+        started = time.thread_time()
         output = program.run(num_samples, [0.1])[0]
-        elapsed = time.perf_counter() - started
-        rate = num_samples / elapsed
-        print(f"\n[speed] ~300 statements: {rate:,.0f} samples/second")
+        elapsed = time.thread_time() - started
+        rate = num_samples / max(elapsed, 1e-9)
+        print(f"\n[speed] ~300 statements: {rate:,.0f} samples per CPU second ({load_report})")
         self.assertTrue(all(math.isfinite(sample) for sample in output))
-        self.assertGreater(rate, 250_000, "the renderer runs compiled C: ~1M samples/s here; Python's was ~120k")
+        self.assertGreater(rate, 250_000, f"the renderer runs compiled C: ~1M samples/s here; Python's was ~120k "
+                                          f"({load_report})")
 
 
 if __name__ == "__main__":
