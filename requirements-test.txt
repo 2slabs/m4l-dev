@@ -1,0 +1,3 @@
+# What the kit's tests need beyond the standard library (README). Builds need none of it.
+# Duktape, node and a C compiler come from the system: see README.
+Pillow>=10

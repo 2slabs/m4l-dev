@@ -9,7 +9,10 @@ import sys
 import tempfile
 import unittest
 
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError as missing:   # a test requirement (README, requirements-test.txt), so say how to get it
+    raise ImportError("the kit's tests need Pillow: brew install pillow, or pip install -r requirements-test.txt") from missing
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "tools")]
