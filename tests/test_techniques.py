@@ -35,7 +35,8 @@ from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStag
                                                            SecondOrderAllpassStage, ZeroDelayAllpassCascade)
 from m4l_dev.techniques.zero_delay_allpass_cascade import \
     small_signal_response as cascade_small_signal_response  # noqa: E402
-from m4l_dev.techniques.zero_delay_ladder_filter import (ZeroDelayLadderFilter, response_script_code,  # noqa: E402
+from m4l_dev.techniques.zero_delay_ladder_filter import (LINEAR_FEEDBACK_AT_FULL_RESONANCE,  # noqa: E402
+                                                         ZeroDelayLadderFilter, response_script_code,
                                                          small_signal_magnitude)
 from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter  # noqa: E402
 from m4l_dev.techniques.zero_delay_one_pole_filter import \
@@ -112,9 +113,12 @@ class ZeroDelayLadderFilterTests(unittest.TestCase):
 
     def test_the_display_script_is_the_same_response(self):
         script = response_script_code()
-        for frequency, cutoff, resonance in ((100.0, 700.0, 0.3), (700.0, 700.0, 1.0), (15000.0, 30000.0, 0.5)):
-            value = float(es5.evaluate(script + f"\nladderResponse({frequency}, {cutoff}, {resonance}, 48000)"))
-            self.assertAlmostEqual(value, small_signal_magnitude(frequency, cutoff, resonance, 48000.0), places=9)
+        for linear in (False, True):
+            for frequency, cutoff, resonance in ((100.0, 700.0, 0.3), (700.0, 700.0, 1.0), (15000.0, 30000.0, 0.5)):
+                value = float(es5.evaluate(script + f"\nladderResponse({frequency}, {cutoff}, "
+                                           f"ladderFeedbackGain({resonance}, {str(linear).lower()}), 48000)"))
+                self.assertAlmostEqual(value, small_signal_magnitude(frequency, cutoff, resonance, 48000.0, linear),
+                                       places=9, msg=(linear, frequency))
 
 
     def test_the_pass_band_is_the_ladder_s_own(self):
@@ -140,6 +144,67 @@ class ZeroDelayLadderFilterTests(unittest.TestCase):
         first = used.run(1, [[saw[0]]])[0]
         used.set_param("reset", 0.0)
         self.assertEqual(first + used.run(len(saw) - 1, [saw[1:]])[0], fresh)
+
+
+class ZeroDelayLadderFilterLinearTests(unittest.TestCase):
+    """The ladder's linear form (linear=True): eq. 5.8 with no tanh, k under 4 (references/dsp.md)."""
+    SAMPLERATE = 44100.0
+
+    def ladder(self, cutoff, resonance):
+        program = harness([ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="cutoff", resonance="resonance",
+                                                 linear=True)],
+                          {"cutoff": 1000.0, "resonance": 0.0}, ["ladder_out"], samplerate=self.SAMPLERATE)
+        program.set_param("cutoff", cutoff)
+        program.set_param("resonance", resonance)
+        return program
+
+    def test_its_output_scales_with_its_input_at_any_level(self):
+        # no harmonics, no compression: a saw at 1e-3 and at 30 (+90 dB) come out in the same proportion
+        saw = [((i * 220.0 / self.SAMPLERATE) % 1) * 2 - 1 for i in range(4410)]
+        for resonance in (0.0, 0.8, 1.0):
+            quiet = self.ladder(2000.0, resonance).run(len(saw), [[1e-3 * v for v in saw]])[0]
+            loud = self.ladder(2000.0, resonance).run(len(saw), [[30.0 * v for v in saw]])[0]
+            worst = max(abs(b / 30.0 - a / 1e-3) for a, b in zip(quiet, loud))
+            self.assertLess(worst, 1e-9 * max(abs(a / 1e-3) for a in quiet), resonance)
+
+    def test_small_signals_and_loud_ones_follow_the_display_s_response(self):
+        for resonance in (0.5, 1.0):
+            for level in (1e-3, 10.0):
+                for frequency in (200.0, 1900.0, 5000.0):
+                    sine = [level * math.sin(2 * math.pi * frequency * i / self.SAMPLERATE) for i in range(44100)]
+                    out = self.ladder(2000.0, resonance).run(len(sine), [sine])[0][22050:]
+                    measured = amplitude_at(out, frequency, self.SAMPLERATE) / level
+                    expected = small_signal_magnitude(frequency, 2000.0, resonance, self.SAMPLERATE, linear=True)
+                    self.assertAlmostEqual(20 * math.log10(measured), 20 * math.log10(expected), delta=0.05,
+                                           msg=(resonance, level, frequency))
+
+    def test_at_full_resonance_it_rings_out_and_never_sings(self):
+        # k 3.9: -60 dB in 0.87 s at 200 Hz (the poles' decay), so 2 s on it is under -120 dB of its loudest
+        for cutoff in (200.0, 3000.0, 12000.0):
+            kick = [0.5] * 20 + [0.0] * 88180
+            out = self.ladder(cutoff, 1.0).run(len(kick), [kick])[0]
+            loudest = max(abs(v) for v in out)
+            self.assertLess(max(abs(v) for v in out[-500:]), 1e-6 * loudest, cutoff)
+
+    def test_its_k_at_full_resonance_is_under_self_oscillation(self):
+        ladder = ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="1", linear=True)
+        self.assertEqual(ladder.feedback_at_full_resonance, LINEAR_FEEDBACK_AT_FULL_RESONANCE)
+        self.assertLess(LINEAR_FEEDBACK_AT_FULL_RESONANCE, 4.0)
+        self.assertNotIn("tanh(", ladder.statements())
+        self.assertEqual(ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="1")
+                         .statements().count("tanh("), 1)
+
+    def test_the_pass_band_is_the_ladder_s_own(self):
+        for resonance in (0.0, 0.5, 1.0):
+            sine = [1e-3 * math.sin(2 * math.pi * 60.0 * i / self.SAMPLERATE) for i in range(8820)]
+            level = amplitude_at(self.ladder(8000.0, resonance).run(len(sine), [sine])[0][4410:], 60.0,
+                                 self.SAMPLERATE) / 1e-3
+            self.assertAlmostEqual(20 * math.log10(level),
+                                   -20 * math.log10(1 + LINEAR_FEEDBACK_AT_FULL_RESONANCE * resonance), delta=0.02)
+
+    def test_linear_is_a_bool(self):
+        with self.assertRaises(BuildError):
+            ZeroDelayLadderFilter("ladder", input="in1", cutoff_hz="1000", resonance="0", linear=1)
 
 
 def equaliser_of(order, oversampling):

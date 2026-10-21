@@ -27,7 +27,9 @@ NI's URL is gone, the Wayback copy is fetched).
   better than the linearization at the operating point, but at more excessive settings could work worse than the
   linearization at zero."
 
-The technique is (5.8) with the tanh applied to the solved u (linearised at zero). The research behind the choice
+The technique is (5.8) with the tanh applied to the solved u (linearised at zero); its linear form is (5.8) as it
+stands, no tanh, and since its resonance is infinite at k = 4 (§5.2, above) and nothing bounds a linear loop past
+it, the linear form's k stays under 4 (3.9 at Resonance 1, a design choice). The research behind the choice
 (2026-10-19, against RK4 at 8x of each analog model): an exact Newton solve of the same loop measured the same
 (-52.6 dB error vs the model, both); the per-stage tanh ladder (the secant linearisation above, at a linear
 predictor) tracks its own model as well but its self-oscillation sinks 4 to 32 cents flat with its amplitude (the
