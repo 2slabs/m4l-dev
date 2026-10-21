@@ -4,13 +4,18 @@ namespace twosl::plugin
 {
 namespace
 {
-    // Max's [js] globals, in the script's own language. Task: `interval` (ms), `repeat (n, initialdelay)` (n < 0 or
+    // Max's [js] globals, in the script's own language. outlet(n, ...): an array argument goes out as its items, as
+    // Max sends it. Task: `interval` (ms), `repeat (n, initialdelay)` (n < 0 or
     // left out: until cancelled; the first run after initialdelay, 0 when left out), `cancel()`, `schedule (delay)`
     // (once), `execute()`, `running`. A task due several times by one advanceTo runs once a time, at its own time.
     const char* prelude = R"js(
 var __global = this;
 var inlet = 0, messagename = "", inlets = 1, outlets = 1, jsarguments = [];
-function outlet() { __host.outlet(Array.prototype.slice.call(arguments)); }
+function outlet() {
+  var values = [];
+  for (var i = 0; i < arguments.length; i++) values = values.concat(arguments[i]);   // an array goes out as its items
+  __host.outlet(values);
+}
 function post() { __host.post(Array.prototype.slice.call(arguments).join(" ")); }
 function error() { __host.error(Array.prototype.slice.call(arguments).join(" ")); }
 function arrayfromargs(a) { return Array.prototype.slice.call(a); }
