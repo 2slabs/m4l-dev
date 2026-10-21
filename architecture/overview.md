@@ -27,7 +27,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `seeded_random.py` | `SeededRandom`: the device's one random generator, its Seed and Loop controls (seeded-random.md) |
 | `chord_block.py` | `ChordBlock`: chord shapes, In key, held keys, names, Drift, the chord display (chord-block.md) |
 | `stored_table.py` | `StoredTable`: a table of values saved with the set and in presets as packed Stored Only parameters, not automated; its fields, its preset book form, its brain code and its Hidden editors (stored-table.md) |
-| `preset_book.py` | `PresetBook`: the Init values and presets, in control units, checked against the controls; saved records (a stored table) and every preset's Stored Only values (`stored_only_values_of_preset`) |
+| `preset_book.py` | `PresetBook`: the neutral values (each control's double-click target), the Init values and presets, in control units, checked against the controls; saved records (a stored table) and every preset's Stored Only values (`stored_only_values_of_preset`) |
 | `live_preset_files.py` | the `.adv` writer (from references/ableton's example) |
 | `live_parameter_identity.py` | what Live knows a parameter by, and the lock file that keeps it |
 | `generated_scripts.py` | `fill_template` and the ES5 check of every generated script |

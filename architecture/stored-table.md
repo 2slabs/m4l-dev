@@ -49,7 +49,10 @@ surfaces" (references/README.md, "Live presets").
   choice for a control the patch drives itself, references/README.md) that show and set one value each:
   `editor_dial` (a continuous field; with `items=` a stepped dial naming each whole number of a field that is an
   index 0..n-1, as a stage's Time on a list of lengths), `editor_menu` and `editor_toggle` (a choice field; a
-  toggle's off is the first item). Each needs Info View text. They tell the brain `<their varname> <value>`; the brain sets them back with
+  toggle's off is the first item). Each needs Info View text. An editor's initial value (its double-click target) is
+  its field's neutral, from the preset book's `"neutral": {table: {field: value}}` (presets.md, "Neutral, Init, and a
+  fresh device"): the build fails on an editor whose field has none, and on a table neutral naming a field the table
+  hasn't or given for a table with no editors. They tell the brain `<their varname> <value>`; the brain sets them back with
   `set` (no output) whenever the value changes from anywhere else. Until the device is ready (the device calls
   `storedTableReady()` on the header's ready) an editor's value is ignored: while a set loads, editors put out their
   initial values, which must not overwrite the recalled table. At ready every editor is set from the table.

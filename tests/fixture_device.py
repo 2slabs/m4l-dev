@@ -26,6 +26,8 @@ from m4l_dev.stored_table import ChoiceField, ContinuousField, StoredTable, stor
 
 FIXTURE_SCRIPT_NAME = "kit-fixture"
 FIXTURE_PRESET_BOOK = {
+    "neutral": {"Level": 0, "Bright": "off", "Shape": "round", "Mode": "a",
+                "Stage": {"Pitch": 0, "Pulse": "off", "Wait": "go"}},
     "init": {"Level": 50, "Bright": "off", "Shape": "round", "Mode": "a", "Volume": 0, "Chord": "minor", "In key": "on",
              "Seed": 0, "Loop": "16 bars",
              "Stage": {"Pitch": [0, 7], "Pulse": ["off", "on"], "Wait": ["go", "keyed"]}},

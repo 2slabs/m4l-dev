@@ -1,9 +1,14 @@
-"""The preset book: a device's Init values and its presets, in one JSON file, in each control's own units.
+"""The preset book: a device's neutral values, its Init values and its presets, in one JSON file, in each control's
+own units.
 
-    {"init": {control: value, ...},
+    {"neutral": {control: value, ...},
+     "init": {control: value, ...},
      "presets": [{"name": ..., "group": ..., "idea": ..., "values": {control: value, ...}}, ...]}
 
-"init" holds every saved control's initial value: a fresh device is the Init sound. "presets" are the sounds, each
+"neutral" holds, for every control a user can double-click (every saved control, and every one with its own initial
+value that Live saves), the value that takes it out of the sound: Live's initial value (the double-click target,
+architecture/presets.md "Neutral, Init, and a fresh device"). A stored table's is {field: value}, its editors'
+double-click target. "init" holds every saved control's starting value: a fresh device is the Init sound. "presets" are the sounds, each
 the Init values with some changed. A value is in its control's own units: a dial's or number box's number, a menu's
 or tab's item name, a toggle's "off" / "on". The build fails on an unknown control, a saved control without an Init
 value, a value out of its control's range, and preset names used twice.
@@ -92,11 +97,13 @@ class PresetBook:
     def __init__(self, data, source_name):
         """`data` as the JSON file holds it; `source_name` names it in the build's messages."""
         self.source_name = source_name
-        if not isinstance(data, dict) or set(data) != {"init", "presets"}:
+        if not isinstance(data, dict) or set(data) != {"neutral", "init", "presets"}:
             found = sorted(data) if isinstance(data, dict) else type(data).__name__
-            raise BuildError(f"{source_name} must hold exactly 'init' and 'presets', not {found}")
-        if not isinstance(data["init"], dict) or not isinstance(data["presets"], list):
-            raise BuildError(f"{source_name}: 'init' must be an object and 'presets' a list")
+            raise BuildError(f"{source_name} must hold exactly 'neutral', 'init' and 'presets', not {found}")
+        if (not isinstance(data["neutral"], dict) or not isinstance(data["init"], dict)
+                or not isinstance(data["presets"], list)):
+            raise BuildError(f"{source_name}: 'neutral' and 'init' must be objects and 'presets' a list")
+        self.neutral_values_in_own_units = data["neutral"]
         self.init_values_in_own_units = data["init"]
         self.presets_in_own_units = data["presets"]
         for preset_number, preset in enumerate(self.presets_in_own_units):
@@ -135,6 +142,21 @@ class PresetBook:
         if control.name not in self.init_values_in_own_units:
             raise BuildError(f"{control.name!r} has no Init value: add it to 'init' in {self.source_name}")
         return value_as_held(control, self.init_values_in_own_units[control.name], f"{self.source_name}, init")
+
+    def has_neutral_value(self, control_name):
+        return control_name in self.neutral_values_in_own_units
+
+    def neutral_value_in_own_units(self, control_name):
+        """`control_name`'s neutral value as the book gives it, or fail the build: every control a user can
+        double-click declares one, never falling back to its Init value."""
+        if control_name not in self.neutral_values_in_own_units:
+            raise BuildError(f"{control_name!r} has no neutral value (what a double-click sets it to: 0 for an amount, "
+                             f"the centre of a bipolar control, unity for a gain, the off item; for a control with no "
+                             f"off, the musically neutral value): add it to 'neutral' in {self.source_name}")
+        return self.neutral_values_in_own_units[control_name]
+
+    def neutral_value_as_held(self, control):
+        return value_as_held(control, self.neutral_value_in_own_units(control.name), f"{self.source_name}, neutral")
 
     def preset_names(self):
         return [preset["name"] for preset in self.presets_in_own_units]

@@ -247,7 +247,22 @@ class StoredTable(SavedRecord):
             raise BuildError(f"{self.patch.device_name}: {long_name!r}: {field_name} is a {type(field).__name__}")
         if long_name not in self.patch.info:
             raise BuildError(f"{self.patch.device_name}: editor {long_name!r} has no Info View text: add it to the info")
-        return field, self.patch.initial_values[self.name].columns[field_name][row]
+        return field, self.patch.initial_values[self.name].columns[field_name][row], self.editor_neutral(field)
+
+    def editor_neutral(self, field):
+        """`field`'s neutral value as held, its editors' double-click target (Live's initial value of a Hidden
+        editor, which the table's recall overrides once the device is ready): the preset book's 'neutral' gives the
+        table {field: value} for every field it has an editor of."""
+        neutral = self.patch.neutral_of_record(self)
+        if field.name not in neutral:
+            raise BuildError(f"{self.patch.device_name}: stored table {self.name!r}: {field.name} has an editor but no "
+                             f"neutral value (what a double-click sets it to): add it to 'neutral' "
+                             f"{{{self.name!r}: {{{field.name!r}: ...}}}} in {self.patch.preset_book.source_name}")
+        unknown = sorted(set(neutral) - set(self.fields_by_name))
+        if unknown:
+            raise BuildError(f"{self.patch.device_name}: stored table {self.name!r}'s neutral names fields it doesn't "
+                             f"have: {unknown}")
+        return field.held(neutral[field.name], f"{self.patch.preset_book.source_name}, neutral, {self.name}")
 
     def placed_editor(self, box_id, long_name, field_name, row, told=False):
         """Record an editor; tell the brain its value as `<its varname> value` (unless the control `told` it)."""
@@ -264,7 +279,7 @@ class StoredTable(SavedRecord):
         style (1: float), `exponent` its taper. `items` (names): a stepped dial showing a name for each whole number
         of a field that runs 0..len(items) - 1 (an index kept in the table, as a sequencer stage's Time on a list of
         lengths); its value is the index."""
-        field, initial = self.editor(field_name, row, long_name, ContinuousField)
+        field, initial, neutral = self.editor(field_name, row, long_name, ContinuousField)
         if items is not None:
             if field.minimum != 0 or field.maximum != len(items) - 1:
                 raise BuildError(f"{self.patch.device_name}: {long_name!r}: {len(items)} items name the whole numbers "
@@ -272,29 +287,33 @@ class StoredTable(SavedRecord):
             if initial != int(initial):
                 raise BuildError(f"{self.patch.device_name}: {long_name!r}: {field_name} {row + 1} starts at "
                                  f"{initial}, between two items")
-            initial = int(initial)
+            if neutral != int(neutral):
+                raise BuildError(f"{self.patch.device_name}: {long_name!r}: {field_name}'s neutral {neutral} is "
+                                 "between two items")
+            initial, neutral = int(initial), int(neutral)
         box_id = self.patch.dial(long_name, short_name, self.brain, varname_for(long_name), field.minimum,
                                  field.maximum, unit, x, y, page, group=group, initial_outside_presets=initial,
                                  inlet=self.brain_inlet, visibility=identity.VISIBILITY_HIDDEN, exponent=exponent,
-                                 items=items)
+                                 items=items, kit_neutral=neutral)
         return self.placed_editor(box_id, long_name, field_name, row, told=True)
 
     def editor_menu(self, field_name, row, long_name, short_name, x, y, w, page, group=None):
         """A Hidden live.menu showing and setting a choice field of row `row` (0-based)."""
-        field, initial = self.editor(field_name, row, long_name, ChoiceField)
+        field, initial, neutral = self.editor(field_name, row, long_name, ChoiceField)
         box_id = self.patch.menu(long_name, short_name, field.items, x, y, w, page, initial_outside_presets=initial,
-                                 group=group, visibility=identity.VISIBILITY_HIDDEN)
+                                 group=group, visibility=identity.VISIBILITY_HIDDEN, kit_neutral=neutral)
         return self.placed_editor(box_id, long_name, field_name, row)
 
     def editor_toggle(self, field_name, row, long_name, short_name, x, y, w, page, group=None):
         """A Hidden live.text toggle showing and setting a two-item choice field of row `row` (0-based): off is the
         first item."""
-        field, initial = self.editor(field_name, row, long_name, ChoiceField)
+        field, initial, neutral = self.editor(field_name, row, long_name, ChoiceField)
         if len(field.items) != 2:
             raise BuildError(f"{self.patch.device_name}: {long_name!r}: a toggle shows two items, {field_name} has "
                              f"{field.items}")
         box_id = self.patch.toggle(long_name, short_name, x, y, w, layout_rules.ROW_H, page,
-                                   initial_outside_presets=initial, group=group, visibility=identity.VISIBILITY_HIDDEN)
+                                   initial_outside_presets=initial, group=group, visibility=identity.VISIBILITY_HIDDEN,
+                                   kit_neutral=neutral)
         return self.placed_editor(box_id, long_name, field_name, row)
 
     # ---- the brain ----------------------------------------------------------------------------------------------

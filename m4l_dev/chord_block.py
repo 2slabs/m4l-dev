@@ -87,13 +87,16 @@ class ChordBlock:
             patch.wire(to_brain, brain, 0, brain_control_inlet)
 
     def chord_menu(self, name, short, x, y, w, page, group=None):
-        box_id = self.patch.menu(name, short, self.menu_items, x, y, w, page, group=group)
+        """The Chord menu; its neutral (a double-click) is "held notes": the keys as played, nothing stacked."""
+        box_id = self.patch.menu(name, short, self.menu_items, x, y, w, page, group=group,
+                                 kit_neutral=self.menu_items.index(HELD_NOTES))
         self.patch.tell(box_id, "chord_shape", self.brain, self.brain_control_inlet)
         self.chord_menu_name = name
         return box_id
 
     def in_key_toggle(self, name, short, x, y, w, h, page, group=None):
-        box_id = self.patch.toggle(name, short, x, y, w, h, page, group=group)
+        """The In key toggle; its neutral (a double-click) is off: fixed intervals, Live's scale not followed."""
+        box_id = self.patch.toggle(name, short, x, y, w, h, page, group=group, kit_neutral=0)
         self.patch.tell(box_id, "chord_in_key", self.brain, self.brain_control_inlet)
         self.in_key_toggle_name = name
         return box_id

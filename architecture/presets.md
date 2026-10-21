@@ -1,9 +1,11 @@
 # Presets: one preset book, two outputs
 
-A device keeps its Init values and its presets in one JSON file, its preset book (`m4l_dev/preset_book.py`):
+A device keeps its neutral values, its Init values and its presets in one JSON file, its preset book
+(`m4l_dev/preset_book.py`):
 
 ```json
-{"init": {"Cutoff": 700, "Chord": "minor", "In Key": "on", "Volume": 0},
+{"neutral": {"Cutoff": 12000, "Env Amount": 0},
+ "init": {"Cutoff": 700, "Env Amount": 50, "Chord": "minor", "In Key": "on", "Volume": 0},
  "presets": [{"name": "init", "group": "init", "idea": "the defaults", "values": {}},
              {"name": "chain stab", "group": "dub", "idea": "what it is for", "values": {"Cutoff": 650}}]}
 ```
@@ -14,6 +16,67 @@ Values are in each control's own units: a dial's or number box's number, a menu'
 default of each gen~ Param it sets, and the displays' starting value); a control given `initial_outside_presets` has
 none and presets leave it alone. The build fails on an unknown control, a missing Init value, a value out of range or
 not an item, and a preset name used twice.
+
+## Neutral, Init, and a fresh device
+
+A double-click on a Live control sets it to its initial value ("For Live UI objects, you can also double-click on the
+object to restore its initial value": Max's Parameter Mode guide, references/README.md). A double-click means "take this
+control out of the sound", so a control's initial value is its **neutral** value, never its Init value. Two values per
+control, two jobs:
+
+- **neutral** (`"neutral"` in the book): Live's initial value (`parameter_initial`), the double-click target, the
+  `Default` a Live preset file lists, a plugin host's default. The value at which the control does nothing: 0 for an
+  amount, a depth, a send, an added effect's mix, any modulation or velocity amount; the centre of a bipolar control;
+  unity (0 dB) for a trim or gain; a menu's, tab's or toggle's off (or first neutral) item. A control with no value
+  that does nothing (a cutoff, a time, a pitch, a ratio) takes the musically neutral one (a low-pass fully open, unity
+  ratio), and the device's architecture lists each such choice.
+- **start** (`"init"`, or a control's own `initial_outside_presets`): what a fresh device plays, the gen~ Params'
+  defaults, the displays' and the brain's starting values, a fresh plugin's values.
+
+Every control a user can double-click declares a neutral; the build fails on one without (no fallback to Init), on a
+neutral out of range or not an item, and on a neutral naming nothing that takes one. The kit declares the neutrals of
+the controls it makes: the output level (0 dB), the Preset menu and a group selector (their first item), the seeded
+random's Seed (0) and Loop (off), the chord block's Chord (held notes) and In key (off). A **Hidden** control is never
+saved, so Live loads it at its initial value every time: its start value is its neutral and the book doesn't name it,
+except a stored table's editors, whose neutral is their field's (`"neutral": {"Stages": {"Pitch": 0, "Pulse": "off"}}`,
+every field with an editor; stored-table.md). A **Stored Only** parameter has no double-click: its initial value is
+its start value.
+
+**A fresh device loads the Init sound, once.** Live loads a fresh device at its initial values, the neutrals. The
+header holds a Stored Only flag, "Init Applied" (`FRESH_START_FLAG_NAME`), initial 0. On the header's ready, the UI
+script (`freshStart`) reads it (`getvalueof`): at 1 it does nothing; at 0, with every saved control at its neutral
+value, it sets each control whose start value isn't its neutral to it (`FRESH_START`, the Preset menu's way) and sets
+the flag to 1. So:
+
+- a saved set holds the flag at 1 (Live stores a Stored Only parameter with the set) and is never touched;
+- every Live preset file the kit writes holds the flag at 1 in its Stored Only blob, and so does any preset a user
+  saves from a device that has started: a preset is never moved to Init;
+- a set saved before the flag existed loads it at 0 (a parameter the set doesn't hold loads at its initial value)
+  with its own values: some control is away from its neutral, so its values are kept, the flag set to 1, and the Max
+  window says so. The one case this misreads: an old set with every control at its neutral loads the Init sound.
+- `ready` comes again whenever live.thisdevice bangs (a preset loaded, the device saved): the flag is 1 by then.
+
+For the first moment of a fresh device (until ready) the DSP hears the neutral values, as Live sends the initial
+values, then the start values: a smoothed control may glide there (dsp-blocks.md, `HistoriesStartAtTheirTargets` starts a
+smoother at its Param, the start value, but Live's first message moves it). The gen~ defaults stay the start values,
+so every render, export and plugin starts at Init without that step.
+
+What a device must do: give `"neutral"` in its preset book for every control it makes that is saved (not Hidden,
+not the kit's) and for every field of a stored table with an editor; accept the lock change
+(`--accept-live-parameter-changes`: every initial value that moves, and the new "Init Applied" parameter); a plugin
+port regenerates its header (`Parameter::neutral` the host's default, `Parameter::start` set on construction,
+plugins.md). Its tests hold three things: every parameter's initial value in the lock is its neutral (patch.neutral_values);
+a fresh device holds its start values after ready (`m4l_dev/fresh_start.py` `controls_after_ready`: the built UI
+script in node on the controls as Live loads them) and so plays the Init sound (rendered from those values, compared
+with Init's by `assert_renders_similar`); a set saved with other values (a preset's, the flag at 1:
+`saved_values_of`) comes back unchanged.
+
+Not verified in Live (no Live here): the order of Live's recall and live.thisdevice's bang (the kit's ready has
+always assumed the recall comes first, and waits 800 ms after the bang); that `getvalueof` reads a live.* control
+(Max documents it for objects that support it); how many undo steps the fresh start adds (each Automated and Stored
+or Stored Only parameter the patch sets is an undo step, the Production Guidelines say, which wants one undo for
+adding a device); and that a `[delay]` waits for audio on (the guidelines: with the audio engine off it fires only
+when audio is turned on, so a fresh device inserted with audio off starts at neutral until then).
 
 **The Init values are the gen~ Params' defaults: one source.** A Param a control sets leaves its default out of the
 device's GenExpr (`Param cutoff(min=40, max=12000);`); the patch builder writes it into the code the patch holds, the

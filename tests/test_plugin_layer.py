@@ -73,6 +73,18 @@ class FixtureParameterTests(unittest.TestCase):
         self.assertEqual([stored_init[n] for n in ("Stage Pitch 1", "Stage Pitch 2", "Stage switches 2")],
                          [24 * 1365, 31 * 1365, 7])
 
+    def test_each_parameter_has_its_neutral_as_the_hosts_default_and_starts_at_init(self):
+        """The host's default (a double-click, a reset) is the neutral value from the lock; a fresh plugin starts at
+        the start value (Init). The fresh-start flag is the device's alone: no host parameter, no Stored value."""
+        neutral_and_start = {name: (self.by_name[name]["neutral"], self.by_name[name]["start"])
+                             for name in ("Level", "Chord", "In key", "Loop", "Volume", "Kick")}
+        self.assertEqual(neutral_and_start, {"Level": (0, 50), "Chord": (1, 2), "In key": (0, 1), "Loop": (0, 5),
+                                             "Volume": (0, 0), "Kick": (0, 0)})
+        self.assertNotIn("Init Applied", self.by_name)
+        self.assertNotIn("Init Applied", [s["name"] for s in self.stored])
+        presets = presets_as_held(self.patch, self.params, self.stored, fixture_device.stored_memory_of_preset)
+        self.assertEqual(presets[0][1], [p["start"] for p in self.params], "the init preset is the start values")
+
     def test_the_header_names_every_route(self):
         text = header.plugin_header("twosl::fixture", ["gen", "brain"], self.params, self.stored,
                                     presets_as_held(self.patch, self.params, self.stored,

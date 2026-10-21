@@ -8,11 +8,18 @@ A parameter reaches its device through one or more routes, each to a named desti
   message  a script's message (the brain): the same value forms, sent as `<message> value`
   raw      a box's inlet as a bare number (e.g. a phasor~'s frequency): the same value forms
 Parameters with no route are the device's buttons the plugin handles itself (Stop, Throw): `routes` is empty. Live's
-Stored Only parameters (visibility 1) are not host parameters: they're the plugin's state (`stored`).
+Stored Only parameters (visibility 1) are not host parameters: they're the plugin's state (`stored`); the fresh-start
+flag (FRESH_START_FLAG_NAME) is the device's alone (a plugin starts at its start values when constructed, and a host's
+saved state replaces them after).
+
+Each host parameter has two values (architecture/presets.md, "Neutral, Init, and a fresh device"): `neutral`, Live's
+initial value from the lock (the double-click target, the host's default) and `start`, the value the device starts at
+(the Init sound's, or the control's own initial_outside_presets), from the patch.
 """
 import json
 
 from m4l_dev.build_error import BuildError
+from m4l_dev.patch_builder import FRESH_START_FLAG_NAME
 from m4l_dev.preset_book import stored_only_values_of_preset
 
 LIVE_FLOAT, LIVE_INT, LIVE_ENUM = 0, 1, 2
@@ -51,8 +58,8 @@ def _linear(sample, low, high, where):
 
 def host_parameters(patch, lock_path, destinations, left_out=("Page",)):
     """([parameter], [stored]): every Live parameter but `left_out` and the Stored Only ones as a host parameter
-    (id, name, short, kind, minimum, maximum, exponent, initial, unit, items, routes), and the Stored Only ones (id,
-    name, initial, routes). `destinations` is [Destination]; the routes to any other box (displays, the UI script) are
+    (id, name, short, kind, minimum, maximum, exponent, neutral, start, unit, items, routes), and the Stored Only ones
+    but the fresh-start flag (id, name, initial, routes). `destinations` is [Destination]; the routes to any other box (displays, the UI script) are
     the page's business, not the sound's."""
     with open(lock_path, encoding="utf-8") as handle:
         lock = json.load(handle)["parameters"]
@@ -97,7 +104,7 @@ def host_parameters(patch, lock_path, destinations, left_out=("Page",)):
     parameters, stored = [], []
     for live in lock:
         name = live["long_name"]
-        if name in left_out:
+        if name in left_out or name == FRESH_START_FLAG_NAME:
             continue
         initial = float((live["initial"] or [0])[0])
         if live.get("visibility") == LIVE_STORED_ONLY:
@@ -113,8 +120,15 @@ def host_parameters(patch, lock_path, destinations, left_out=("Page",)):
         if not routes and kind == "Choice" and len(live["items"]) == 2:
             kind = "Button"    # a two-item button with no route (Stop, Throw): every press is the plugin's to handle
         unit = UNITS.get(live["unit_style"], "bipolar" if low < 0 < high else "") if kind in ("Float", "Int") else ""
+        if kind == "Button":
+            start = 0.0
+        elif name in patch.initial_values:
+            start = float(patch.initial_values[name])
+        else:
+            raise BuildError(f"plugin parameters: {name} has no start value in the patch (patch.initial_values)")
         parameters.append({"id": live["varname"], "name": name, "short": live["short_name"].lower(), "kind": kind,
-                           "minimum": low, "maximum": high, "exponent": float(live["exponent"]), "initial": initial,
+                           "minimum": low, "maximum": high, "exponent": float(live["exponent"]), "neutral": initial,
+                           "start": start,
                            "unit_style": live["unit_style"], "unit": unit, "items": list(live["items"]),
                            "routes": routes})
     return parameters, stored
@@ -128,7 +142,7 @@ def presets_as_held(patch, parameters, stored, stored_values_of_preset=None):
     result = []
     for preset in patch.preset_book.presets_as_held(patch.saved_controls):
         title = preset.name if preset.group == preset.name else f"{preset.group}: {preset.name}"
-        held = [0.0 if p["kind"] == "Button" else float(preset.values.get(p["name"], p["initial"])) for p in parameters]
+        held = [0.0 if p["kind"] == "Button" else float(preset.values.get(p["name"], p["start"])) for p in parameters]
         values = stored_only_values_of_preset(preset.values, stored_values_of_preset,
                                               f"plugin parameters: preset {preset.name!r}")
         if sorted(values) != sorted(s["name"] for s in stored):

@@ -22,4 +22,6 @@ sets mean, and they change often; a port that must keep them (2sl stab's move on
 `tools/compare_device_builds.py`, whose gated parameter table includes them.
 
 Why a short name and the initial value are in it: Live shows the short name on control surfaces and in the Info View,
-and a preset written by an older build sets the initial value's position; neither should change by accident.
+and a preset written by an older build sets the initial value's position; neither should change by accident. The
+initial value is the control's neutral value, its double-click target, not its Init value (presets.md, "Neutral,
+Init, and a fresh device").

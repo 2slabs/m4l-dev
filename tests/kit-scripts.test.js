@@ -34,14 +34,28 @@ function maxGlobals(record, mode) {
     mgraphics: graphics,
     Task: function (callback) { this.callback = callback; this.repeat = () => {}; this.cancel = () => {}; },
     max: { getcolor: () => [0.149, 0.149, 0.149, 1], launchbrowser: (url) => record.posts.push("launch " + url) },
-    patcher: { getnamed: (name) => ({ message: function () {
-      (record.messagesTo[name] = record.messagesTo[name] || []).push(Array.prototype.slice.call(arguments));
-    } }) },
+    // a control keeps the number it was last sent (as Live's parameter does) and getvalueof() reads it; every
+    // control starts where Live loads it: its initial value (LIVE_INITIAL), or record.values set by a test first
+    patcher: { getnamed: (name) => ({
+      message: function () {
+        const args = Array.prototype.slice.call(arguments);
+        (record.messagesTo[name] = record.messagesTo[name] || []).push(args);
+        if (args.length === 1 && typeof args[0] === "number") record.values[name] = args[0];
+      },
+      getvalueof: () => (name in record.values ? record.values[name] : LIVE_INITIAL[name]),
+    }) },
   };
 }
 
-function load(source, mode) {
-  const record = {};
+/** {varname: Live's initial value} of every parameter in the patch: what a fresh device loads at. */
+const LIVE_INITIAL = {};
+for (const box of PATCH.patcher.boxes.map((b) => b.box)) {
+  const valueof = box.saved_attribute_attributes && box.saved_attribute_attributes.valueof;
+  if (box.varname && valueof && valueof.parameter_initial) LIVE_INITIAL[box.varname] = valueof.parameter_initial[0];
+}
+
+function load(source, mode, values) {
+  const record = { values: Object.assign({}, values || {}) };
   const made = sandbox(1, {});
   Object.assign(made.record, record);
   Object.assign(made.context, maxGlobals(made.record, mode));
@@ -62,6 +76,55 @@ test("the UI script shows the first page on ready, and another on page", () => {
   assert.ok(!shown("level") && shown("mode"), "page two shows");
   deliverMessage(context, 0, "page", [7]);
   assert.ok(record.errors.some((e) => /page 7 doesn't exist/.test(e)), "a page that doesn't exist is an error");
+});
+
+// ---- a fresh device moves to its start values once; a saved set or preset is never touched -----------------
+
+const FRESH_START = JSON.parse(UI_SOURCE.match(/^var FRESH_START = (\{.*?\});/m)[1]);
+const NEUTRAL = JSON.parse(UI_SOURCE.match(/^var NEUTRAL = (\{.*?\});/m)[1]);
+const controlMessages = (record) => Object.keys(record.messagesTo).filter((n) => n !== "init_applied" &&
+  record.messagesTo[n].some((m) => m.length === 1 && typeof m[0] === "number"));
+
+test("a fresh device (flag 0, every control at its neutral value) moves to the Init sound on ready, once", () => {
+  const { context, record } = load(UI_SOURCE);
+  for (const name in NEUTRAL) assert.strictEqual(LIVE_INITIAL[name], NEUTRAL[name][0], name + ": Live loads its neutral");
+  deliverMessage(context, 0, "ready", []);
+  assert.deepStrictEqual(record.errors, []);
+  // the fixture's Init values that aren't neutral (tests/fixture_device.py): Level 50, In key on, Chord minor (index
+  // 2 after "one note", "held notes"; its neutral is "held notes", 1), Loop 16 bars (index 5)
+  assert.strictEqual(NEUTRAL.chord[0], 1);
+  assert.deepStrictEqual({ level: record.values.level, in_key: record.values.in_key, chord: record.values.chord,
+                           loop: record.values.loop }, { level: 50, in_key: 1, chord: 2, loop: 5 });
+  assert.deepStrictEqual(controlMessages(record).sort(), Object.keys(FRESH_START).sort(),
+                         "only the controls whose start isn't neutral are set");
+  assert.strictEqual(record.values.init_applied, 1, "the flag is set");
+  record.messagesTo = {};
+  deliverMessage(context, 0, "ready", []);       // live.thisdevice bangs again on a preset load or a save
+  assert.deepStrictEqual(controlMessages(record), [], "a second ready sets nothing");
+});
+
+test("a saved set or a preset (flag 1) keeps its values: nothing is set on ready", () => {
+  const { context, record } = load(UI_SOURCE, undefined, { init_applied: 1, level: 0, chord: 0 });
+  deliverMessage(context, 0, "ready", []);
+  assert.deepStrictEqual(controlMessages(record), []);
+  assert.deepStrictEqual(record.messagesTo.init_applied, undefined, "the flag is left alone");
+  assert.deepStrictEqual(record.errors, []);
+});
+
+test("a set saved before the flag (flag 0, a control away from neutral) keeps its values and says so", () => {
+  const { context, record } = load(UI_SOURCE, undefined, { level: 70 });
+  deliverMessage(context, 0, "ready", []);
+  assert.deepStrictEqual(controlMessages(record), [], "nothing moved to Init");
+  assert.strictEqual(record.values.level, 70);
+  assert.strictEqual(record.values.init_applied, 1, "the flag is set, so it isn't asked again");
+  assert.ok(record.posts.some((p) => /saved before the fresh-start flag/.test(p) && /level/.test(p)), record.posts);
+});
+
+test("a flag that reads neither 0 nor 1 leaves the controls alone, loudly", () => {
+  const { context, record } = load(UI_SOURCE, undefined, { init_applied: 7 });
+  deliverMessage(context, 0, "ready", []);
+  assert.deepStrictEqual(controlMessages(record), []);
+  assert.ok(record.errors.some((e) => /fresh-start flag reads 7/.test(e)), record.errors);
 });
 
 test("Stop sets every control it turns off to 0", () => {

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev import layout_rules  # noqa: E402
 from m4l_dev import live_parameter_identity as identity  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
+from m4l_dev.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
 from m4l_dev.preset_book import PresetBook, stored_only_values_of_preset  # noqa: E402
 from m4l_dev.seeded_random import SeededRandom  # noqa: E402
 from m4l_dev.stored_table import (ChoiceField, ContinuousField, HeldTable, StoredTable,  # noqa: E402
@@ -28,8 +28,14 @@ def fields():
             ChoiceField("Wait", ["go", "stop", "hold", "keyed"])]
 
 
-def book(presets=None, init_stages=None):
-    return PresetBook({"init": {"Volume": 0, "Stages": INIT_STAGES if init_stages is None else init_stages},
+# the editors' double-click targets (Wait's "hold" is neither the first item nor any row's Init: a test sees which)
+NEUTRAL_STAGES = {"Pitch": 0, "Level": 0, "Pulse": "off", "Wait": "hold"}
+
+
+def book(presets=None, init_stages=None, neutral_stages=None):
+    """A test's book; the table has a neutral value (`neutral_stages`) only where a test makes its editors."""
+    return PresetBook({"neutral": {} if neutral_stages is None else {"Stages": neutral_stages},
+                       "init": {"Volume": 0, "Stages": INIT_STAGES if init_stages is None else init_stages},
                        "presets": presets or [{"name": "init", "group": "init", "idea": "init", "values": {}}]},
                       "the test's book")
 
@@ -126,7 +132,7 @@ class PresetBookTests(unittest.TestCase):
             stages_of(patch)
 
     def test_a_table_needs_an_init_value(self):
-        patch = builder(PresetBook({"init": {"Volume": 0}, "presets": [
+        patch = builder(PresetBook({"neutral": {}, "init": {"Volume": 0}, "presets": [
             {"name": "init", "group": "init", "idea": "i", "values": {}}]}, "b"))
         with self.assertRaisesRegex(BuildError, "no Init value"):
             stages_of(patch)
@@ -138,7 +144,7 @@ class StoredParameterTests(unittest.TestCase):
         stages_of(patch)
         names = [valueof["parameter_longname"] for _, valueof in identity.live_parameter_boxes(patch.patch())
                  if valueof.get("parameter_invisible") == identity.VISIBILITY_STORED_ONLY]
-        self.assertEqual(names, ["Stages Pitch 1", "Stages Level 1", "Stages switches 1", "Stages Pitch 2",
+        self.assertEqual(names, [FRESH_START_FLAG_NAME, "Stages Pitch 1", "Stages Level 1", "Stages switches 1", "Stages Pitch 2",
                                  "Stages Level 2", "Stages switches 2", "Stages Pitch 3", "Stages Level 3",
                                  "Stages switches 3"])
         box = find_by_varname(patch, "stages_switches_2")
@@ -195,7 +201,7 @@ class OutsidePresetsTests(unittest.TestCase):
     doesn't set it, the preset book can't name it."""
 
     def outside_book(self, presets=None):
-        return PresetBook({"init": {"Volume": 0}, "presets": presets or [
+        return PresetBook({"neutral": {}, "init": {"Volume": 0}, "presets": presets or [
             {"name": "init", "group": "init", "idea": "i", "values": {}},
             {"name": "loud", "group": "g", "idea": "i", "values": {"Volume": 3}}]}, "the test's book")
 
@@ -230,13 +236,15 @@ class OutsidePresetsTests(unittest.TestCase):
 
 
 class EditorTests(unittest.TestCase):
-    def test_editors_are_hidden_controls_starting_at_init(self):
-        patch = builder(info_keys=EDITOR_INFO)
+    def test_editors_are_hidden_controls_loading_at_their_fields_neutral(self):
+        """An editor's initial value (its double-click target) is its field's neutral, not its row's Init: the
+        table's recall shows the row once the device is ready."""
+        patch = builder(book(neutral_stages=NEUTRAL_STAGES), info_keys=EDITOR_INFO)
         stages = stages_of(patch)
         dial = stages.editor_dial("Pitch", 0, "Pitch editor 1", "Pitch 1", 12, layout_rules.DIAL_Y, "one")
         toggle = stages.editor_toggle("Pulse", 0, "Pulse editor 1", "Pulse 1", 12, layout_rules.ROW_Y, 48, "one")
         menu = stages.editor_menu("Wait", 1, "Wait editor 2", "Wait 2", 64, layout_rules.ROW_Y, 44, "one")
-        for box_id, initial in ((dial, [0.0]), (toggle, [0]), (menu, [3])):
+        for box_id, initial in ((dial, [0.0]), (toggle, [0]), (menu, [2])):
             valueof = patch.find(box_id)["saved_attribute_attributes"]["valueof"]
             self.assertEqual(valueof["parameter_invisible"], identity.VISIBILITY_HIDDEN)
             self.assertEqual(valueof["parameter_initial"], initial)
@@ -250,19 +258,33 @@ class EditorTests(unittest.TestCase):
         patch.check()
 
     def test_a_stepped_editor_dial_names_an_index_field(self):
-        patch = builder(book(init_stages=dict(INIT_STAGES, Time=[0, 1, 2])), info_keys=("Time editor 1",))
+        patch = builder(book(init_stages=dict(INIT_STAGES, Time=[0, 1, 2]), neutral_stages=dict(NEUTRAL_STAGES, Time=1)),
+                        info_keys=("Time editor 1",))
         stages = stages_of(patch, table_fields=fields() + [ContinuousField("Time", 0, 2)])
         dial = stages.editor_dial("Time", 0, "Time editor 1", "Time 1", 12, layout_rules.DIAL_Y, "one",
                                   items=["1/16", "1/8", "1/4"])
         valueof = patch.find(dial)["saved_attribute_attributes"]["valueof"]
         self.assertEqual(valueof["parameter_enum"], ["1/16", "1/8", "1/4"])
-        self.assertEqual(valueof["parameter_initial"], [0])
+        self.assertEqual(valueof["parameter_initial"], [1], "the field's neutral, not row 1's Init (0)")
         with self.assertRaisesRegex(BuildError, "name the whole numbers 0..1"):
             stages.editor_dial("Time", 1, "Time editor 1", "Time 2", 12, layout_rules.DIAL_Y, "one",
                                items=["1/16", "1/8"])
 
     def test_editor_mistakes_fail(self):
-        patch = builder()
+        without_neutral = stages_of(builder(info_keys=EDITOR_INFO))
+        with self.assertRaisesRegex(BuildError, "no neutral value"):
+            without_neutral.editor_dial("Pitch", 0, "Pitch editor 1", "Pitch 1", 12, layout_rules.DIAL_Y, "one")
+        partial = stages_of(builder(book(neutral_stages={"Pitch": 0}), info_keys=EDITOR_INFO))
+        with self.assertRaisesRegex(BuildError, "Pulse has an editor but no neutral value"):
+            partial.editor_toggle("Pulse", 0, "Pulse editor 1", "Pulse 1", 12, layout_rules.ROW_Y, 48, "one")
+        stray = stages_of(builder(book(neutral_stages=dict(NEUTRAL_STAGES, Time=0)), info_keys=EDITOR_INFO))
+        with self.assertRaisesRegex(BuildError, "fields it doesn't have: \\['Time'\\]"):
+            stray.editor_dial("Pitch", 0, "Pitch editor 1", "Pitch 1", 12, layout_rules.DIAL_Y, "one")
+        unused = builder(book(neutral_stages=NEUTRAL_STAGES))
+        stages_of(unused)
+        with self.assertRaisesRegex(BuildError, "names no control that takes one.*Stages"):
+            unused.check()
+        patch = builder(book(neutral_stages=NEUTRAL_STAGES))
         stages = stages_of(patch)
         with self.assertRaisesRegex(BuildError, "no field"):
             stages.editor_dial("Time", 0, "Pitch editor 1", "Pitch 1", 12, layout_rules.DIAL_Y, "one")
@@ -312,7 +334,7 @@ class ControlFormTests(unittest.TestCase):
 
     def test_seed_as_a_dial_is_the_numbox_parameter_in_another_box(self):
         def seed_identity(make):
-            patch = builder(PresetBook({"init": {"Volume": 0, "Seed": 0, "Loop": "16 bars"}, "presets": [
+            patch = builder(PresetBook({"neutral": {}, "init": {"Volume": 0, "Seed": 0, "Loop": "16 bars"}, "presets": [
                 {"name": "init", "group": "init", "idea": "i", "values": {}}]}, "b"),
                             info_keys=())
             random = SeededRandom(patch, patch.brain, 1)

@@ -42,7 +42,8 @@ def fingerprints(root):
 
 # the "loud" preset's Stored Only blob: the device's own Memory, and the stored table Stage (Pitch 12, -24 at 1365
 # codes a semitone from -24; row 2's switches: Pulse on (bit 0) + Wait keyed (3, bits 1-2) = 7)
-LOUD_STORED_ONLY_BLOB = ('{\n    "Memory": [ 97 ],\n    "Stage Pitch 1": [ 49140 ],\n    "Stage Pitch 2": [ 0 ],\n'
+# every preset holds the fresh-start flag at 1: a preset loaded is never moved to the Init sound
+LOUD_STORED_ONLY_BLOB = ('{\n    "Init Applied": [ 1 ],\n    "Memory": [ 97 ],\n    "Stage Pitch 1": [ 49140 ],\n    "Stage Pitch 2": [ 0 ],\n'
                          '    "Stage switches 1": [ 0 ],\n    "Stage switches 2": [ 7 ]\n}')
 
 class FixtureBuildTests(unittest.TestCase):
@@ -149,7 +150,7 @@ class FixtureBuildTests(unittest.TestCase):
         def add_an_int_dial(patch):
             patch.info["Count"] = ("Count", "how many")
             patch.dial("Count", "Count", next(iter(patch.gen_params_by_box)), None, 0, 7, 0, 60, 119, "one", integer=True,
-                       initial_outside_presets=0)
+                       initial_outside_presets=0, kit_neutral=0)
         with self.assertRaisesRegex(BuildError, "'Count' has parameter_type 1"):
             quietly(fixture_device.build_fixture_device, self.root, patch_edit=add_an_int_dial)
 

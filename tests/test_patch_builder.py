@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev import layout_rules  # noqa: E402
 from m4l_dev import live_parameter_identity as identity  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
+from m4l_dev.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
 from m4l_dev.preset_book import PresetBook  # noqa: E402
 from m4l_dev.techniques.defined_latency_pad import DefinedLatency  # noqa: E402
 
@@ -18,8 +18,15 @@ INFO = {name: (name, "text") for name in ("A", "B", "C", "Volume", "Page", "Pres
 GEN_CODE = "Param a(min=0, max=1);\nParam b(0.25, min=0, max=1);\nParam volume;\nout1 = in1 * a;\n"
 
 
-def preset_book(init=None, presets=None):
-    return PresetBook({"init": {"A": 0, "B": 0, "C": 0, "Volume": 0} if init is None else init,
+KIT_NEUTRAL_NAMES = ("Volume", "Output", "Seed", "Loop", "Chord", "In key")   # the kit declares these neutrals
+
+
+def preset_book(init=None, presets=None, neutral=None):
+    """A test's book; its neutral values, unless given, are its Init values (the controls a test builds)."""
+    init = {"A": 0, "B": 0, "C": 0, "Volume": 0} if init is None else init
+    return PresetBook({"neutral": ({name: value for name, value in init.items() if name not in KIT_NEUTRAL_NAMES}
+                                   if neutral is None else neutral),
+                       "init": init,
                        "presets": presets or [{"name": "init", "group": "init", "idea": "init", "values": {}}]},
                       "the test's book")
 
@@ -127,7 +134,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(find_by_varname(patch, "page")["presentation_rect"][0], 12 + link_width + 12)
 
     def test_tabs_need_room_for_the_longest_name(self):
-        patch = builder(book=preset_book(init={"A": 0, "B": 0, "C": 0, "Volume": 0}))
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Tool": "one", "Pick": "-1 sq"}))
         patch.tabs("Tool", "Tool", ["one", "two", "three", "four"], 12, 40, 76, "one", initial_outside_presets=0, rows=2)
         self.assertEqual(find_by_varname(patch, "tool")["presentation_rect"][3], 30, "two rows of 15 px")
         self.assertEqual(find_by_varname(patch, "tool")["num_lines_presentation"], 2)
@@ -141,7 +148,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(saved_values(patch, patch.header_boxes["page_tabs"])["parameter_invisible"], 2)
 
     def test_tabs_can_be_hidden_and_then_stay_out_of_presets(self):
-        patch = builder(book=preset_book(init={"A": 0, "B": 0, "C": 0, "Volume": 0}))
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Pick": "a"}))
         with self.assertRaisesRegex(BuildError, "initial_outside_presets"):
             patch.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", visibility=identity.VISIBILITY_HIDDEN)
         tool = patch.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", initial_outside_presets=0,
@@ -157,7 +164,7 @@ class LayoutTests(unittest.TestCase):
         patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
                                    device_type="instrument", device_width=400, page_names=["one"],
                                    info={name: (name, "text") for name in ("Output", "Page", "Stop", "Link view")},
-                                   preset_book=PresetBook({"init": {"Output": -6}, "presets": [
+                                   preset_book=PresetBook({"neutral": {}, "init": {"Output": -6}, "presets": [
                                        {"name": "init", "group": "init", "idea": "init", "values": {}}]}, "book"),
                                    latency_samples=0)
         target = patch.gen_box("Param volume;\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
@@ -242,7 +249,7 @@ class ControlRouteTests(unittest.TestCase):
 
 class InitialValueAndPresetTests(unittest.TestCase):
     def test_controls_with_their_own_initial_value_stay_out_of_presets(self):
-        patch = builder()
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Tool": 0}))
         patch.numbox("Tool", "Tool", patch.target, "tool", 0, 10, 0, 12, 40, 40, "one", integer=True,
                      initial_outside_presets=3)
         self.assertNotIn("Tool", patch.saved_controls)
@@ -300,15 +307,65 @@ class InitialValueAndPresetTests(unittest.TestCase):
         self.assertIn('"a": 1', patch.ui_script(held))
 
     def test_preset_book_shape_is_checked(self):
-        with self.assertRaisesRegex(BuildError, "exactly 'init' and 'presets'"):
-            PresetBook({"init": {}}, "book")
+        with self.assertRaisesRegex(BuildError, "exactly 'neutral', 'init' and 'presets'"):
+            PresetBook({"init": {}, "presets": []}, "book")
         with self.assertRaisesRegex(BuildError, "used twice"):
-            PresetBook({"init": {}, "presets": [{"name": "a", "group": "g", "idea": "i", "values": {}}] * 2}, "book")
+            PresetBook({"neutral": {}, "init": {},
+                        "presets": [{"name": "a", "group": "g", "idea": "i", "values": {}}] * 2}, "book")
+
+
+class NeutralValueTests(unittest.TestCase):
+    """Every control a user can double-click declares a neutral value (Live's initial value, the double-click
+    target), separate from Init; a fresh device moves from it to its start value (the UI script)."""
+
+    def test_live_loads_the_neutral_and_the_device_starts_at_init(self):
+        patch = builder(book=preset_book(init={"A": 0.7, "B": 0, "Volume": -3}, neutral={"A": 0, "B": 0}))
+        a = patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        patch.dial("B", "B", patch.target, "b", 0, 1, 0, 60, 119, "one")
+        self.assertEqual(saved_values(patch, a)["parameter_initial"], [0.0], "the double-click target")
+        self.assertEqual(patch.initial_values["A"], 0.7, "the start value: the gen~ default, the displays'")
+        self.assertEqual(saved_values(patch, patch.header_boxes["output_level"])["parameter_initial"], [0.0],
+                         "the output level's neutral is unity, the kit's")
+        self.assertEqual(patch.fresh_start_by_varname, {"a": 0.7, "volume": -3},
+                         "only a control whose start isn't neutral moves on a fresh device")
+        self.assertEqual(patch.neutral_by_varname["a"], [0, 1e-4])
+
+    def test_a_control_without_a_neutral_fails_and_a_stray_one_fails(self):
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0}))
+        with self.assertRaisesRegex(BuildError, "'C' has no neutral value .*add it to 'neutral'"):
+            patch.dial("C", "C", patch.target, "c", 0, 1, 0, 12, 119, "one")
+        with self.assertRaisesRegex(BuildError, "outside"):
+            builder(book=preset_book(neutral={"A": 2})).dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        stray = builder(book=preset_book(init={"A": 0, "Volume": 0}, neutral={"A": 0, "Gone": 0}))
+        stray.dial("A", "A", stray.target, "a", 0, 1, 0, 12, 119, "one")
+        with self.assertRaisesRegex(BuildError, "names no control that takes one.*Gone"):
+            stray.check()
+
+    def test_hidden_and_kit_controls_take_no_neutral_from_the_book(self):
+        hidden = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Tool": "a"}))
+        with self.assertRaisesRegex(BuildError, "Hidden .*leave it out of 'neutral'"):
+            hidden.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", initial_outside_presets=1,
+                        visibility=identity.VISIBILITY_HIDDEN)
+        patch = builder()
+        tool = patch.tabs("Tool", "Tool", ["a", "b"], 12, 40, 40, "one", initial_outside_presets=1,
+                          visibility=identity.VISIBILITY_HIDDEN)
+        self.assertEqual(saved_values(patch, tool)["parameter_initial"], [1], "a Hidden control loads at its start")
+        self.assertNotIn("tool", patch.neutral_by_varname, "never saved: nothing to move on a fresh device")
+        with self.assertRaisesRegex(BuildError, "the kit declares its neutral"):
+            builder(book=preset_book(init={"A": 0, "B": 0, "C": 0, "Volume": 0},
+                                     neutral={"A": 0, "B": 0, "C": 0, "Volume": 0}))
+
+    def test_the_fresh_start_flag_is_stored_only_and_starts_at_0(self):
+        patch = builder()
+        flag = saved_values(patch, patch.header_boxes["fresh_start_flag"])
+        self.assertEqual((flag["parameter_longname"], flag["parameter_invisible"], flag["parameter_initial"]),
+                         (FRESH_START_FLAG_NAME, identity.VISIBILITY_STORED_ONLY, [0.0]))
+        self.assertIn('var FRESH_START_FLAG = "init_applied";', patch.ui_script([]))
 
 
 class GroupTests(unittest.TestCase):
-    def test_any_control_can_select_groups_and_must_start_on_the_first(self):
-        patch = builder()
+    def test_any_control_can_select_groups_and_must_load_on_the_first(self):
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Pick": "x", "Tool": 2}))
         picker = patch.dial("Pick", "Pick", patch.target, "pick", 0, 0, 0, 12, 119, "one", items=["x", "y"],
                             initial_outside_presets=0)
         patch.groups_selected_by(picker, 2, "one")
@@ -319,12 +376,12 @@ class GroupTests(unittest.TestCase):
         self.assertTrue(any(route[0] == "Pick" and route[2] == patch.header_boxes["ui"] and route[3] == "group pick"
                             for route in patch.control_routes), "the UI hears the selector")
         late = patch.dial("Tool", "Tool", patch.target, "tool", 0, 3, 0, 120, 119, "one", integer=True,
-                          initial_outside_presets=2)
-        with self.assertRaisesRegex(BuildError, "initial value 0"):
+                          initial_outside_presets=0)
+        with self.assertRaisesRegex(BuildError, "load on its first group"):
             patch.groups_selected_by(late, 4, "one")
 
     def test_dials_are_floats_ints_or_enums(self):
-        patch = builder(book=preset_book(init={"A": 0, "B": 0, "Volume": 0}))
+        patch = builder(book=preset_book(init={"A": 0, "B": 0, "Volume": 0}, neutral={"A": 0, "B": 0, "Tool": "p"}))
         self.assertEqual(saved_values(patch, patch.dial("A", "A", patch.target, "a", 0, 10, 0, 12, 119, "one"))[
             "parameter_type"], 0)
         self.assertEqual(saved_values(patch, patch.dial("B", "B", patch.target, "b", 0, 10, 0, 60, 119, "one",
@@ -332,7 +389,8 @@ class GroupTests(unittest.TestCase):
         enum = saved_values(patch, patch.dial("Tool", "Tool", patch.target, "t", 0, 0, 0, 108, 119, "one",
                                               items=["p", "q"], initial_outside_presets=1))
         self.assertEqual((enum["parameter_type"], enum["parameter_enum"], enum["parameter_mmax"],
-                          enum["parameter_initial"]), (2, ["p", "q"], 1, [1]))
+                          enum["parameter_initial"]), (2, ["p", "q"], 1, [0]), "Live's initial value is the neutral")
+        self.assertEqual(patch.initial_values["Tool"], 1, "it starts at its own initial value")
         with self.assertRaisesRegex(BuildError, "256 values"):
             patch.dial("C", "C", patch.target, "c", 0, 999, 0, 156, 119, "one", integer=True)
 

@@ -25,14 +25,17 @@ LOOP_NAME = "Loop"
 # would hold only 256 seeds.
 SEED_HIGHEST = 999
 SEED_UNIT_STYLE = 0                  # Live's Int unit style: whole numbers shown
+# the neutral values (a double-click's target, the kit's for every device): Seed 0, Loop off (never starts over)
+SEED_NEUTRAL = 0
+LOOP_NEUTRAL_INDEX = 0
 LOOP_CHOICES = [("off", 0), ("1 bar", 1), ("2 bars", 2), ("4 bars", 4), ("8 bars", 8), ("16 bars", 16),
                 ("32 bars", 32), ("64 bars", 64)]
 INFO = {
     SEED_NAME: ("Seed", "Where the device's random choices start: the same Seed makes the same choices in the same "
-                        "order, so a part plays back the way you heard it. Loop starts them over. 0 to 999, default 0."),
+                        "order, so a part plays back the way you heard it. Loop starts them over. 0 to 999; double-click: 0."),
     LOOP_NAME: ("Loop", "How often the random choices start over from Seed while Live plays: every 1 to 64 bars of "
                         "4 beats, counted from the song's start, so the randomness repeats. Off: it never starts "
-                        "over. Pressing play also starts it from Seed. Stopped, it keeps going. Default 16 bars."),
+                        "over. Pressing play also starts it from Seed. Stopped, it keeps going. Double-click: off."),
 }
 
 
@@ -51,7 +54,7 @@ class SeededRandom:
         if SEED_NAME in self.made:
             raise BuildError(f"{self.patch.device_name}: Seed is made twice (seed_control or seed_dial: one)")
         box_id = self.patch.numbox(SEED_NAME, SEED_NAME, self.brain, "random_seed", 0, SEED_HIGHEST, SEED_UNIT_STYLE,
-                                   x, y, w, page, inlet=self.brain_control_inlet, group=group)
+                                   x, y, w, page, inlet=self.brain_control_inlet, group=group, kit_neutral=SEED_NEUTRAL)
         self.made.add(SEED_NAME)
         return box_id
 
@@ -63,12 +66,13 @@ class SeededRandom:
         if SEED_NAME in self.made:
             raise BuildError(f"{self.patch.device_name}: Seed is made twice (seed_control or seed_dial: one)")
         box_id = self.patch.dial(SEED_NAME, SEED_NAME, self.brain, "random_seed", 0, SEED_HIGHEST, SEED_UNIT_STYLE, x, y,
-                                 page, inlet=self.brain_control_inlet, group=group)
+                                 page, inlet=self.brain_control_inlet, group=group, kit_neutral=SEED_NEUTRAL)
         self.made.add(SEED_NAME)
         return box_id
 
     def loop_control(self, x, y, w, page, group=None):
-        box_id = self.patch.menu(LOOP_NAME, LOOP_NAME, [name for name, _ in LOOP_CHOICES], x, y, w, page, group=group)
+        box_id = self.patch.menu(LOOP_NAME, LOOP_NAME, [name for name, _ in LOOP_CHOICES], x, y, w, page, group=group,
+                                 kit_neutral=LOOP_NEUTRAL_INDEX)
         self.patch.tell(box_id, "random_loop", self.brain, self.brain_control_inlet)
         self.made.add(LOOP_NAME)
         return box_id

@@ -68,7 +68,8 @@ def plugin_header(namespace, destinations, parameters, stored, presets, latency_
         unit = -1 if p["unit_style"] is None else p["unit_style"]
         lines.append(f"    {{ {c_string(p['id'])}, {c_string(p['name'])}, Kind::{p['kind']}, "
                      f"{c_double_literal(p['minimum'])}, {c_double_literal(p['maximum'])}, "
-                     f"{c_double_literal(p['exponent'])}, {c_double_literal(p['initial'])}, {unit}, "
+                     f"{c_double_literal(p['exponent'])}, {c_double_literal(p['neutral'])}, "
+                     f"{c_double_literal(p['start'])}, {unit}, "
                      f"{len(p['items'])}, {items}, {len(p['routes'])}, {routes} }},")
     lines += ["};", ""]
     lines.append(f"inline constexpr int storedCount = {len(stored)};")

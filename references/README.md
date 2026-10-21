@@ -80,11 +80,30 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
   The build writes it from `DevicePatchBuilder(latency_samples=...)`, a whole number: the device latency rule's
   (architecture/overview.md, "Defined Latency": the latest path rounded up, every path padded to it). Seen in Live:
   not yet (check: hover the device's title bar, the status bar shows the device's latency).
-- **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/
+- **Parameter Mode** (Max user guide): https://docs.cycling74.com/userguide/parameter_mode/ (this page, live.thisdevice,
+  Maxobj and the Production Guidelines below are mirrored by fetch-live-parameter-sources.sh, outside git)
   Initial Enable: "If enabled, the parameter will be set to an initial value when the patcher or device is
   loaded." Initial Value: "The object will restore this value when the patcher loads, as well as sending
-  this value to any connected objects." The build sets every control's initial value from the Init
-  values (the device's preset book: m4l_dev/preset_book.py), and checks the gen~ Params and starts the displays there.
+  this value to any connected objects." "For Live UI objects, you can also double-click on the object to restore its
+  initial value." Order: "Objects with a lower value for their "Order" attribute will be initialized first." (fetched
+  2026-10-21) So the initial value is the double-click target: the build sets every control's initial value to its
+  neutral value and moves a fresh device to its Init values once (architecture/presets.md, "Neutral, Init, and a
+  fresh device"). The page doesn't say how a set's or preset's saved values and the initial values interact on load.
+- **live.thisdevice** (https://docs.cycling74.com/reference/live.thisdevice, fetched 2026-10-21): "A bang message is
+  automatically sent from the left outlet when the Max Device is opened and completely initialized"; "a bang will be
+  reported every time a new preset is loaded or the device is saved". It doesn't say whether a set's recalled values
+  are in place by then; the kit's `ready` comes 800 ms after the bang (patch_builder.py `header`).
+- **Maxobj.getvalueof** (https://docs.cycling74.com/apiref/js/maxobj/, fetched 2026-10-21): "Get the current value of
+  the object, if supported". The page doesn't list which objects support it; the UI script reads the live.* controls
+  and the fresh-start flag with it (unverified in Live).
+- **Initialization and undo** (Max for Live Production Guidelines, maxdevtools m4l-production-guidelines.md,
+  "Initialization", "Undo History", the checklist): don't order initialization with `[delay]` or `[deferlow]` ("time-
+  sensitive operations (such as delaying with a set amount of time) are not executed when Live's audio engine is off");
+  a parameter set to Automated and Stored or Stored Only "controlled internally by the patch" makes undo steps;
+  checklist: "After adding the device, there is only one new undo", "Defaults: All default parameter values are
+  correct, i.e. the device works well after newly instantiating it", "Save and recall: All parameters are recalled
+  correctly when opening a Live Set that contains the device with non-default values for all parameters". The fresh
+  start (setting controls from the UI script on the first ready) adds undo steps by that rule: not yet seen in Live.
 - **Parameter Visibility** (Max user guide, Parameter Mode; and the live.tab / live.dial references:
   https://docs.cycling74.com/reference/live.tab): "Stored Only: Use for parameters that are part of the device's
   persistent state but should not be automated or exposed to control surfaces." "Hidden: ... Not stored in the Live

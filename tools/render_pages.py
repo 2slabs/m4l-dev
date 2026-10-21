@@ -103,6 +103,8 @@ class Device:
         self.page_names = read_js_assignment(ui_text, "PAGE_NAMES", ui_path)
         self.pages = read_js_assignment(ui_text, "PAGES", ui_path)
         self.groups = read_js_assignment(ui_text, "GROUPS", ui_path)
+        # a fresh device shows its start values: the UI script moves each control from its neutral value there
+        self.fresh_start = read_js_assignment(ui_text, "FRESH_START", ui_path)
         self.boxes_by_varname = {b["varname"]: b for b in boxes if b.get("varname")}
 
     def views(self):
@@ -134,9 +136,11 @@ def values_of(box):
     return box.get("saved_attribute_attributes", {}).get("valueof", {})
 
 
-def shown_value(box):
+def shown_value(box, fresh_start):
+    """What a fresh device shows: its start value (`fresh_start`, the UI script's FRESH_START), else Live's initial."""
     values = values_of(box)
-    initial = (values.get("parameter_initial") or [values.get("parameter_mmin", 0)])[0]
+    initial = fresh_start.get(box.get("varname"),
+                              (values.get("parameter_initial") or [values.get("parameter_mmin", 0)])[0])
     items = values.get("parameter_enum")
     if items:
         return items[max(0, min(len(items) - 1, int(initial)))]
@@ -222,13 +226,13 @@ class Painter:
             cx, cy = x + w / 2, y + 24
             self.draw.arc([cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2], 135, 405, fill=t["unlit"], width=2)
             self.draw.line([cx, cy, cx, cy - d / 2 + 2], fill=t["ink"], width=2)
-            self.live_text(shown_value(box), x, y + h - 11, w, 11, t["label"])
+            self.live_text(shown_value(box, self.device.fresh_start), x, y + h - 11, w, 11, t["label"])
         elif kind == "live.tab":
             items = values["parameter_enum"]
             if items == self.device.page_names:
                 picked = page_index
             else:
-                picked = choice.get(box.get("varname"), items.index(shown_value(box)))
+                picked = choice.get(box.get("varname"), items.index(shown_value(box, self.device.fresh_start)))
             rows = int(box.get("num_lines_presentation", 1))
             per_row = -(-len(items) // rows)
             button_w, button_h = w / per_row, h / rows
@@ -242,7 +246,7 @@ class Painter:
             self.rect(x, y, w, h, t["well"])
             self.frame(x, y, w, h, self.mix(t["unlit"], 0.6))
             arrow = layout_rules.LIVE_MENU_ARROW_PIXELS
-            self.live_text(shown_value(box), x, y, w - arrow, h, t["ink"], align="left")
+            self.live_text(shown_value(box, self.device.fresh_start), x, y, w - arrow, h, t["ink"], align="left")
             ax, ay = x + w - arrow / 2 - 3, y + h / 2
             self.draw.polygon([(ax - 3, ay - 2), (ax + 3, ay - 2), (ax, ay + 2)], fill=t["ink"])
         elif kind == "live.text":
@@ -251,7 +255,7 @@ class Painter:
         elif kind == "live.numbox":
             self.rect(x, y, w, h, t["well"])
             self.frame(x, y, w, h, self.mix(t["unlit"], 0.6))
-            self.live_text(shown_value(box), x, y, w, h, t["ink"])
+            self.live_text(shown_value(box, self.device.fresh_start), x, y, w, h, t["ink"])
         else:
             self.frame(x, y, w, h, t["warm"])
             self.live_text(kind, x, y, w, min(h, 15), t["warm"])

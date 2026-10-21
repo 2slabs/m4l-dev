@@ -6,9 +6,20 @@ View text, displays (jsui running the views script), the shared header (2sl link
 menu, output level, Stop), Live's transport and Live Set properties, and the Stop action. m4l_dev/device_build.py
 then checks it (`check()`), generates its scripts and writes the device.
 
-Initial values come from the preset book (m4l_dev/preset_book.py): every control the presets set takes its initial
-value from the book's Init values. A control given `initial_outside_presets` is saved with the set but presets leave
-it alone (a group selector, the Preset menu itself, a device's pattern tools).
+Two values per control, both from the preset book (m4l_dev/preset_book.py) (architecture/presets.md, "Neutral, Init,
+and a fresh device"):
+  - its **neutral** value: Live's initial value (`parameter_initial`), what a double-click sets it to: the value that
+    takes it out of the sound. Every control a user can double-click declares one in the book's "neutral"; the kit
+    declares its own (the output level's unity, the Preset menu's and a group selector's first item). A Hidden
+    control (never saved: it loads at its initial value every time) has its start value as its neutral, or the kit's
+    (a stored table editor's: its field's neutral).
+  - its **start** value: what a fresh device starts at. A control the presets set starts at the book's Init value; a
+    control given `initial_outside_presets` is saved with the set but presets leave it alone (a group selector, the
+    Preset menu itself, a device's pattern tools) and starts there. The gen~ Params' defaults, the displays' starting
+    values and the tempo pairs are the start values.
+A fresh device loads at the neutral values (Live's), and the UI script moves every saved control whose start value
+differs to it once, on its first ready, then sets the Stored Only "Init Applied" flag (FRESH_START_FLAG_NAME) so a
+saved set or a preset (the flag 1 in it) is never overridden.
 
 A gen~ Param a control sets has no default in the device's GenExpr (`Param cutoff(min=40, max=12000);`): the build
 writes it, the value the initial values send that Param (`write_gen_param_defaults`), so the Init values are its one
@@ -47,6 +58,13 @@ LIVE_OBJECT_OUTLETS = {"live.dial": (2, ["", "float"]), "live.menu": (3, ["", ""
                        "live.numbox": (2, ["", "float"])}
 CONTROL_KINDS = ("dial", "text", "menu", "tab", "numbox")    # how the UI script recolours them
 INT_PARAMETER_VALUES = 256                                    # Live's Int type holds 0-255 steps
+# The Stored Only flag a fresh device starts at 0 and the UI script sets to 1 once it has moved the controls to their
+# start values (the Init sound): saved with the set and in every preset, so a set or preset reopened is left alone.
+FRESH_START_FLAG_NAME = "Init Applied"
+# how far a float control's value may sit from its neutral and still count as "at neutral" (a fraction of its range):
+# Live keeps a float parameter's value as a position (live_parameter_identity.py), so a recalled value may be off by
+# a last bit
+NEUTRAL_TOLERANCE_OF_RANGE = 1e-4
 
 
 def varname_for(long_name):
@@ -87,7 +105,11 @@ class DevicePatchBuilder:
         self.box_count = 0
         self.pages = {name: [] for name in self.page_names}
         self.saved_controls = {}                    # long name -> SavedControl: the controls presets set
-        self.initial_values = {}                    # long name -> its initial value as held
+        self.initial_values = {}                    # long name -> its start value as held (Init, or its own)
+        self.neutral_values = {}                    # long name -> its neutral value as held (Live's initial value)
+        self.neutral_names_asked = set()            # every name whose neutral the preset book was asked for
+        self.neutral_by_varname = {}                # saved control's varname -> [neutral as held, tolerance]
+        self.fresh_start_by_varname = {}            # saved control's varname -> its start value, where not neutral
         self.groups = {}                            # selector varname -> {"page": page, "members": [[varname]]}
         self.controls_by_kind = {kind: [] for kind in CONTROL_KINDS}
         self.view_varnames = []
@@ -179,23 +201,56 @@ class DevicePatchBuilder:
 
     # ---- Live parameters -----------------------------------------------------------------------------
 
-    def initial(self, name, items=None, minimum=None, maximum=None, initial_outside_presets=None):
-        """A control's initial value as held: the preset book's Init value (the control is then one presets set), or
-        `initial_outside_presets` (as held) for a control presets leave alone."""
+    def initial(self, name, items=None, minimum=None, maximum=None, initial_outside_presets=None,
+                visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, kit_neutral=None):
+        """A control's neutral value as held, Live's initial value (the double-click target): the preset book's
+        neutral value; the kit's (`kit_neutral`) for a control the kit makes; a Hidden control's start value unless
+        the kit gives one. Records its start value: the preset book's Init value (the control is then one presets
+        set), or `initial_outside_presets` (as held) for a control presets leave alone. A saved control whose start
+        differs from its neutral is moved there on a fresh device's first ready (the UI script)."""
         if name in self.initial_values:
             self.fail(f"two controls are called {name!r}")
+        control = SavedControl(name, varname_for(name), None if items is None else list(items),
+                               0 if items is not None else minimum, len(items) - 1 if items is not None else maximum)
         if initial_outside_presets is None:
-            control = SavedControl(name, varname_for(name), None if items is None else list(items),
-                                   0 if items is not None else minimum, len(items) - 1 if items is not None else maximum)
-            value = self.preset_book.init_value_as_held(control)
+            start = self.preset_book.init_value_as_held(control)
             self.saved_controls[name] = control
         else:
             if self.preset_book.has_init_value(name):
                 self.fail(f"{name!r} has an Init value in {self.preset_book.source_name}, so presets set it: "
                           "it can't have its own initial value too")
-            value = initial_outside_presets
-        self.initial_values[name] = value
-        return value
+            start = initial_outside_presets
+        hidden = visibility == identity.VISIBILITY_HIDDEN
+        if kit_neutral is not None or hidden:
+            if self.preset_book.has_neutral_value(name):
+                self.fail(f"{name!r} has a neutral value in {self.preset_book.source_name}, but "
+                          + ("the kit declares its neutral" if kit_neutral is not None else
+                             "it is Hidden (never saved, it loads at its initial value every time): its start value "
+                             "is its neutral")
+                          + ": leave it out of 'neutral'")
+            neutral = kit_neutral if kit_neutral is not None else start
+        else:
+            self.neutral_names_asked.add(name)
+            neutral = self.preset_book.neutral_value_as_held(control)
+        self.initial_values[name] = start
+        self.neutral_values[name] = neutral
+        if not hidden:
+            varname = varname_for(name)
+            tolerance = 0 if items is not None else NEUTRAL_TOLERANCE_OF_RANGE * (maximum - minimum)
+            self.neutral_by_varname[varname] = [neutral, generated_number(tolerance)]
+            if start != neutral:
+                self.fresh_start_by_varname[varname] = start
+        return neutral
+
+    def neutral_of_record(self, record):
+        """A saved record's neutral value, {field name: value in its field's own units}, from the preset book: its
+        editors' double-click targets. Asked only by a record with editors."""
+        self.neutral_names_asked.add(record.name)
+        neutral = self.preset_book.neutral_value_in_own_units(record.name)
+        if not isinstance(neutral, dict):
+            self.fail(f"{record.name!r}'s neutral value in {self.preset_book.source_name} must be "
+                      f"{{field: value}}, not {neutral!r}")
+        return neutral
 
     def saved_record(self, record, initial_outside_presets=None):
         """Register a saved record (a stored table, m4l_dev/stored_table.py): it reaches Live as its Stored Only
@@ -360,11 +415,11 @@ class DevicePatchBuilder:
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
              views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0,
-             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, width=layout_rules.DIAL_WIDTH):
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, width=layout_rules.DIAL_WIDTH, kit_neutral=None):
         """A live.dial: a float by default; integer=True Live's Int type (256 values at most); items=[names] an
         enum (minimum, maximum, unit and exponent unused), showing the chosen name. Its value goes to `target` as
         `message value` (scaled by `scale`), and to each (view box, message) in `views`. visibility: see
-        `visibility_values`. width: DIAL_WIDTH, or wider for a short name that needs it
+        `visibility_values`. kit_neutral: for a control the kit makes, its neutral (see `initial`). width: DIAL_WIDTH, or wider for a short name that needs it
         (layout_rules.live_dial_width(short)); on the grid."""
         if width < layout_rules.DIAL_WIDTH or width % layout_rules.GRID:
             self.fail(f"dial {name!r} is {width!r} px wide: at least {layout_rules.DIAL_WIDTH}, on the "
@@ -375,10 +430,12 @@ class DevicePatchBuilder:
         if items is not None:
             if integer:
                 self.fail(f"dial {name!r} is an enum or an Int, not both")
-            initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
+            initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets,
+                                   visibility=visibility, kit_neutral=kit_neutral)
             kind, values = identity.PARAMETER_TYPE_ENUM, dict(parameter_enum=list(items), parameter_mmax=len(items) - 1)
         else:
-            initial = self.initial(name, minimum=minimum, maximum=maximum, initial_outside_presets=initial_outside_presets)
+            initial = self.initial(name, minimum=minimum, maximum=maximum, initial_outside_presets=initial_outside_presets,
+                                   visibility=visibility, kit_neutral=kit_neutral)
             kind = identity.PARAMETER_TYPE_INT if integer else identity.PARAMETER_TYPE_FLOAT
             values = dict(parameter_mmin=float(minimum), parameter_mmax=float(maximum), parameter_unitstyle=unit,
                           parameter_exponent=float(exponent))
@@ -396,10 +453,11 @@ class DevicePatchBuilder:
         return box_id
 
     def menu(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None,
-             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
-        """A live.menu. visibility: see `visibility_values`."""
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, kit_neutral=None):
+        """A live.menu. visibility: see `visibility_values`; kit_neutral: see `initial`."""
         hidden = self.visibility_values("menu", name, visibility, initial_outside_presets)
-        initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
+        initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets,
+                               visibility=visibility, kit_neutral=kit_neutral)
         box_id = self.live_parameter("live.menu", name, short, (1500 + x, 640 + y, w, layout_rules.ROW_H),
                                      identity.PARAMETER_TYPE_ENUM, (x, y, w, layout_rules.ROW_H),
                                      parameter_enum=list(items), parameter_mmax=len(items) - 1,
@@ -409,18 +467,19 @@ class DevicePatchBuilder:
         return self.on_page(page, box_id, varname, group)
 
     def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None, rows=1,
-             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, row_height=layout_rules.ROW_H):
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, row_height=layout_rules.ROW_H, kit_neutral=None):
         """Selector buttons (a live.tab): one enum parameter, a button per item, in `rows` lines of `row_height` px
         (ROW_H by default, the row band's; a column of tabs, one a line, can be taller: live.tab splits its height
         equally between its lines). live.tab splits each line's width equally; every button must hold its longest
-        name (layout_rules). visibility: see `visibility_values`."""
+        name (layout_rules). visibility: see `visibility_values`; kit_neutral: see `initial`."""
         problem = layout_rules.live_tab_button_problem(items, w, rows)
         if problem:
             self.fail(f"tabs {name!r}: {problem}")
         if not (isinstance(row_height, int) and row_height >= layout_rules.ROW_H):
             self.fail(f"tabs {name!r}: a line is {row_height!r} px high, less than the row band's {layout_rules.ROW_H}")
         hidden = self.visibility_values("tabs", name, visibility, initial_outside_presets)
-        initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
+        initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets,
+                               visibility=visibility, kit_neutral=kit_neutral)
         height = row_height * rows
         box_id = self.live_parameter("live.tab", name, short, (1500 + x, 600 + y, w, height),
                                      identity.PARAMETER_TYPE_ENUM, (x, y, w, height), parameter_enum=list(items),
@@ -433,32 +492,34 @@ class DevicePatchBuilder:
 
     def groups_selected_by(self, selector_box, choice_count, page):
         """Make `selector_box` (any control whose value is a choice 0..choice_count-1) show one group of boxes on
-        `page` at a time; boxes join a group with group=(the selector's varname, i). It starts on its first group,
-        so the selector's initial value must be 0."""
+        `page` at a time; boxes join a group with group=(the selector's varname, i). The patch shows its first group
+        (the boxes of the others are saved hidden), so the selector's neutral value (Live's initial value, what the
+        device loads at) must be 0; its start value reaches the UI script as any change does."""
         varname = self.find(selector_box)["varname"]
         if varname in self.groups:
             self.fail(f"{varname!r} selects groups twice")
-        if self.initial_values.get(self.control_by_box[selector_box][0]) != 0:
-            self.fail(f"group selector {varname!r} must start on its first group (initial value 0)")
+        if self.neutral_values.get(self.control_by_box[selector_box][0]) != 0:
+            self.fail(f"group selector {varname!r} must load on its first group (neutral value 0)")
         self.groups[varname] = {"page": page, "members": [[] for _ in range(choice_count)]}
         self.tell(selector_box, f"group {varname}", self.built_header()["ui"])
 
     def group_selector(self, name, short, items, x, y, w, page):
         """A live.tab that shows one group of boxes on `page` at a time (see `groups_selected_by`). Saved with the
         set, not in presets; starts on the first group."""
-        box_id = self.tabs(name, short, items, x, y, w, page, initial_outside_presets=0)
+        box_id = self.tabs(name, short, items, x, y, w, page, initial_outside_presets=0, kit_neutral=0)
         self.groups_selected_by(box_id, len(items), page)
         return box_id
 
     def toggle(self, name, short, x, y, w, h, page, mode=1, initial_outside_presets=None, group=None,
-               visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
+               visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, kit_neutral=None):
         """A live.text: mode 1 a toggle (saved; in presets unless it has its own initial value), mode 0 a
         momentary button (neither). visibility: see `visibility_values` (a button, saved in nothing, needs no initial
-        value to be Hidden)."""
+        value to be Hidden). kit_neutral: see `initial`."""
         hidden = self.visibility_values("toggle", name, visibility, initial_outside_presets if mode == 1 else 0)
         initial_values = ({"parameter_initial_enable": 1,
                            "parameter_initial": [self.initial(name, items=TOGGLE_ITEMS,
-                                                              initial_outside_presets=initial_outside_presets)]}
+                                                              initial_outside_presets=initial_outside_presets,
+                                                              visibility=visibility, kit_neutral=kit_neutral)]}
                           if mode == 1 else {})
         box_id = self.live_parameter("live.text", name, short, (1500 + x, 660 + y, w, h), identity.PARAMETER_TYPE_ENUM,
                                      (x, y, w, h), _mode=mode, **initial_values, **hidden)
@@ -467,11 +528,13 @@ class DevicePatchBuilder:
         return self.on_page(page, box_id, varname, group)
 
     def numbox(self, name, short, target, message, minimum, maximum, unit, x, y, w, page, integer=False,
-               inlet=0, initial_outside_presets=None, group=None):
-        """A live.numbox. integer=True: Live's Int type, which holds 256 values at most (see `stored`)."""
+               inlet=0, initial_outside_presets=None, group=None, kit_neutral=None):
+        """A live.numbox. integer=True: Live's Int type, which holds 256 values at most (see `stored`). kit_neutral:
+        see `initial`."""
         if integer and maximum - minimum >= INT_PARAMETER_VALUES:
             self.fail(f"numbox {name!r}: an Int parameter holds {INT_PARAMETER_VALUES} values, {minimum}..{maximum} has more")
-        initial = self.initial(name, minimum=minimum, maximum=maximum, initial_outside_presets=initial_outside_presets)
+        initial = self.initial(name, minimum=minimum, maximum=maximum, initial_outside_presets=initial_outside_presets,
+                               kit_neutral=kit_neutral)
         box_id = self.live_parameter("live.numbox", name, short, (1500 + x, 680 + y, w, layout_rules.ROW_H),
                                      identity.PARAMETER_TYPE_INT if integer else identity.PARAMETER_TYPE_FLOAT,
                                      (x, y, w, layout_rules.ROW_H), parameter_mmin=float(minimum),
@@ -485,7 +548,7 @@ class DevicePatchBuilder:
 
     def stored(self, name, initial_value):
         """A Stored Only parameter: Live stores it with the set (and a Live preset's blob) but doesn't show or
-        automate it. Float type with an Int unit style, 0-65535: Live's Int type holds only 256 values (0-255),
+        automate it. No double-click reaches it, so it has no neutral: its initial value is its start value. Float type with an Int unit style, 0-65535: Live's Int type holds only 256 values (0-255),
         which would cut a 16-bit value down to its first 8 bits. Cycling '74's param reference gives this pattern
         for bigger integers."""
         if not (0 <= initial_value <= 65535 and initial_value == int(initial_value)):
@@ -583,11 +646,12 @@ class DevicePatchBuilder:
         if preset_menu is not None:
             self.preset_menu_x, preset_menu_width = preset_menu
             made["preset"] = self.menu("Preset", "Preset", ["-"], self.preset_menu_x, header_y, preset_menu_width, None,
-                                       initial_outside_presets=0)  # items: the preset book's, set by check()
+                                       initial_outside_presets=0, kit_neutral=0)  # items: the preset book's, set by check()
             self.wire(made["preset"], made["ui"])
         # the right end of the header: out (the output level) and Stop, 12 px from the device's edge
         self.output_level_x = self.device_width - 136
-        output_level_initial = self.initial(output_level_name, minimum=-36.0, maximum=12.0)
+        # unity (0 dB) is the output level's neutral, the kit's for every device
+        output_level_initial = self.initial(output_level_name, minimum=-36.0, maximum=12.0, kit_neutral=0.0)
         made["output_level"] = self.live_parameter("live.numbox", output_level_name, output_level_name,
                                                    (1500, 520, 64, 15), identity.PARAMETER_TYPE_FLOAT,
                                                    (float(self.output_level_x), float(header_y), 64.0, 15.0),
@@ -599,6 +663,9 @@ class DevicePatchBuilder:
         self.find(made["output_level"]).update(varname=output_level_varname)
         self.controls_by_kind["numbox"].append(output_level_varname)
         self.tell(made["output_level"], "volume", output_level_target)
+        # the fresh-start flag (FRESH_START_FLAG_NAME): 0 in a fresh device, 1 once the UI script has moved the controls
+        # to their start values; saved with the set and in presets (Stored Only), read and set by the UI script
+        made["fresh_start_flag"] = self.stored(FRESH_START_FLAG_NAME, 0)
         made["stop"] = self.live_parameter("live.text", "Stop", "Stop", (1500, 540, 48, 15),
                                            identity.PARAMETER_TYPE_ENUM,
                                            (float(self.device_width - 60), float(header_y), 48.0, 15.0), _mode=0)
@@ -700,6 +767,10 @@ class DevicePatchBuilder:
         Preset menu's items. Fails on the first broken rule, saying what to fix."""
         self.built_header()
         presets = self.preset_book.presets_as_held(self.saved_controls)
+        unknown_neutral = set(self.preset_book.neutral_values_in_own_units) - self.neutral_names_asked
+        if unknown_neutral:
+            self.fail(f"'neutral' in {self.preset_book.source_name} names no control that takes one (a control or a "
+                      f"stored table with editors, not Hidden, not the kit's): {sorted(unknown_neutral)}")
         if self.header_boxes["preset"] is not None:
             preset_values = self.find(self.header_boxes["preset"])["saved_attribute_attributes"]["valueof"]
             preset_values.update(parameter_enum=[preset.name for preset in presets], parameter_mmax=len(presets) - 1)
@@ -896,7 +967,8 @@ class DevicePatchBuilder:
                                else {control.varname})
         return (saved_varnames
                 | {n for names in self.controls_by_kind.values() for n in names} | set(self.view_varnames)
-                | {n for names in self.pages.values() for n in names} | set(self.stop_turns_off))
+                | {n for names in self.pages.values() for n in names} | set(self.stop_turns_off)
+                | set(self.neutral_by_varname) | {varname_for(FRESH_START_FLAG_NAME)})
 
     def check_script_lookups(self):
         """Every name the UI script looks up must name exactly one box (it errors at run time otherwise)."""
@@ -934,7 +1006,8 @@ class DevicePatchBuilder:
         }}
 
     def ui_script(self, presets):
-        """The UI script (templates/ui-script.template.js): pages, groups, the Preset menu, Stop, the theme."""
+        """The UI script (templates/ui-script.template.js): pages, groups, the Preset menu, Stop, the theme, and a fresh
+        device's move to its start values."""
         presets_for_menu = []
         if self.header_boxes["preset"] is not None:
             presets_for_menu = [self.preset_menu_values(preset) for preset in presets]
@@ -943,7 +1016,10 @@ class DevicePatchBuilder:
             "PAGE_NAMES": json.dumps(self.page_names), "PAGES": json.dumps(self.pages),
             "PRESETS": json.dumps(presets_for_menu, indent=1), "CONTROLS": json.dumps(self.controls_by_kind),
             "GROUPS": json.dumps(self.groups), "VIEWS": json.dumps(self.view_varnames),
-            "STOP_TURNS_OFF": json.dumps(self.stop_turns_off), "THEME_FROM_LIVE": theme_from_live_js()},
+            "STOP_TURNS_OFF": json.dumps(self.stop_turns_off), "THEME_FROM_LIVE": theme_from_live_js(),
+            "FRESH_START": json.dumps(self.fresh_start_by_varname),
+            "NEUTRAL": json.dumps(self.neutral_by_varname),
+            "FRESH_START_FLAG": json.dumps(varname_for(FRESH_START_FLAG_NAME))},
             "the kit's UI script template")
 
     def preset_menu_values(self, preset):

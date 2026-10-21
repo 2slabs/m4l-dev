@@ -35,7 +35,11 @@ is `m4l_dev/plugin/` (Python: parameters, the generated header, `.vstpreset` fil
   `midiparse`, the voice allocator, `mc.target`, `phasor~` / `cos~`, the mixdown, `delay`, Stop. It's the one part
   with no device code to share, so it's kept small and every piece has a test.
 - **Parameters** come from the device's patch (`host_parameters`, the patch's own `messages_for` routes) and Live's
-  parameter lock, never by hand: names, ranges, units, menus, defaults. Stored Only values (a pattern) are plugin
+  parameter lock, never by hand: names, ranges, units, menus, defaults. Each has two values (presets.md, "Neutral,
+  Init, and a fresh device"): `neutral`, the lock's initial value, is the host parameter's default (a host's reset,
+  a double-click in its generic editor); `start` (Init) is what the plugin sets every parameter to in its constructor
+  and what its engine starts from, so a fresh instance plays the Init sound, and a host restoring a set or preset
+  calls `setStateInformation` after construction, which replaces them: no flag is needed. Stored Only values (a pattern) are plugin
   state, not host parameters. A two-item button with no route (Stop, Throw) is a `Button`: every change is a press.
   Routes that depend on the tempo are recomputed when it changes. Plugin-only parameters (stab's Key and Scale, since
   a plugin can't read Live's scale) go after the device's, so the device's ids and order stay.

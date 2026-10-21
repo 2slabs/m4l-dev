@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ElementTree
 
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
+from m4l_dev.patch_builder import FRESH_START_FLAG_NAME
 from m4l_dev.preset_book import HeldRecord, stored_only_values_of_preset
 
 KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -210,6 +211,8 @@ def write_live_presets(device_path, patch, device_type, presets, live_preset_fil
                              f"Stored parameters, which a Live preset can't hold: {sorted(unlisted)}")
         stored_only_values = stored_only_values_of_preset(preset.values, live_preset_files.stored_only_values_of_preset,
                                                           f"Live preset files: preset {preset.name!r}")
+        # a preset is a device with its values: the fresh-start flag at 1, so the UI script never moves them to Init
+        stored_only_values[FRESH_START_FLAG_NAME] = 1
         if sorted(stored_only_values) != sorted(writer.stored_only_names):
             raise BuildError(f"Live preset files: preset {preset.name!r} gives Stored Only values for "
                              f"{sorted(stored_only_values)}, the device's Stored Only parameters are "
