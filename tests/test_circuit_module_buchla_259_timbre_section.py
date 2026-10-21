@@ -229,7 +229,7 @@ class FolderGenExprTests(unittest.TestCase):
             self.assertAlmostEqual(measured[1], second_order, delta=1.5, msg=f"{drive} V, {frequency} Hz, second order")
 
     def test_a_hot_fold_at_2x_peaks_past_the_ideal_through_the_elliptic_downsampler(self):
-        # PLANS/2026-10-20-instrument-2x-folder-peaks.md: the unit at 2x 48 kHz on a pure sine, brought down by the
+        # references/dsp.md ("After the 259 folder at 2x"): the unit at 2x 48 kHz on a pure sine, brought down by the
         # kit's elliptic HalfbandDownsampler and its HalfbandLinearPhaseDownsampler; the steady peak re the ideal (the
         # folded tone's harmonics below 24 kHz, flat, their own phases), DC off. Measured (scratchpad numpy, = this renderer):
         # 8 V at 987.8 Hz elliptic 7.08, linear phase 4.06, ideal 3.00; 10 V at 784.0 Hz 8.45, 5.49, 4.46. The

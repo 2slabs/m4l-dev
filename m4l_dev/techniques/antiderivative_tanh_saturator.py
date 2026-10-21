@@ -24,7 +24,7 @@ step late; after it, ADAA's equaliser for first order at the rate it runs at (th
 
   Why the downsampler is linear phase: a mean of tanh never leaves (-1, 1), but band-limiting a clipped broadband wave
   overshoots (hot white noise through tanh at 16x, low-passed at 20 kHz: 1.78), and the elliptic downsampler's phase
-  near its corner rang it to 2.85 (2sl drums' snare at +36 dB: 2.11; PLANS/2026-10-20-tanh-saturator-peaks.md). With
+  near its corner rang it to 2.85 (2sl drums' snare at +36 dB: 2.11; references/dsp.md, "Peaks"). With
   the FIR: 1.91 and 1.50. `output_bound_per_unit_mean` is the bound for any input: the sum of |taps| of the chain
   after the mean (2.19 at 2x, 1 at 1x) times the mean's own bound (1, or 1 + |tanh(bias)| with a bias).
 

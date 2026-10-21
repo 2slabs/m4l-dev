@@ -215,7 +215,7 @@ class HalfbandDownsampler(Technique):
 
 # The linear-phase half-band (a windowed-sinc FIR, Kaiser's window): the downsampler after a saturator, where the
 # elliptic half-band's phase near its corner rings a clipped broadband wave far past the band-limited ideal's peak
-# (PLANS/2026-10-20-tanh-saturator-peaks.md: hot white noise through the tanh saturator at 2x, 48 kHz: the elliptic
+# (references/dsp.md, measured 2026-10-20: hot white noise through the tanh saturator at 2x, 48 kHz: the elliptic
 # pair 2.85, this one 1.91, tanh at 16x low-passed at 20 kHz 1.78). Its band edges are the elliptic default's
 # (pass to 0.21, stop from 0.29 of the doubled rate) and its stop band at least as deep (100 dB against 99.3 dB).
 LINEAR_PHASE_HALFBAND_ATTENUATION_DB = 100.0

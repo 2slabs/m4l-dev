@@ -1,6 +1,20 @@
 # 2026-10-20: why the matcher recovers the toy voice (85 %) and not the 2sl drums voice (10 %)
 
-The matcher is the drums engine's acceptance test (PLANS/2026-10-19-patch-matcher.md). On the drums' synth voice
+## Status (2026-10-21)
+
+Open: the 2sl drums synth voice's self-recovery is 0 / 8 (fixture voice 20 / 20). Root causes (1) and (2) are fixed
+in the kit (e7cff6c) and in 2sl drums 0.3.18 (noise_pattern an enum); (3), the voice's continuous landscape, is not a
+search setting. Waiting on the user, who deferred both: calibrating the bar by ear (is "within 0.25 of the truth's
+score" the right "recovered"?) and a learned warm start (Genopatch's net, architecture/patch-matcher.md "Open"); or
+far larger budgets. After that: the user's targets (Drumazon 909 kicks first) through `tools/match_patch.py`, each
+`.match.wav` listened to against its `.target.wav`.
+
+The matcher itself (score, search, CLI, the drums' MatchedVoice, one C build-and-cache) is built:
+architecture/patch-matcher.md.
+
+## The investigation
+
+The matcher is the drums engine's acceptance test (architecture/patch-matcher.md). On the drums' synth voice
 (2sl-drums src/drum_synth_voice.py, MATCHED_DRUM_SYNTH_VOICE, 31 searched parameters) it recovers 2 / 20 random known
 settings (found <= truth's own score + 0.25), median found 5.7 vs truth 0.0; switches fixed at the truth: no better;
 4x the renders: one target 6.5 -> 4.8; ~2.5 min a match on 6 cores. Target: >= 75 % on the drums voice in reasonable

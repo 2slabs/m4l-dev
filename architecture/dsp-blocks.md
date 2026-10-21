@@ -1,7 +1,7 @@
 # Gen blocks: techniques, circuit modules, instruments
 
 User, 2026-10-19: "build them as kit blocks … find your favorite and coolest and best implementation of these
-things". User, 2026-10-20 (PLANS/2026-10-20-kit-layers.md): "we have all of these modules that exist that are the
+things". User, 2026-10-20: "we have all of these modules that exist that are the
 backbone of these instruments, either that expose their modularity, or that wrap it (the roland synths using the same
 filter chip, that's their modular building block, they're just wrapping it, this is what we're doing)".
 
@@ -16,6 +16,10 @@ three layers; each layer uses only the layers below it:
 
 Every block is chosen by numbers against a stated reference (the analog model, the tempo grid, an oversampled ideal)
 and keeps its claims as tests.
+
+Circuit modules come as an instrument needs them, sources first (references/circuit-module-catalogue.md ranks what we
+have the schematics of). Named by the user, 2026-10-20: Roland (IR3109, BA662), Moog 5U, Serge, a deliberately clinical
+one, and a Mackie desk's channel and summing ("so it can sound like a mackie desk").
 
 ## The pattern every gen block keeps (both layers)
 

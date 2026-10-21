@@ -1,6 +1,6 @@
 # Circuit-module catalogue: which characteristic circuits we actually have the information on
 
-Written 2026-10-20 for the kit's layer 2 (PLANS/2026-10-20-kit-layers.md: techniques -> circuit modules -> instruments).
+Written 2026-10-20 for the kit's layer 2 (architecture/dsp-blocks.md: techniques -> circuit modules -> instruments).
 The user's rule: "filter it down to things we actually have the information on - what do we actually have the schematic
 of - and those are the starting building blocks." So this note is a ranking by source quality, not by fame.
 
