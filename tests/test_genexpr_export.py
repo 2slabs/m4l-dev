@@ -125,7 +125,7 @@ class ExportTests(unittest.TestCase):
 
     def test_the_header_describes_the_program(self):
         for line in ("CORE_INPUTS = 2", "CORE_OUTPUTS = 3", "CORE_PARAMS = 2", "CORE_HISTORIES = 2",
-                     "CORE_DELAYS = 1", "CORE_DELAY_MEMORY = 4410", '{"cutoff", "time"}'):
+                     "CORE_DELAYS = 1", "CORE_DELAY_MEMORY = 4410", '{"cutoff", "time"}', '{"lp", "ph"}'):
             self.assertIn(line, self.header)
 
     def test_code_without_its_param_defaults_is_not_exported(self):

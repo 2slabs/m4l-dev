@@ -120,6 +120,7 @@ def header(info, num_inputs, num_outputs, prefix):
     lowest = [param.minimum if param.minimum is not None else -1e308 for param in params]
     highest = [param.maximum if param.maximum is not None else 1e308 for param in params]
     names = ", ".join(c_string(param.name) for param in params) or "0"
+    history_names = ", ".join(c_string(history.name) for history in histories) or "0"
     return NOTICE + f"""#ifndef {upper}_H
 #define {upper}_H
 
@@ -148,7 +149,8 @@ static const char *const {prefix}_param_names[] = {{{names}}};
 static const double {prefix}_param_defaults[] = {c_doubles([param.default for param in params])};
 static const double {prefix}_param_lowest[] = {c_doubles(lowest)};
 static const double {prefix}_param_highest[] = {c_doubles(highest)};
-/* the Histories' values at the start (and after a reset) */
+/* the Histories by name and their values at the start (and after a reset) */
+static const char *const {prefix}_history_names[] = {{{history_names}}};
 static const double {prefix}_history_initials[] = {c_doubles([history.initial for history in histories])};
 
 /* Renders sample_count samples. params: {upper}_PARAMS values (clamp them to their range, as gen~ does).
