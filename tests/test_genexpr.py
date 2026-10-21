@@ -96,6 +96,11 @@ class RejectionTests(unittest.TestCase):
     def test_comments_and_error_positions(self):
         self.assert_rejected("/* a\nb */ a = 1 ;\n  b = @;", "unexpected character", expected_line=3)
 
+    def test_an_unsupported_operator_is_named_even_as_the_last_character(self):
+        for operator in ("&", "|", "^", "~"):
+            self.assert_rejected(f"out1 = in1 {operator}", f"operator '{operator}' is not supported", expected_line=1)
+            self.assert_rejected(f"out1 = in1 {operator} 2;", f"operator '{operator}' is not supported", expected_line=1)
+
 
 class ParamDefaultWritingTests(unittest.TestCase):
     """code_with_param_defaults: the patch builder writes the defaults a device's Init values give its Params."""

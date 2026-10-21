@@ -79,6 +79,7 @@ class DevicePatchBuilder:
         self.preset_book = preset_book
         self.info_used = set()
         self.boxes, self.lines = [], []
+        self.boxes_by_id = {}                       # box id -> [box] (a list: find() names an id given twice)
         self.box_count = 0
         self.pages = {name: [] for name in self.page_names}
         self.saved_controls = {}                    # long name -> SavedControl: the controls presets set
@@ -114,17 +115,18 @@ class DevicePatchBuilder:
             new_box["outlettype"] = outtype or [""] * outs
         new_box.update(extra)
         self.boxes.append({"box": new_box})
+        self.boxes_by_id.setdefault(new_box["id"], []).append(new_box)
         return new_box["id"]
 
     def wire(self, source, destination, source_outlet=0, destination_inlet=0):
         for end in (source, destination):
-            if not any(x["box"]["id"] == end for x in self.boxes):
+            if end not in self.boxes_by_id:
                 self.fail(f"a wire names box {end!r}, which doesn't exist")
         self.lines.append({"patchline": {"source": [source, source_outlet],
                                          "destination": [destination, destination_inlet]}})
 
     def find(self, box_id):
-        found = [x["box"] for x in self.boxes if x["box"]["id"] == box_id]
+        found = self.boxes_by_id.get(box_id, [])
         if len(found) != 1:
             self.fail(f"box {box_id!r} found {len(found)} times")
         return found[0]

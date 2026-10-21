@@ -67,6 +67,7 @@ Usage
 
 import array
 import ctypes
+import functools
 import math
 import os
 import random
@@ -134,6 +135,8 @@ BINARY_PRECEDENCE_LEVELS = (
     ("+", "-"),
     ("*", "/", "%"),
 )
+BINARY_OPERATOR_LEVELS = {operator: level for level, operators in enumerate(BINARY_PRECEDENCE_LEVELS)
+                          for operator in operators}
 COMPARISON_OPERATORS = frozenset({"<", ">", "<=", ">=", "==", "!="})
 
 
@@ -153,8 +156,29 @@ class Token:
         return self.col + len(self.text)
 
 
-NUMBER_PATTERN = re.compile(r"(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
-IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# One pattern for every token and everything between tokens, tried in the order the alternatives are written; the
+# group that matched (`lastgroup`) says which. A number is digits (any Unicode decimal digits, as Python's \d) with an
+# optional fraction and exponent, or a leading-dot fraction (before the operators: ".5" is a number, "." alone an
+# operator). The operators: the supported two-character ones, the refused two-character ones (compound assignment and
+# friends, tokens so that the parser can name them), then the single characters; a refused single character fails here.
+TWO_CHARACTER_OPERATORS = SUPPORTED_MULTI_OPERATORS + tuple(o for o in UNSUPPORTED_OPERATORS if len(o) == 2)
+UNSUPPORTED_SINGLE_CHARACTERS = "".join(o for o in UNSUPPORTED_OPERATORS if len(o) == 1)
+TOKEN_PATTERN = re.compile(r"""
+    (?P<ident>[A-Za-z_][A-Za-z0-9_]*)
+  | (?P<space>[ \t\r\n]+)
+  | (?P<number>(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)
+  | (?P<line_comment>//[^\n]*)
+  | (?P<block_comment>/\*.*?\*/)
+  | (?P<unterminated_block_comment>/\*)
+  | (?P<op>%s|[%s])
+  | (?P<string>"[^"\n]*")
+  | (?P<unterminated_string>")
+  | (?P<unsupported_operator>[%s])
+""" % ("|".join(re.escape(operator) for operator in TWO_CHARACTER_OPERATORS), re.escape(SINGLE_CHARACTER_OPERATORS),
+       re.escape(UNSUPPORTED_SINGLE_CHARACTERS)), re.DOTALL | re.VERBOSE)
+
+
+NEWLINE_PATTERN = re.compile(r"\n")
 
 
 def tokenize(code):
@@ -163,70 +187,40 @@ def tokenize(code):
     line = 1
     line_start = 0
     length = len(code)
+    match_token_at = TOKEN_PATTERN.match
     while position < length:
-        char = code[position]
+        match = match_token_at(code, position)
         col = position - line_start + 1
-        if char == "\n":
-            line += 1
-            position += 1
-            line_start = position
-            continue
-        if char in " \t\r":
-            position += 1
-            continue
-        if code.startswith("//", position):
-            newline_at = code.find("\n", position)
-            position = length if newline_at < 0 else newline_at
-            continue
-        if code.startswith("/*", position):
-            close_at = code.find("*/", position + 2)
-            if close_at < 0:
-                raise GenExprError("unterminated /* comment", line, col)
-            for offset in range(position, close_at + 2):
-                if code[offset] == "\n":
-                    line += 1
-                    line_start = offset + 1
-            position = close_at + 2
-            continue
-        if char.isdigit() or (char == "." and position + 1 < length and code[position + 1].isdigit()):
-            match = NUMBER_PATTERN.match(code, position)
-            text = match.group(0)
-            following = code[match.end():match.end() + 1]
+        if match is None:
+            raise GenExprError(f"unexpected character {code[position]!r}", line, col)
+        kind = match.lastgroup
+        text = match.group()
+        end = match.end()
+        if kind == "ident" or kind == "op":
+            tokens.append(Token(kind, text, line, col))
+        elif kind == "space" or kind == "block_comment":
+            newlines_inside = text.count("\n")
+            if newlines_inside:
+                line += newlines_inside
+                line_start = position + text.rindex("\n") + 1
+        elif kind == "line_comment":
+            pass
+        elif kind == "number":
+            following = code[end:end + 1]
             if following and (following.isalpha() or following == "_"):
                 raise GenExprError(f"malformed number '{text}{following}'", line, col)
             tokens.append(Token("number", text, line, col))
-            position = match.end()
-            continue
-        if char.isalpha() or char == "_":
-            match = IDENTIFIER_PATTERN.match(code, position)
-            tokens.append(Token("ident", match.group(0), line, col))
-            position = match.end()
-            continue
-        if char == '"':
-            close_at = code.find('"', position + 1)
-            newline_at = code.find("\n", position + 1)
-            if close_at < 0 or (0 <= newline_at < close_at):
-                raise GenExprError("unterminated string literal", line, col)
-            tokens.append(Token("string", code[position + 1:close_at], line, col))
-            position = close_at + 1
-            continue
-        two_characters = code[position:position + 2]
-        if two_characters in SUPPORTED_MULTI_OPERATORS:
-            tokens.append(Token("op", two_characters, line, col))
-            position += 2
-            continue
-        # Compound assignment and friends are tokenised so that the parser can name them.
-        if two_characters in UNSUPPORTED_OPERATORS:
-            tokens.append(Token("op", two_characters, line, col))
-            position += 2
-            continue
-        if char in SINGLE_CHARACTER_OPERATORS:
-            tokens.append(Token("op", char, line, col))
-            position += 1
-            continue
-        if char in UNSUPPORTED_OPERATORS:
-            raise GenExprError(f"operator '{char}' is not supported in this GenExpr subset", line, col)
-        raise GenExprError(f"unexpected character {char!r}", line, col)
+        elif kind == "string":
+            tokens.append(Token("string", text[1:-1], line, col))
+        elif kind == "unterminated_block_comment":
+            raise GenExprError("unterminated /* comment", line, col)
+        elif kind == "unterminated_string":
+            raise GenExprError("unterminated string literal", line, col)
+        elif kind == "unsupported_operator":
+            raise GenExprError(f"operator '{text}' is not supported in this GenExpr subset", line, col)
+        else:
+            raise GenExprError(f"internal error: the token pattern matched an unknown group {kind!r}", line, col)
+        position = end
     tokens.append(Token("eof", "", line, position - line_start + 1))
     return tokens
 
@@ -398,7 +392,8 @@ class Parser:
 
     # -- token helpers --
     def peek(self, offset=0):
-        return self.tokens[min(self.index + offset, len(self.tokens) - 1)]
+        index = self.index + offset
+        return self.tokens[index] if index < len(self.tokens) else self.tokens[-1]
 
     def advance(self):
         token = self.tokens[self.index]
@@ -734,15 +729,18 @@ class Parser:
             return Ternary(question.line, question.col, condition, when_true, when_false)
         return condition
 
-    def parse_binary(self, level):
-        if level == len(BINARY_PRECEDENCE_LEVELS):
-            return self.parse_unary()
-        left = self.parse_binary(level + 1)
-        while self.peek().kind == "op" and self.peek().text in BINARY_PRECEDENCE_LEVELS[level]:
-            operator = self.advance()
+    def parse_binary(self, lowest_level):
+        """Precedence climbing: an operand, then while the next token is an operator of `lowest_level` or tighter,
+        that operator and its right operand (bound at the next tighter level: left associative)."""
+        left = self.parse_unary()
+        while True:
+            token = self.peek()
+            level = BINARY_OPERATOR_LEVELS.get(token.text) if token.kind == "op" else None
+            if level is None or level < lowest_level:
+                return left
+            self.advance()
             right = self.parse_binary(level + 1)
-            left = Binary(operator.line, operator.col, operator.text, left, right)
-        return left
+            left = Binary(token.line, token.col, token.text, left, right)
 
     def parse_unary(self):
         token = self.peek()
@@ -829,9 +827,18 @@ def code_with_param_defaults(code, defaults_by_name):
     """`code` with each Param of `defaults_by_name` given that default where its declaration leaves it out
     (`Param cutoff(min=40, max=12000);` -> `Param cutoff(700, min=40, max=12000);`, `Param x;` -> `Param x(0.5);`).
     Fails on a name that is no Param, on a Param whose code already holds a default (one number, one source), and if
-    the result does not read back with exactly these defaults."""
+    the result does not read back with exactly these defaults. A device's build asks for the same code as built more
+    than once (the patch's codebox, a renderer's or exporter's copy): the last few answers are kept, by code and
+    defaults (a refusal is not kept: asked again, it fails again)."""
+    return code_with_param_defaults_by_items(code, tuple(sorted(defaults_by_name.items())))
+
+
+@functools.lru_cache(maxsize=8)
+def code_with_param_defaults_by_items(code, default_items):
+    """code_with_param_defaults with its defaults as sorted (name, value) pairs: hashable, for the cache."""
+    defaults_by_name = dict(default_items)
     tokens = tokenize(code)
-    declarations = {declaration.name: declaration for declaration in parse(code).declarations
+    declarations = {declaration.name: declaration for declaration in Parser(tokens).parse_program().declarations
                     if isinstance(declaration, ParamDecl)}
     unknown = sorted(set(defaults_by_name) - set(declarations))
     if unknown:
@@ -841,7 +848,7 @@ def code_with_param_defaults(code, defaults_by_name):
     if written_twice:
         raise BuildError(f"Params {written_twice} hold a default in the code and are given one: leave the default "
                          f"out of the code (Param name(min=..., max=...);), the one given is the default")
-    line_starts = [0] + [index + 1 for index, character in enumerate(code) if character == "\n"]
+    line_starts = [0] + [newline.end() for newline in NEWLINE_PATTERN.finditer(code)]
 
     def offset_of(token):
         return line_starts[token.line - 1] + token.col - 1

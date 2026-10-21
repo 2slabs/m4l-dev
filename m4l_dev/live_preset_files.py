@@ -10,6 +10,7 @@ Known forms only: float and enum parameters, Automated and Stored / Stored Only 
 or a Max Audio Effect. Anything else (an Int parameter, a MIDI effect) fails the build: its form hasn't been seen in
 a file Live wrote, or isn't taught yet (the audio effect example also holds an Int parameter's form).
 """
+import copy
 import os
 import re
 import struct
@@ -123,7 +124,7 @@ class _LivePresetWriter:
         [max(min, 0), max(min, 1)]. All as Live wrote them for all 51 of 2sl stab's (Decay 260 ms is saved as 2097.7)."""
         is_enum = valueof["parameter_type"] == identity.PARAMETER_TYPE_ENUM
         prototype = self.prototypes["MxDEnumParameter" if is_enum else "MxDFloatParameter"]
-        element = ElementTree.fromstring(ElementTree.tostring(prototype))
+        element = copy.deepcopy(prototype)
         element.set("Id", str(parameter_id))
         minimum = float(valueof.get("parameter_mmin", 0.0))
         maximum = float(len(valueof["parameter_enum"]) - 1) if is_enum else float(valueof.get("parameter_mmax", 127.0))
@@ -162,7 +163,7 @@ class _LivePresetWriter:
         return "\n" + "".join(blob_indent + hex_digits[i:i + 80] + "\n" for i in range(0, len(hex_digits), 80)) + "\t" * 5
 
     def preset_bytes(self, preset, device_file_name, device_size, device_crc, stored_only_values):
-        root = ElementTree.fromstring(ElementTree.tostring(self.template_root))
+        root = copy.deepcopy(self.template_root)
         device = root.find(self.device_element_name)
         # the device file: relative to the preset (RelativePathType 1), so the presets work wherever the folder goes;
         # no absolute Path (the template's is a path on one Mac)
