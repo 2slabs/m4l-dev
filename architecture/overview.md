@@ -20,7 +20,9 @@ repository as a git submodule (device-repository.md). It holds no device.
 | module | concern |
 |---|---|
 | `device_repository.py` | `DeviceRepository`: where a device's sources are and where its build writes; refuses writes inside the kit |
-| `patch_builder.py` | `DevicePatchBuilder`: the patch, box by box, and every check of it (`check()`) |
+| `patch_builder.py` | `DevicePatchBuilder`: the patch, box by box, and every check of it (`check()`; with the scripts, `check_script_messages_into_gen`). Every message sent straight into a gen~ names a Param it declares: a [prepend X] or message box wired into it (`check_messages_into_gen_name_params`), a script's `outlet(N, ...)` from an outlet wired into it (a literal, or a `+` chain a Param matches; a block's outlet the text can't say is told with `script_outlet_of_block`) |
+| `max_time_values.py` | Max's note values (`MAX_NOTE_VALUE_TICKS`, references/README.md "Time value syntax") and the check every [metro] / [delay] / [pipe] / ... box's text passes as it is made (`box`): a token shaped like a note value (`64nt`) must be one |
+| `script_outlet_calls.py` | an ES5 script's `outlet(index, message, ...)` calls read from its text (tokenized, not run): each call's outlet and its message name as a pattern; what `check_script_messages_into_gen` holds to a gen~'s Params |
 | `layout_rules.py` | the 2sl layout contract (169 px, the bands, the header), the overlap check, and how wide a control must be for its text (live.dial / live.menu / live.text / live.tab text in Live's font, measured per character by a stand-in, with padding) |
 | `seeded_random.py` | `SeededRandom`: the device's one random generator, its Seed and Loop controls (seeded-random.md) |
 | `chord_block.py` | `ChordBlock`: chord shapes, In key, held keys, names, Drift, the chord display (chord-block.md) |

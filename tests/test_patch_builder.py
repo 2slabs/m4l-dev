@@ -397,8 +397,10 @@ class GenTests(unittest.TestCase):
     def test_a_message_to_no_param_fails(self):
         patch = builder(book=preset_book(init={"A": 0, "Volume": 0}))
         patch.dial("A", "A", patch.target, "nothing", 0, 1, 0, 12, 119, "one")
-        with self.assertRaisesRegex(BuildError, "nothing: no such Param"):
+        with self.assertRaisesRegex(BuildError, "\\[prepend nothing\\] .* sends 'nothing' into \\[gen~\\] .* no such Param"):
             patch.check()
+        with self.assertRaisesRegex(BuildError, "nothing: no such Param"):
+            patch.gen_code_as_built(patch.target)
 
     def test_gen_code_is_checked(self):
         patch = builder()

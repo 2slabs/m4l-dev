@@ -6,7 +6,8 @@
 In order, and nothing is written until every check has passed:
   1. the patch's checks (DevicePatchBuilder.check: Init values, presets, gen~ Params, layout, Info text, names, wires)
   2. the scripts: the UI and views scripts from the kit's templates, and the device's own (`device_scripts`,
-     {file name: text}, already filled in), every one checked as ES5; the patch and every script hold only numbers
+     {file name: text}, already filled in), every one checked as ES5; every message a script sends straight into a
+     gen~ names a Param of it (DevicePatchBuilder.check_script_messages_into_gen); the patch and every script hold only numbers
      that went through generated_number (m4l_dev/generated_numbers.py)
   3. the Live parameter lock (src/live-parameters.lock.json): fails with a diff on any change, unless
      --accept-live-parameter-changes is among `command_line_arguments`
@@ -71,6 +72,7 @@ def build_device(repository, patch, layout, views_code, device_scripts, live_pre
             raise BuildError(f"{patch.device_name}: the device's scripts include {kit_script_name}, which the kit writes")
         scripts[kit_script_name] = kit_script_text
     check_es5(scripts)
+    patch.check_script_messages_into_gen(scripts)
     identity = live_parameter_identity.device_identity(patch_json, patch.device_type)
     held_by_the_lock = literals_held_by_the_lock(live_parameter_identity.lock_text(identity))
     maxpat_text = json.dumps(patch_json, indent="\t")

@@ -25,6 +25,7 @@ A page can hold groups of controls that a selector shows one at a time: a live.t
 control (`groups_selected_by`). The layout contract is m4l_dev/layout_rules.py's.
 """
 import json
+import re
 
 from m4l_dev import genexpr
 from m4l_dev import layout_rules
@@ -32,6 +33,8 @@ from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
 from m4l_dev.generated_numbers import generated_number
 from m4l_dev.generated_scripts import fill_template, kit_template_text
+from m4l_dev.max_time_values import check_note_values_in_box_text
+from m4l_dev.script_outlet_calls import outlet_calls
 from m4l_dev.preset_book import TOGGLE_ITEMS, SavedControl, SavedRecord, stored_only_values_of_preset
 from m4l_dev.themes import theme_from_live_js
 
@@ -94,6 +97,9 @@ class DevicePatchBuilder:
         self.gen_param_from_init = []               # (gen box id, Param name, value the initial values send, control)
         self.gen_params_by_box = {}                 # gen~ box id -> {Param name: ParamDecl} of the code as given
         self.gen_code_by_box = {}                   # gen~ box id -> its code as given (defaults left out)
+        # script box id -> {outlet expression a block's code sends from (stored tables: "spec.outlet"): [(outlet
+        # index, the block)]}: the outlets an `outlet(<expression>, ...)` the script's text can't resolve reaches
+        self.script_outlets_of_blocks = {}
         self.control_routes = []                    # (control, transform, destination box, message or None, scale)
         self.tempo_routes = []                      # (control, beats of its value as held, destination box, message)
         self.stop_turns_off = []                    # varnames of controls the Stop action sets to 0
@@ -115,6 +121,8 @@ class DevicePatchBuilder:
         if outs:
             new_box["outlettype"] = outtype or [""] * outs
         new_box.update(extra)
+        if cls == "newobj" and text is not None:
+            check_note_values_in_box_text(text, f"{self.device_name}: box {new_box['id']}")
         self.boxes.append({"box": new_box})
         self.boxes_by_id.setdefault(new_box["id"], []).append(new_box)
         return new_box["id"]
@@ -695,6 +703,7 @@ class DevicePatchBuilder:
         if self.header_boxes["preset"] is not None:
             preset_values = self.find(self.header_boxes["preset"])["saved_attribute_attributes"]["valueof"]
             preset_values.update(parameter_enum=[preset.name for preset in presets], parameter_mmax=len(presets) - 1)
+        self.check_messages_into_gen_name_params()
         self.write_gen_param_defaults()
         problems = layout_rules.overlap_problems(
             [x["box"] for x in self.boxes if x["box"].get("presentation") == 1 and not x["box"].get("background")],
@@ -707,6 +716,100 @@ class DevicePatchBuilder:
         self.check_script_lookups()
         self.check_wires()
         return presets
+
+    def wires_into_gen(self):
+        """[(source box id, source outlet, gen~ box id)] for every wire straight into a gen~ box."""
+        return [(line["patchline"]["source"][0], line["patchline"]["source"][1], line["patchline"]["destination"][0])
+                for line in self.lines if line["patchline"]["destination"][0] in self.gen_params_by_box]
+
+    def gen_box_name(self, gen_box_id):
+        return f"[{self.find(gen_box_id)['text']}] ({gen_box_id})"
+
+    def check_messages_into_gen_name_params(self):
+        """Every message the patch itself sends straight into a gen~ names a Param that gen~ declares: a [prepend X]
+        wired into it (tell, tempo_synced_milliseconds, the Stop action's panic, a device's own) sends X, a message
+        box its first word (a number is a value, not a message). A gen~ ignores a message to no Param, silently."""
+        problems = []
+        for source, _, gen_box_id in self.wires_into_gen():
+            source_box = self.find(source)
+            words = source_box.get("text", "").split()
+            if source_box["maxclass"] == "newobj" and words[:1] == ["prepend"] and len(words) > 1:
+                message, sender = words[1], f"[{source_box['text']}] ({source})"
+            elif source_box["maxclass"] == "message" and words and not re.fullmatch(r"-?[0-9.]+", words[0]):
+                message, sender = words[0], f"message box [{source_box['text']}] ({source})"
+            else:
+                continue
+            params = self.gen_params_by_box[gen_box_id]
+            if message not in params:
+                problems.append(f"{sender} sends {message!r} into {self.gen_box_name(gen_box_id)}, which declares no "
+                                f"such Param (its Params: {', '.join(sorted(params)) or 'none'})")
+        if problems:
+            self.fail("messages into a gen~ that name no Param of it:\n  " + "\n  ".join(problems))
+
+    def script_outlet_of_block(self, script_box, outlet_index, outlet_expression, block):
+        """A block's code in `script_box`'s script sends from outlet `outlet_index` through `outlet(<outlet_expression>,
+        ...)`, an expression the script's text can't resolve (a stored table: "spec.outlet"): what lets
+        check_script_messages_into_gen know where those calls go."""
+        self.script_outlets_of_blocks.setdefault(script_box, {}).setdefault(outlet_expression, []).append(
+            (outlet_index, block))
+
+    def script_name_of_box(self, box):
+        """The script file a [js] or [jsui] box runs, or None for any other box."""
+        if box["maxclass"] == "jsui":
+            return box.get("filename")
+        words = box.get("text", "").split()
+        if box["maxclass"] == "newobj" and words[:1] == ["js"] and len(words) > 1:
+            return words[1] if words[1].endswith(".js") else words[1] + ".js"
+        return None
+
+    def check_script_messages_into_gen(self, scripts):
+        """Every message a script ([js] / [jsui], its text in `scripts`, {file name: text}) sends from an outlet wired
+        straight into a gen~ names a Param that gen~ declares (a gen~ ignores any other message, silently). Each
+        `outlet(N, message, ...)` from such an outlet (m4l_dev/script_outlet_calls.py): a string literal must be a
+        declared Param; a `+` chain of literals and other expressions ("random_" + n) a pattern (other parts: any
+        text) that at least one declared Param matches whole. Fails, listing every problem, on: a message of neither
+        kind (a bare variable: it can't be checked), a call whose outlet the text can't say while the script feeds a
+        gen~ (unless a block said where it goes: script_outlet_of_block), a block's outlet wired into a gen~, a script
+        the build doesn't have."""
+        gens_by_script_outlet = {}
+        for source, source_outlet, gen_box_id in self.wires_into_gen():
+            if self.script_name_of_box(self.find(source)) is not None:
+                gens_by_script_outlet.setdefault((source, source_outlet), []).append(gen_box_id)
+        problems = []
+        for script_box in sorted({source for source, _ in gens_by_script_outlet}):
+            script_name = self.script_name_of_box(self.find(script_box))
+            if script_name not in scripts:
+                problems.append(f"{script_name} (box {script_box}) sends into a gen~, but the build has no such script "
+                                f"to check (its scripts: {', '.join(sorted(scripts))})")
+                continue
+            blocks_outlets = self.script_outlets_of_blocks.get(script_box, {})
+            for expression, outlets in blocks_outlets.items():
+                for outlet_index, block in outlets:
+                    for gen_box_id in gens_by_script_outlet.get((script_box, outlet_index), []):
+                        problems.append(f"{script_name}: {block}'s outlet {outlet_index} is wired into "
+                                        f"{self.gen_box_name(gen_box_id)}: it goes to the block's own route only")
+            for call in outlet_calls(scripts[script_name], script_name):
+                where = f"{script_name} line {call.line}: outlet({call.outlet_expression}, {call.message_text}, ...)"
+                if call.outlet_index is None:
+                    if call.outlet_expression not in blocks_outlets:
+                        problems.append(f"{where}: which outlet it sends from can't be read (a number, or a name bound "
+                                        "once by `var NAME = <int>`), and the script sends into a gen~, so its "
+                                        "message can't be checked")
+                    continue
+                for gen_box_id in gens_by_script_outlet.get((script_box, call.outlet_index), []):
+                    params = self.gen_params_by_box[gen_box_id]
+                    params_text = ", ".join(sorted(params)) or "none"
+                    if call.message is None:
+                        problems.append(f"{where} goes into {self.gen_box_name(gen_box_id)}, and its message is "
+                                        "neither a string literal nor a + chain with one: it can't be checked against "
+                                        f"the Params ({params_text}); send a literal or \"prefix_\" + n")
+                    elif not any(re.fullmatch(call.message.pattern, name, re.DOTALL) for name in params):
+                        problems.append(f"{where} goes into {self.gen_box_name(gen_box_id)}, whose Params "
+                                        f"({params_text}) include no "
+                                        + (f"{call.message_text}" if call.message.is_literal else
+                                           f"name matching {call.message_text} (as /{call.message.pattern}/)"))
+        if problems:
+            self.fail("script messages into a gen~:\n  " + "\n  ".join(problems))
 
     def check_controls_hold_their_text(self):
         """Every shown live.dial holds its short name, live.menu its longest item, live.text its text

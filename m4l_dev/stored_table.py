@@ -37,6 +37,9 @@ from m4l_dev.patch_builder import varname_for
 from m4l_dev.preset_book import HeldRecord, SavedRecord
 
 STORED_VALUE_CODES = 65536            # a Stored Only value holds 0..65535 (DevicePatchBuilder.stored)
+# the outlet templates/stored-table.template.js's writes go from, `outlet(spec.outlet, ...)`: the table's brain_outlet,
+# which the script's text can't say, so each table tells the builder (script_outlet_of_block)
+STORED_TABLE_OUTLET_EXPRESSION = "spec.outlet"
 SWITCHES_WORD = "switches"            # the packed choices' parameter: "<table> switches <row>"
 
 
@@ -314,6 +317,8 @@ class StoredTable(SavedRecord):
         route = self.patch.box("route " + " ".join(varname for varname, _ in targets),
                                rect=(1100, 1700 + 2 * len(self.patch.boxes), 600, 22), ins=1, outs=len(targets) + 1)
         self.patch.wire(self.brain, route, self.brain_outlet, 0)
+        self.patch.script_outlet_of_block(self.brain, self.brain_outlet, STORED_TABLE_OUTLET_EXPRESSION,
+                                          f"stored table {self.name!r}")
         for outlet_index, (_, target_box) in enumerate(targets):
             self.patch.wire(route, target_box, outlet_index, 0)
 

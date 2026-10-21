@@ -44,6 +44,14 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
 - **Time value syntax** (Max user guide): https://docs.cycling74.com/userguide/time_value_syntax/
   "one tick is 1/480 of a quarter note (equivalently, there are 480 ticks in one quarter note)".
   So a 16th is 120 ticks.
+  Its "Note Values in Ticks" table, every note value Max knows (m4l_dev/max_time_values.py's MAX_NOTE_VALUE_TICKS;
+  anything else shaped like one, e.g. `64nt`, isn't a time value, and the build refuses it in a [metro] / [delay] /
+  ... box): 1nd 2880, 1n 1920, 1nt 1280, 2nd 1440, 2n 960, 2nt 640, 4nd 720, 4n 480, 4nt 320, 8nd 360, 8n 240,
+  8nt 160, 16nd 180, 16n 120, 16nt 80, 32nd 90, 32n 60, 32nt 40, 64nd 45, 64n 30, 128n 15 (ticks).
+  The other forms: ticks as a number ("a value in ticks must be followed by `ticks` to be interpreted as ticks instead
+  of milliseconds"), bars.beats.units ("bars/beats/units can be separated by periods"; `bbu` for a list), hh:mm:ss
+  ("1 hour, 3 minutes, 45 seconds, and 250 milliseconds. The millisecond value after the decimal is optional"), and
+  fixed units: ms ("The default for objects like metro"), hz ("`2 hz` is equivalent to `500 ms`"), samples.
 - **metro** (Max reference): https://docs.cycling74.com/reference/metro
   "Any number other than 0 starts the metro object"; a bang "is sent immediately when metro is started"
   (the machine's clock must not play that bang twice); `quantize`: "Send output only on the specified
