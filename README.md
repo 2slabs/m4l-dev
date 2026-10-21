@@ -42,6 +42,10 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
   `max_sandbox.js` (Max's [js] globals for node tests), `render_pages.py` (a built device's pages as PNGs + layout facts;
   needs Pillow).
 - `references/`: the sources the kit follows (Max, Live, Live's preset format, the techniques' papers: `dsp.md`; circuits' datasheets: `circuits/`).
+- `m4l_dev/plugin/` and `plugin/cpp/`: a device as a VST3 plugin (JUCE), the pieces every port shares: its host
+  parameters and presets from the device's patch, its gen~ programs as C, its `[js]` brain run unchanged.
+  [architecture/plugins.md](architecture/plugins.md) is the approach and what the first ports taught: read it before
+  starting another.
 - `architecture/`: how the kit is partitioned and the contracts a device repository keeps.
 
 ## Tests

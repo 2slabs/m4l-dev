@@ -6,6 +6,7 @@ Worked out from a preset Live 12 saved for 2sl filter (2sl-filter plugin/referen
 `preset_file` rebuilds byte for byte (the kit's tests): the class id is JUCE's (its VST3 component id from the
 manufacturer and plugin codes), the private data is JUCE's VST3 wrapper's (bypass off), the meta info Live's.
 """
+import re
 import struct
 from xml.sax.saxutils import quoteattr
 
@@ -74,7 +75,12 @@ def preset_file(class_id_bytes, xml, info, private_data=JUCE_PRIVATE_DATA):
 
 def state_xml(state_tag, parameter_values, program, extra=()):
     """The plugin's state as its processor writes it (JUCE's single-line XML): the root `state_tag` with version,
-    program and any `extra` [(name, value)] attributes, then a PARAM per parameter, by id."""
+    program and any `extra` [(name, value)] attributes, then a PARAM per parameter, by id. The tag must be an XML
+    name: JUCE writes any tag but can't read back one that isn't (a plugin name like "2sl stab"), and the plugin then
+    loads every preset and saved set as its defaults (architecture/plugins.md, "The saved state")."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", state_tag):
+        raise BuildError(f"vstpreset: the state tag {state_tag!r} isn't an XML name, so the plugin couldn't read its "
+                         "presets or saved sets back: use one like 'TwoSlStab', the processor's too")
     attributes = "".join(f" {name}={quoteattr(str(value))}" for name, value in extra)
     params = "".join(f'<PARAM id="{pid}" value="{value!r}"/>' for pid, value in sorted(parameter_values))
     return (f'<?xml version="1.0" encoding="UTF-8"?> <{state_tag} version="1" program="{program}"{attributes}>'

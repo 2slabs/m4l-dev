@@ -13,6 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.path.dirname(HERE)
 sys.path[:0] = [HERE, KIT]
 import fixture_device  # noqa: E402
+from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.genexpr import GenProgram, analyze  # noqa: E402
 from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
 from m4l_dev.plugin import header, vstpreset  # noqa: E402
@@ -73,6 +74,11 @@ class FixtureParameterTests(unittest.TestCase):
 
 
 class VstPresetTests(unittest.TestCase):
+    def test_a_state_tag_the_plugin_could_not_read_back_is_refused(self):
+        with self.assertRaises(BuildError):
+            vstpreset.state_xml("2sl stab", [("cutoff", 1.0)], 0)
+        self.assertIn(b"<TwoSlStab ", vstpreset.state_xml("TwoSlStab", [("cutoff", 1.0)], 0))
+
     def test_the_writer_rebuilds_a_preset_live_saved(self):
         with open(LIVE_SAVED, "rb") as handle:
             saved = handle.read()
