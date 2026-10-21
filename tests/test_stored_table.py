@@ -190,6 +190,45 @@ class StoredParameterTests(unittest.TestCase):
         self.assertNotIn("stages", menu_presets[1], "the table itself is no box")
 
 
+class OutsidePresetsTests(unittest.TestCase):
+    """A table presets leave alone (initial_outside_presets): its initial value is the device's, the Preset menu
+    doesn't set it, the preset book can't name it."""
+
+    def outside_book(self, presets=None):
+        return PresetBook({"init": {"Volume": 0}, "presets": presets or [
+            {"name": "init", "group": "init", "idea": "i", "values": {}},
+            {"name": "loud", "group": "g", "idea": "i", "values": {"Volume": 3}}]}, "the test's book")
+
+    def test_its_initial_value_is_the_devices_and_the_preset_menu_leaves_it_alone(self):
+        patch = builder(self.outside_book(), preset_menu=(200, 64), info_keys=())
+        StoredTable(patch, "Stages", fields(), 3, patch.brain, 1, 2, initial_outside_presets=INIT_STAGES)
+        self.assertEqual(patch.initial_values["Stages"].columns["Pitch"], (0, 7, -24))
+        box = find_by_varname(patch, "stages_switches_2")
+        self.assertEqual(box["saved_attribute_attributes"]["valueof"]["parameter_initial"], [1.0 + (3 << 1)])
+        presets = patch.check()
+        self.assertTrue(all("Stages" not in preset.values for preset in presets))
+        script = patch.ui_script(presets)
+        menu_presets = json.loads(script.split("var PRESETS = ")[1].split(";\n")[0])
+        self.assertTrue(menu_presets and all(not any(name.startswith("stages_") for name in values)
+                                             for values in menu_presets))
+
+    def test_a_preset_naming_it_fails(self):
+        patch = builder(self.outside_book([{"name": "init", "group": "init", "idea": "i", "values": {}},
+                                           {"name": "up", "group": "g", "idea": "i",
+                                            "values": {"Stages": {"Pitch": [12, 0, 0]}}}]))
+        StoredTable(patch, "Stages", fields(), 3, patch.brain, 1, 2, initial_outside_presets=INIT_STAGES)
+        with self.assertRaisesRegex(BuildError, "sets controls the device doesn't have"):
+            patch.check()
+
+    def test_an_init_value_too_fails_and_every_field_is_needed(self):
+        with self.assertRaisesRegex(BuildError, "can't have its own initial value too"):
+            stages = builder()
+            StoredTable(stages, "Stages", fields(), 3, stages.brain, 1, 2, initial_outside_presets=INIT_STAGES)
+        patch = builder(self.outside_book())
+        with self.assertRaisesRegex(BuildError, "leaves out"):
+            StoredTable(patch, "Stages", fields(), 3, patch.brain, 1, 2, initial_outside_presets={"Pitch": [0, 0, 0]})
+
+
 class EditorTests(unittest.TestCase):
     def test_editors_are_hidden_controls_starting_at_init(self):
         patch = builder(info_keys=EDITOR_INFO)

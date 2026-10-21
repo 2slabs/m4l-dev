@@ -26,6 +26,10 @@ surfaces" (references/README.md, "Live presets").
   A preset's held value is a `HeldTable`; `preset_book.stored_only_values_of_preset` turns it into its parameters'
   values for every output: Live preset files, the header's Preset menu and the plugin's presets. A device gives
   `stored_only_values_of_preset` only for Stored Only parameters of its own (`patch.stored`).
+- **Outside presets**: a table presets leave alone (2sl drums' pattern: its presets are kit sounds) is given
+  `initial_outside_presets={field: [one value per row]}` (every field, own units), as a control is: that is its
+  initial value, the preset book can't name it, the Preset menu doesn't set it. Live preset files hold every Stored
+  Only parameter, so a device with Live preset files fails to build with such a table.
 - **Migrating** state into a table is the preset book's business: a device's migration script writes the table's
   fields into the book's presets (2sl gate: each Lane's steps into Seq B's row).
 - **The brain holds the table** and is the only thing that changes it (`/*STORED_TABLES*/`, filled by

@@ -121,10 +121,13 @@ class HeldTable(HeldRecord):
 
 
 class StoredTable(SavedRecord):
-    def __init__(self, patch, name, fields, row_count, brain, brain_inlet, brain_outlet):
+    def __init__(self, patch, name, fields, row_count, brain, brain_inlet, brain_outlet, initial_outside_presets=None):
         """The table `name` of `row_count` rows of `fields` (ContinuousField, ChoiceField), its Init value the preset
-        book's. Its Stored Only parameters tell `brain` (inlet `brain_inlet`) their values; the brain writes them back
-        from outlet `brain_outlet` (the route is made by stored_tables_brain_code, once the editors are placed)."""
+        book's; or, given `initial_outside_presets` ({field: [a value per row]}, every field, in its own units), that
+        is its initial value and presets leave the table alone (the Preset menu doesn't set it; a Live preset file
+        can't hold it, so the build fails with Live preset files). Its Stored Only parameters tell `brain` (inlet
+        `brain_inlet`) their values; the brain writes them back from outlet `brain_outlet` (the route is made by
+        stored_tables_brain_code, once the editors are placed)."""
         names = [field.name for field in fields]
         if not fields or len(set(names)) != len(names):
             raise BuildError(f"{patch.device_name}: stored table {name!r} needs fields with different names, not {names}")
@@ -152,7 +155,7 @@ class StoredTable(SavedRecord):
         self.editors = {}                   # editor varname -> (field name, row index)
         self.editor_boxes = {}              # editor varname -> box id
         self.code_given = False
-        init = patch.saved_record(self)
+        init = patch.saved_record(self, initial_outside_presets)
         initial_codes = init.stored_only_values()
         self.stored_boxes = {}
         for long_name, _, _ in self.parameters:
@@ -172,7 +175,8 @@ class StoredTable(SavedRecord):
         if init_held is None:
             missing = [field.name for field in self.fields if field.name not in value_in_own_units]
             if missing:
-                raise BuildError(f"{where}: Init must give every field; it leaves out {missing}")
+                raise BuildError(f"{where}: Init (or initial_outside_presets) must give every field; it leaves out "
+                                 f"{missing}")
             columns = {}
         else:
             columns = dict(init_held.columns)

@@ -186,15 +186,24 @@ class DevicePatchBuilder:
         self.initial_values[name] = value
         return value
 
-    def saved_record(self, record):
-        """Register a saved record (a stored table, m4l_dev/stored_table.py): presets set it like a control, its Init
-        value is the preset book's, and it reaches Live as its Stored Only parameters. Returns its Init value as held."""
+    def saved_record(self, record, initial_outside_presets=None):
+        """Register a saved record (a stored table, m4l_dev/stored_table.py): it reaches Live as its Stored Only
+        parameters. Presets set it like a control and its Init value is the preset book's; or, given
+        `initial_outside_presets` (in its own units, every field), that is its initial value and presets leave it
+        alone, as a control's initial_outside_presets. Returns its initial value as held."""
         if not isinstance(record, SavedRecord):
             self.fail(f"saved_record of {record!r}, which is no SavedRecord")
         if record.name in self.initial_values:
             self.fail(f"two controls are called {record.name!r}")
-        value = self.preset_book.init_value_as_held(record)
-        self.saved_controls[record.name] = record
+        if initial_outside_presets is None:
+            value = self.preset_book.init_value_as_held(record)
+            self.saved_controls[record.name] = record
+        else:
+            if self.preset_book.has_init_value(record.name):
+                self.fail(f"{record.name!r} has an Init value in {self.preset_book.source_name}, so presets set it: "
+                          "it can't have its own initial value too")
+            value = record.held_from_own_units(initial_outside_presets, f"{record.name}'s initial_outside_presets",
+                                               None)
         self.initial_values[record.name] = value
         return value
 

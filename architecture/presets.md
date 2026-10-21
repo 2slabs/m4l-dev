@@ -10,7 +10,7 @@ A device keeps its Init values and its presets in one JSON file, its preset book
 
 Values are in each control's own units: a dial's or number box's number, a menu's or tab's item name, a toggle's
 `off` / `on`; a stored table's `{field: [a value per row]}`, a preset giving only the fields it changes
-(stored-table.md). Every control the presets set has an Init value (it is the control's initial value in the patch, the
+(stored-table.md; a table given `initial_outside_presets` is left alone, as a control is). Every control the presets set has an Init value (it is the control's initial value in the patch, the
 default of each gen~ Param it sets, and the displays' starting value); a control given `initial_outside_presets` has
 none and presets leave it alone. The build fails on an unknown control, a missing Init value, a value out of range or
 not an item, and a preset name used twice.
