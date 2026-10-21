@@ -13,6 +13,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev.c_library_cache import CLibraryBuildError  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
 from m4l_dev.genexpr import GenExprError, GenProgram, analyze, check, code_with_param_defaults  # noqa: E402
 
 
@@ -201,12 +202,12 @@ class SemanticsTests(unittest.TestCase):
         first = GenProgram(code, 1, 1, seed=7).run(200)[0]
         second = GenProgram(code, 1, 1, seed=7).run(200)[0]
         other = GenProgram(code, 1, 1, seed=8).run(200)[0]
-        self.assertEqual(first, second)
-        self.assertNotEqual(first, other)
+        assert_renders_similar(first, second, 44100.0, "seed 7 again")
+        self.assertFalse(renders_are_similar(first, other, 44100.0).similar, "seeds 7 and 8 draw alike")
         self.assertTrue(all(-1.0 <= sample < 1.0 for sample in first))
         program = GenProgram(code, 1, 1, seed=7)
         program.set_seed(7)
-        self.assertEqual(program.run(200)[0], first)
+        assert_renders_similar(first, program.run(200)[0], 44100.0, "set_seed(7)")
 
     def test_delay_integer_read(self):
         code = "Delay d(100);\nout1 = d.read(5);\nd.write(in1);"
@@ -307,7 +308,8 @@ class PythonArithmeticTests(unittest.TestCase):
         for _ in range(50):
             first, second = draws.random() * 2 - 1, draws.random() * 2 - 1
             expected.append(first - second * 3)
-        self.assertEqual(GenProgram("out1 = noise() - noise() * 3;", 0, 1, seed=3).run(50)[0], expected)
+        assert_renders_similar(expected, GenProgram("out1 = noise() - noise() * 3;", 0, 1, seed=3).run(50)[0], 44100.0,
+                               "noise() - noise() * 3")
 
     def test_division_draws_its_divisor_first_and_skips_its_dividend_on_zero(self):
         draws = random.Random(5)

@@ -1,4 +1,5 @@
-"""Tests for m4l_dev/genexpr_export.py: the exported C, built as a plugin would build it, renders GenProgram's bits."""
+"""Tests for m4l_dev/genexpr_export.py: the exported C, built as a plugin would build it, renders GenProgram's sound
+(within the kit's render comparator's tolerance, architecture/testing.md)."""
 
 import array
 import ctypes
@@ -14,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev.genexpr import GenProgram, NoiseState  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 
 # a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, histories,
 # bounded loops (in a function and stepping a History, with break and continue)
@@ -111,17 +113,18 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(list(noise.words), list(state[:624]), seed)
             self.assertEqual(noise.index, state[624])
 
-    def test_the_renderers_bits_at_any_sample_rate(self):
+    def test_the_renderers_sound_at_any_sample_rate(self):
         library = build(self.directory, self.source, self.header, ("-O0", *FLOATING_POINT_FLAGS))
         inputs = self.inputs()
         for samplerate in (44100.0, 48000.0, 96000.0):
-            self.assertEqual(self.render(library, samplerate, inputs), self.reference(samplerate, inputs), samplerate)
+            assert_renders_similar(self.reference(samplerate, inputs), self.render(library, samplerate, inputs),
+                                   samplerate, f"the export at {samplerate:g} Hz")
 
-    def test_the_renderers_bits_optimised(self):
+    def test_the_renderers_sound_optimised(self):
         library = build(self.directory, self.source, self.header, ("-O2", *FLOATING_POINT_FLAGS))
         inputs = self.inputs()
-        self.assertEqual(self.render(library, 48000.0, inputs, {0: 2000.0, 1: 7.5}),
-                         self.reference(48000.0, inputs, {"cutoff": 2000.0, "time": 7.5}))
+        assert_renders_similar(self.reference(48000.0, inputs, {"cutoff": 2000.0, "time": 7.5}),
+                               self.render(library, 48000.0, inputs, {0: 2000.0, 1: 7.5}), 48000.0, "the export at -O2")
 
     def test_the_header_describes_the_program(self):
         for line in ("CORE_INPUTS = 2", "CORE_OUTPUTS = 3", "CORE_PARAMS = 2", "CORE_HISTORIES = 2",

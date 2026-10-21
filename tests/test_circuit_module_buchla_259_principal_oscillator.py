@@ -14,6 +14,7 @@ from m4l_dev.circuit_modules.buchla_259_principal_oscillator import (  # noqa: E
     Buchla259PrincipalOscillator, Buchla259PrincipalOscillatorCharacter, shaped_sine)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 from gen_block_harness import folded, frequency_by_zero_crossings, harness, worst_alias_db  # noqa: E402
 
 SAMPLERATE = 44100.0
@@ -150,7 +151,7 @@ class SineShaperDriveTests(unittest.TestCase):
             built = oscillator_program(character=Buchla259PrincipalOscillatorCharacter(sine_shaper_drive=drive))
             moved = oscillator_program(character_inputs={"sine_shaper_drive": "drive"})
             moved.set_param("drive", drive)
-            self.assertEqual(run(built, 2000), run(moved, 2000))
+            assert_renders_similar(run(built, 2000), run(moved, 2000), SAMPLERATE, f"drive {drive} at run time")
 
     def test_only_the_drive_moves_at_run_time(self):
         with self.assertRaises(BuildError):

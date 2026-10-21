@@ -11,7 +11,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display, stored table), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `plugin/cpp/` | ([plugins.md](plugins.md): the approach a port follows) the C++ every 2sl plugin shares (no JUCE except MaxScript): `PluginTable.h` (the generated header's types; a route's value), `GenProgram.h` (one running copy of an exported gen~ program: Params, state, render), `MaxScript.h/.cpp` (a device's [js] brain run unchanged in JUCE's JavascriptEngine, QuickJS, with the Max globals it uses and a Task clock the plugin moves) | the generated header fills in the tables; a plugin's own wrapper connects the parts the way the device's Max objects do |
 | `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests); `match_patch.py` (the patch matcher's CLI, patch-matcher.md); `render_pages.py` (a built device's pages and group choices as PNGs at the device's size, plus layout.txt: every box's x / width / gap by band and its breaks of the layout contract; fails on the overlap check, a control with no text or a chrome label in a box) |
-| `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing |
+| `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing; a build compared byte for byte, two renders by `render_comparison` (testing.md) |
 | `references/` | sources (Max, Live, Live presets, DSP techniques in dsp.md, circuits in circuits/) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies. Papers and datasheets aren't kept: a fetch script per set downloads and checks them (`fetch-dsp-sources.sh`, `circuits/fetch-circuit-sources.sh`) |
 | `architecture/` | this | the partitions and the contracts below |
 
@@ -42,6 +42,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `plugin/generated_files.py` | a plugin's generated folder: written from the device's sources, or checked to be what they make |
 | `gen_blocks.py` | the gen block pattern: `GenBlock` and its two layers' bases `Technique` and `CircuitModule`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `techniques/`, `circuit_modules/` | the gen blocks, by layer (their own partitions, above) |
+| `render_comparison.py` | `renders_are_similar` / `assert_renders_similar`: the one way a test compares two renders, by the residual's level against the reference's, whole and in 10 ms windows, with its limits (testing.md) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
 | `patch_match_voice.py`, `patch_match_score.py` (+ `patch_match_features.c`), `patch_match_search.py` | the patch matcher: a voice's parameters for a target hit (render, score, CMA-ES strands), the 2sl drums' acceptance test (patch-matcher.md) |
 | `wave_files.py` | WAV in (PCM 8-32 bit, float 32/64) and out (float 32), failing loudly on anything else |
@@ -149,6 +150,7 @@ the platform's maths library (math / cmath / `**` round the last bit differently
 - **Hand-written code** obeys the same rule (a GenExpr constant: `pi`, `halfpi`; C: a hex literal).
 - **Proof**: tests/test_generated_numbers.py builds every gen block and the fixture device with every maths-library
   result moved up to 16 units in the last place and holds every byte; `build_comparison` compares builds exactly.
+  Renders are not the build: they are compared as sound, within tolerance (testing.md).
 
 ## Layout: widths from text
 

@@ -22,7 +22,9 @@ is `m4l_dev/plugin/` (Python: parameters, the generated header, `.vstpreset` fil
 ## One DSP, one brain, nothing written twice
 
 - **DSP:** the device's gen~ code, exported to C by `genexpr_export` and built with its floating-point flags
-  (`-ffp-contract=off -fno-fast-math -fno-builtin`), so it gives the kit renderer's bits. A synth runs one
+  (`-ffp-contract=off -fno-fast-math -fno-builtin`), so it gives the kit renderer's sound (on one machine its bits; the tests hold it to
+  the renderer within `render_comparison`'s tolerance, testing.md, since another machine's maths library may move a
+  last bit). A synth runs one
   `GenProgram` per voice (each its own noise seed, as Max's `mc.gen~` voices draw theirs).
 - **Brain:** the device's built `[js]` script runs **unchanged** in QuickJS (`juce_javascript`) through `MaxScript`,
   a shim for the Max globals a 2sl brain uses. What the shim must do as Max does: deliver a message to a function of
@@ -97,7 +99,8 @@ the plugin does.
 
 ## Verifying without a DAW
 
-- **Parity tests** (each port's `tests/test_plugin.py`): every preset's sound against the kit's renderer to the bit;
+- **Parity tests** (each port's `tests/test_plugin.py`): every preset's sound against the kit's renderer, within
+  `render_comparison`'s tolerance (testing.md; report the worst residual, not "bit-identical");
   the brain in QuickJS against the node sandbox, message for message; the wrapper against the device's patch (the
   allocator against the probe logs). The engine is built without a host as a console app in the plugin's CMake
   (`render_<name>`), with a `TestAccess` friend for what only tests reach.

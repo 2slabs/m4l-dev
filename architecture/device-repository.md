@@ -29,3 +29,6 @@ Why:
   diff shows; it must be exactly what the sources build (a device's tests check it byte for byte).
 - **src/ is hand-written only.** Nothing the build writes goes in src/ except the parameter lock, which is the
   reviewed record of what Live knows the parameters by (live-parameter-identity.md).
+- **The tests compare the build exactly and sound as sound.** A device's tests hold devices/ and every generated file
+  to the byte, and compare any two renders (presets before and after, plugin vs device) with the kit's
+  `render_comparison`, never `==` (testing.md); they report "within tolerance: residual X dB".

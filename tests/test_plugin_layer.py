@@ -19,6 +19,7 @@ from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
 from m4l_dev.plugin import header, vstpreset  # noqa: E402
 from m4l_dev.plugin.parameters import Destination, host_parameters, presets_as_held  # noqa: E402
 from m4l_dev.preset_book import PresetBook  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 
 LIVE_SAVED = os.path.join(KIT, "references", "ableton", "example-2sl-filter-vst3-preset.vstpreset")
 
@@ -132,7 +133,7 @@ int main() {
 
 @unittest.skipIf(shutil.which("c++") is None, "needs a C++ compiler")
 class GenProgramTests(unittest.TestCase):
-    def test_a_program_renders_the_renderers_bits_in_any_blocks(self):
+    def test_a_program_renders_the_renderers_sound_in_any_blocks(self):
         root = tempfile.mkdtemp()
         try:
             source, header_text = export_c(CODE, 1, 2, "core")
@@ -149,8 +150,8 @@ class GenProgramTests(unittest.TestCase):
             program.set_param("cutoff", 1234.5)
             program.set_history("ph", 0.5)
             expected = program.run(1000, [[(i % 37) / 37.0 - 0.5 for i in range(1000)]])
-            self.assertEqual(out[:1000].tolist(), expected[0])
-            self.assertEqual(out[1000:].tolist(), expected[1])
+            assert_renders_similar(expected, [out[:1000].tolist(), out[1000:].tolist()], 48000.0,
+                                   "GenProgram.h in blocks of 600 and 400")
         finally:
             shutil.rmtree(root)
 

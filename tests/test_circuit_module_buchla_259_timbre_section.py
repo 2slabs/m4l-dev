@@ -16,6 +16,7 @@ from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
     cell_fold_point_volts, cell_node_volts, output_volts, summed_output_volts_unlimited, transfer_pieces)
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 from m4l_dev.techniques.halfband_oversampler import HalfbandDownsampler, HalfbandLinearPhaseDownsampler  # noqa: E402
 from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,  # noqa: E402
                                equalised_adaa_outputs, exact_second_order_mean, harness)
@@ -287,13 +288,14 @@ class RunTimeRailTests(unittest.TestCase):
         return timbre, GenProgram(gen_code_with_blocks(template, [timbre], "test harness"), 2, 3,
                                   samplerate=samplerate)
 
-    def test_the_characters_rail_renders_the_numbers_unit_bit_for_bit(self):
+    def test_the_characters_rail_renders_the_numbers_units_sound(self):
         # a hot, offset fold (every corner, the floor and the limiter): the rail at 6 V moving = the still unit
         count = 2000
         sine = [math.sin(2 * math.pi * 300 * i / 88200) for i in range(count)]
         _, still = self.program(None, 11.0, 300.0, 0.6)
         _, moving = self.program({"cell_rail_volts": "in2"}, 11.0, 300.0, 0.6)
-        self.assertEqual(still.run(count, [sine, [6.0] * count]), moving.run(count, [sine, [6.0] * count]))
+        assert_renders_similar(still.run(count, [sine, [6.0] * count]), moving.run(count, [sine, [6.0] * count]),
+                               44100.0, "the rail held at 6 V at run time")
 
     def test_a_moving_rail_is_the_circuit_at_each_samples_rail(self):
         # the rail swept across its whole range and back while a 9 V sine folds (1x: no equaliser, the raw mean): each

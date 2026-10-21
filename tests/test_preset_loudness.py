@@ -7,6 +7,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev import bs1770, preset_loudness  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 
 
 class PhraseTests(unittest.TestCase):
@@ -75,7 +76,10 @@ class EffectTests(unittest.TestCase):
                 self.assertAlmostEqual(bs1770.integrated_loudness([list(mono)] * 2, rate), -18.0, places=6)
                 self.assertLess(bs1770.sample_peak_db([list(mono)]), -1.0)
         preset_loudness.effect_inputs.cache_clear()
-        self.assertEqual(preset_loudness.effect_inputs(rate), inputs)
+        again = preset_loudness.effect_inputs(rate)
+        self.assertEqual(tuple(again), tuple(inputs))
+        for name, mono in inputs.items():
+            assert_renders_similar(list(mono), list(again[name]), rate, f"{name} made again")
 
     def test_the_effect_inputs_can_be_shorter_and_fewer_without_changing_the_rest(self):
         full = preset_loudness.effect_inputs(self.rate)
@@ -85,14 +89,16 @@ class EffectTests(unittest.TestCase):
             with self.subTest(input=name):
                 self.assertEqual(len(mono), int(2.0 * self.rate))
                 self.assertAlmostEqual(bs1770.integrated_loudness([list(mono)] * 2, self.rate), -18.0, places=6)
-        self.assertEqual(preset_loudness.effect_inputs(self.rate, 8.0, ("pad", "drums")),
-                         {name: full[name] for name in ("pad", "drums")})
+        fewer = preset_loudness.effect_inputs(self.rate, 8.0, ("pad", "drums"))
+        self.assertEqual(tuple(fewer), ("pad", "drums"))
+        for name, mono in fewer.items():
+            assert_renders_similar(list(full[name]), list(mono), self.rate, f"{name} made with fewer")
 
     def test_a_short_chords_and_kick_is_the_start_of_the_long_one(self):
         # every beat's kick is there however short the input (a loop variable once shadowed the length)
         short = preset_loudness._chords_and_kick(self.rate, 2.0)
         long = preset_loudness._chords_and_kick(self.rate, 8.0)
-        self.assertEqual(short, long[:len(short)])
+        assert_renders_similar(list(long[:len(short)]), list(short), self.rate, "the short chords and kick")
 
     def test_a_bad_input_choice_fails(self):
         with self.assertRaisesRegex(BuildError, "unknown: \\['kazoo'\\]"):

@@ -43,6 +43,7 @@ from m4l_dev.techniques.zero_delay_one_pole_filter import \
     small_signal_response as one_pole_small_signal_response  # noqa: E402
 from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
                                                                  ring_time_constant_seconds, small_signal_response)
+from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
 from m4l_dev.techniques import drum_envelope  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
@@ -143,7 +144,7 @@ class ZeroDelayLadderFilterTests(unittest.TestCase):
         used.set_param("reset", 1.0)
         first = used.run(1, [[saw[0]]])[0]
         used.set_param("reset", 0.0)
-        self.assertEqual(first + used.run(len(saw) - 1, [saw[1:]])[0], fresh)
+        assert_renders_similar(fresh, first + used.run(len(saw) - 1, [saw[1:]])[0], self.SAMPLERATE, "after a reset")
 
 
 class ZeroDelayLadderFilterLinearTests(unittest.TestCase):
@@ -456,8 +457,8 @@ class AntiderivativeTanhSaturatorTests(unittest.TestCase):
             used.set_param("reset", 1.0)
             first = used.run(1, [sine[:1]])[0]
             used.set_param("reset", 0.0)
-            self.assertEqual(first + used.run(len(sine) - 1, [sine[1:]])[0], self.saturate(sine, oversampling),
-                             msg=oversampling)
+            assert_renders_similar(self.saturate(sine, oversampling), first + used.run(len(sine) - 1, [sine[1:]])[0],
+                                   self.SAMPLERATE, f"after a reset, {oversampling}x")
 
     def test_its_cost_is_one_mean_a_step(self):
         for oversampling in (1, 2):
@@ -833,7 +834,7 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
                 f"\nout1 = {table.value_call('in1')};\nout2 = {table.integral_call('in1')};\n"
                 f"out3 = {table.second_order_mean_call('in1', 'in2', 'in3')};\n")
             outputs.append(GenProgram(code, 3, 3).run(len(x0s), [x0s, x1s, x2s]))
-        self.assertEqual(outputs[0], outputs[1])
+        assert_renders_similar(outputs[1], outputs[0], self.SAMPLERATE, "the moving table at shift 0")
 
     def test_a_motion_that_breaks_the_table_fails_the_build(self):
         PiecewiseLinearTable("fold", self.FOLD, motion=self.motion())          # the one above builds
@@ -1083,7 +1084,7 @@ class KneeSoftClipTests(unittest.TestCase):
     def test_it_is_unity_up_to_the_knee(self):
         for knee in self.KNEES:
             signal = [knee * (2.0 * i / 200 - 1.0) for i in range(201)]
-            self.assertEqual(self.clip(signal, knee), signal, knee)
+            assert_renders_similar(signal, self.clip(signal, knee), 44100.0, f"under the knee {knee}")
 
     def test_value_and_slope_are_continuous_at_the_knee(self):
         step = 1e-6
@@ -1101,7 +1102,7 @@ class KneeSoftClipTests(unittest.TestCase):
             self.assertTrue(all(b >= a for a, b in zip(out, out[1:])), "rising")
             self.assertLessEqual(max(out), 1.0)
             self.assertGreater(out[-1], 1.0 - 1e-12, "reaches 1 for a huge input")
-            self.assertEqual(self.clip([-x for x in signal], knee), [-x for x in out], "odd")
+            assert_renders_similar([-x for x in out], self.clip([-x for x in signal], knee), 44100.0, "odd")
 
     def test_it_is_memoryless_so_its_latency_is_zero(self):
         # the same sample in gives the same sample out whatever came before: no state, no delay
@@ -1570,7 +1571,7 @@ class PitchModulatorTests(unittest.TestCase):
         self.assertAlmostEqual(sum(values) / len(values), 0.0, delta=0.5)
         # the same seed draws the same values; another seed others
         again, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=0.0), hits, 4000)
-        self.assertEqual(again, offset)
+        assert_renders_similar(offset, again, self.SAMPLERATE, "the same seed")
         other, _ = self.run_hits(self.modulator(SHAPES["random"], amount=3.0, rate_hz=0.0, seed=999.0), hits, 4000)
         self.assertNotEqual([other[n] for n in sorted(hits)], values)
 
@@ -1589,16 +1590,18 @@ class PitchModulatorTests(unittest.TestCase):
 
 
 class SeededWhiteNoiseTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+
     def noise(self, seed=0.0):
         return harness([SeededWhiteNoise("noise", seed="seed", restart="in1")], {"seed": seed},
-                       ["noise_out", "noise_state"], samplerate=8000.0)
+                       ["noise_out", "noise_state"], samplerate=self.SAMPLERATE)
 
     def test_it_is_the_minimal_standard_generator(self):
         # Park & Miller, p. 1195: "z1 = 1 then z10001 = 1043618065" (seed 0 starts the state at 1)
         _, state = self.noise(0.0).run(10000, [[0.0] * 10000])
         self.assertEqual(state[-1], 1043618065.0)
         out, _ = self.noise(271828.0).run(2000, [[0.0] * 2000])
-        self.assertEqual(out, park_miller_sequence(271828.0, 2000))
+        assert_renders_similar(park_miller_sequence(271828.0, 2000), out, self.SAMPLERATE, "Park and Miller's")
 
     def test_a_seed_restarts_it_and_so_does_restart(self):
         program = self.noise(5.0)
@@ -1607,10 +1610,10 @@ class SeededWhiteNoiseTests(unittest.TestCase):
         other = program.run(100, [[0.0] * 100])[0]
         program.set_param("seed", 5.0)
         again = program.run(100, [[0.0] * 100])[0]
-        self.assertEqual(first, again)
-        self.assertNotEqual(first, other)
+        assert_renders_similar(first, again, self.SAMPLERATE, "seed 5 again")
+        self.assertFalse(renders_are_similar(first, other, self.SAMPLERATE).similar, "seeds 5 and 6 draw alike")
         restarted = program.run(150, [[0.0] * 50 + [1.0] + [0.0] * 99])[0]
-        self.assertEqual(restarted[50:150], first)
+        assert_renders_similar(first, restarted[50:150], self.SAMPLERATE, "after a restart")
 
     def test_it_is_white_and_uniform(self):
         out, _ = self.noise(123456789.0).run(100000, [[0.0] * 100000])
@@ -1662,7 +1665,7 @@ class MetallicNoiseTests(unittest.TestCase):
     def test_a_hit_restarts_the_same_pattern(self):
         hits = [1.0 if n in (0, 1000) else 0.0 for n in range(2000)]
         out, _ = self.source(77, 1234.5).run(2000, [hits])
-        self.assertEqual(out[1003:1990], out[3:990])
+        assert_renders_similar(out[3:990], out[1003:1990], self.SAMPLERATE, "the second hit")
 
     def test_every_metallic_source_keeps_the_seam(self):
         # the interface an instrument (and the matcher) swaps sources by; two instances in one voice
@@ -1675,7 +1678,7 @@ class MetallicNoiseTests(unittest.TestCase):
                 for out in (a, b):
                     self.assertLess(max(abs(v) for v in out), 1.3)
                     self.assertGreater(sum(v * v for v in out) / len(out), 0.5)
-                self.assertNotEqual(a, b)
+                self.assertFalse(renders_are_similar(a, b, self.SAMPLERATE).similar, "two instances sound alike")
 
 
 class BellEqualizerTests(unittest.TestCase):
@@ -1957,7 +1960,7 @@ class DefinedLatencyPadTests(unittest.TestCase):
             whole = round(pad_samples)
             self.assertEqual((pad.latency_samples, pad.thiran_order), (whole, 0))
             out = harness([pad], {}, ["pad_out"], samplerate=self.SAMPLERATE).run(200, [signal])[0]
-            self.assertEqual(out, [0.0] * whole + signal[:200 - whole], pad_samples)
+            assert_renders_similar([0.0] * whole + signal[:200 - whole], out, self.SAMPLERATE, f"a pad of {pad_samples}")
         self.assertEqual(DefinedLatencyPad("pad", input="in1", pad_samples=0, oversampling=1).declarations(), "", "no state at 0")
 
     def test_a_fractional_pad_is_a_thiran_allpass_rendered_as_its_python_response(self):

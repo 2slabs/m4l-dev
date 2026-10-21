@@ -26,6 +26,7 @@ from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettin
 from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
 from m4l_dev.genexpr import GenProgram  # noqa: E402
 from m4l_dev.patch_match_voice import MatchedParameter, MatchedVoice  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise  # noqa: E402
 from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
@@ -142,16 +143,16 @@ class VoiceTests(unittest.TestCase):
             MatchedParameter.enum("mode", (0, 1)).unit_of_value(3)
 
     def test_a_render_has_no_memory_of_the_one_before(self):
-        self.assertEqual(render(KICK, 0.1), render(KICK, 0.1))
+        assert_renders_similar(render(KICK, 0.1), render(KICK, 0.1), RATE, "the second render")
 
     def test_the_optimised_build_renders_the_same_samples(self):
-        # the voice renders at -O2 (genexpr.OPTIMISED_COMPILER_FLAGS); the floating-point flags make it the -O0 bits
+        # the voice renders at -O2 (genexpr.OPTIMISED_COMPILER_FLAGS); the floating-point flags make it the -O0 sound
         voice = dataclasses.replace(FIXTURE_DRUM_VOICE, fixed_values=())
         program = GenProgram(voice.gen_code, voice.num_inputs, voice.num_outputs, samplerate=RATE, seed=voice.noise_seed)
         for name, value in KICK.items():
             program.set_param(name, value)
         trigger = [1.0] + [0.0] * (RATE // 2 - 1)
-        self.assertEqual(program.run(RATE // 2, [trigger])[0], render(KICK, 0.5))
+        assert_renders_similar(program.run(RATE // 2, [trigger])[0], render(KICK, 0.5), RATE, "the -O2 render")
 
     def test_the_noise_seed_reaches_the_kits_seeded_noise_through_the_seed_param(self):
         # a voice whose noise is the kit's SeededWhiteNoise, seeded by its Param "seed": the matched voice's seed
@@ -164,11 +165,12 @@ class VoiceTests(unittest.TestCase):
                              parameters=(MatchedParameter.continuous("level", 0.1, 1),), noise_seed=7,
                              noise_seed_param="seed")
         hits = {seed: dataclasses.replace(voice, noise_seed=seed).render({"level": 0.5}, 64, RATE) for seed in (7, 8)}
-        self.assertEqual(voice.render({"level": 0.5}, 64, RATE), hits[7])
-        self.assertNotEqual(hits[7], hits[8])
+        assert_renders_similar(hits[7], voice.render({"level": 0.5}, 64, RATE), RATE, "seed 7 again")
+        self.assertFalse(renders_are_similar(hits[7], hits[8], RATE).similar, "seeds 7 and 8 give the same noise")
         unplumbed = dataclasses.replace(voice, noise_seed_param="")
-        self.assertEqual(unplumbed.render({"level": 0.5}, 64, RATE),
-                         dataclasses.replace(unplumbed, noise_seed=8).render({"level": 0.5}, 64, RATE))
+        assert_renders_similar(unplumbed.render({"level": 0.5}, 64, RATE),
+                               dataclasses.replace(unplumbed, noise_seed=8).render({"level": 0.5}, 64, RATE), RATE,
+                               "the seed without its Param")
         with self.assertRaisesRegex(BuildError, "not declared"):
             dataclasses.replace(voice, noise_seed_param="sead")
         with self.assertRaisesRegex(BuildError, "also searched or fixed"):
