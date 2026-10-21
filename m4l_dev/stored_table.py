@@ -10,6 +10,7 @@ means the same and loads the same way.
                                           ChoiceField("Wait", ["go", "stop", "hold", "keyed"])],
                          row_count=16, brain=brain, brain_inlet=1, brain_outlet=3)
     stages.editor_dial("Pitch", 0, "Seq Pitch 1", "Pitch 1", x, y, "seq", group=...)      # Hidden live.dial
+    # (items=[names]: a stepped dial over a field that is an index, 0..len(items) - 1)
     stages.editor_toggle("Pulse", 0, "Seq Pulse 1", "Pulse 1", x, y, w, "seq", group=...)   # Hidden live.text
     stages.editor_menu("Wait", 0, "Seq Wait 1", "Wait 1", x, y, w, "seq", group=...)        # Hidden live.menu
     brain_code = stored_tables_brain_code([stages])        # fills the brain's /*STORED_TABLES*/
@@ -254,13 +255,25 @@ class StoredTable(SavedRecord):
         self.editor_boxes[varname] = box_id
         return box_id
 
-    def editor_dial(self, field_name, row, long_name, short_name, x, y, page, group=None, unit=1):
+    def editor_dial(self, field_name, row, long_name, short_name, x, y, page, group=None, unit=1, exponent=1.0,
+                    items=None):
         """A Hidden live.dial showing and setting a continuous field of row `row` (0-based); `unit` its Live unit
-        style (1: float)."""
+        style (1: float), `exponent` its taper. `items` (names): a stepped dial showing a name for each whole number
+        of a field that runs 0..len(items) - 1 (an index kept in the table, as a sequencer stage's Time on a list of
+        lengths); its value is the index."""
         field, initial = self.editor(field_name, row, long_name, ContinuousField)
+        if items is not None:
+            if field.minimum != 0 or field.maximum != len(items) - 1:
+                raise BuildError(f"{self.patch.device_name}: {long_name!r}: {len(items)} items name the whole numbers "
+                                 f"0..{len(items) - 1}, {field_name} runs {field.minimum}..{field.maximum}")
+            if initial != int(initial):
+                raise BuildError(f"{self.patch.device_name}: {long_name!r}: {field_name} {row + 1} starts at "
+                                 f"{initial}, between two items")
+            initial = int(initial)
         box_id = self.patch.dial(long_name, short_name, self.brain, varname_for(long_name), field.minimum,
                                  field.maximum, unit, x, y, page, group=group, initial_outside_presets=initial,
-                                 inlet=self.brain_inlet, visibility=identity.VISIBILITY_HIDDEN)
+                                 inlet=self.brain_inlet, visibility=identity.VISIBILITY_HIDDEN, exponent=exponent,
+                                 items=items)
         return self.placed_editor(box_id, long_name, field_name, row, told=True)
 
     def editor_menu(self, field_name, row, long_name, short_name, x, y, w, page, group=None):

@@ -58,6 +58,8 @@ function deviceMessage(m, a) {
 var VIEW_PAINTERS = { level: function (w, h) { viewLabel("level"); rect(4, 20, (w - 8) * S.level, 4, T.mint); },
                       chord: function (w, h) { chordDisplayView(w, h, "chord"); } };
 var VIEW_CLICKS = {};
+// the level display is dragged: its height sets the level, told out while held
+var VIEW_DRAGS = { level: function (x, y, held) { if (held) outlet(0, "level", 1 - y / mgraphics.size[1]); } };
 """, {"CHORD_DISPLAY": ChordBlock.display_code()}, "the fixture's views code")
 # the fixture's brain: the kit's seeded random and chord block, a key playing its chord, the rest ignored
 FIXTURE_BRAIN_TEMPLATE = """var DEVICE_NAME = "kit fixture";

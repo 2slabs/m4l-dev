@@ -98,6 +98,18 @@ test("every display paints without an error, on every page", () => {
   }
 });
 
+test("a drag reaches the device's VIEW_DRAGS while held, and only a display that has one", () => {
+  const level = load(VIEWS_SOURCE, "level");
+  level.context.ondrag(10, 16, 1, 0, 0, 0, 0, 0);
+  level.context.ondrag(10, 32, 0, 0, 0, 0, 0, 0);
+  assert.deepStrictEqual(level.record.outlets, [[0, "level", 1 - 16 / level.context.mgraphics.size[1]]],
+                         "the release (button 0) is told as not held");
+  const chord = load(VIEWS_SOURCE, "chord");
+  chord.context.ondrag(10, 16, 1, 0, 0, 0, 0, 0);
+  assert.deepStrictEqual(chord.record.outlets, []);
+  assert.deepStrictEqual(level.record.errors.concat(chord.record.errors), []);
+});
+
 test("a display keeps a control's value, takes the device's messages and refuses the rest", () => {
   const { context, record } = load(VIEWS_SOURCE, "level");
   assert.strictEqual(vm.runInContext("S.level", context), 0.5, "the Init value, from the build");

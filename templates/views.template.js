@@ -103,7 +103,8 @@ function viewInfo(str, w, c) { text(str, w - measure(str) - 4, 12, c || T.label)
 // ---- the device's displays --------------------------------------------------------------------
 // The device code defines: DEVICE_STATE (what its displays draw from, merged into S), deviceMessage(m, args)
 // -> true when it took the message, VIEW_PAINTERS {mode: function (w, h)}, VIEW_CLICKS {mode: function (x, y,
-// modifiers)} and ANIMATED_MODES (modes redrawn every 33 ms).
+// modifiers)} and ANIMATED_MODES (modes redrawn every 33 ms); and, if any display is dragged, VIEW_DRAGS {mode:
+// function (x, y, held, modifiers)} (held: 1 while the button is down, 0 on its release).
 /*DEVICE_VIEWS*/
 
 // What the displays draw from. The controls' values start as the Init values send them, written in by
@@ -189,4 +190,11 @@ function onclick(x, y, button, cmd, shift, capslock, option, ctrl) {
     return;
   }
   if (VIEW_CLICKS[MODE]) VIEW_CLICKS[MODE](x, y, { shift: !!shift, option: !!option, cmd: !!cmd, ctrl: !!ctrl });
+}
+// A drag (Max calls ondrag after onclick while the button is held, and once more on its release, button 0): the
+// device's VIEW_DRAGS, which a device without dragged displays leaves out.
+function ondrag(x, y, button, cmd, shift, capslock, option, ctrl) {
+  if (typeof VIEW_DRAGS === "object" && VIEW_DRAGS[MODE]) {
+    VIEW_DRAGS[MODE](x, y, button ? 1 : 0, { shift: !!shift, option: !!option, cmd: !!cmd, ctrl: !!ctrl });
+  }
 }

@@ -249,6 +249,18 @@ class EditorTests(unittest.TestCase):
         self.assertEqual(route["text"].split()[1:], stages.parameter_varnames() + list(stages.editors))
         patch.check()
 
+    def test_a_stepped_editor_dial_names_an_index_field(self):
+        patch = builder(book(init_stages=dict(INIT_STAGES, Time=[0, 1, 2])), info_keys=("Time editor 1",))
+        stages = stages_of(patch, table_fields=fields() + [ContinuousField("Time", 0, 2)])
+        dial = stages.editor_dial("Time", 0, "Time editor 1", "Time 1", 12, layout_rules.DIAL_Y, "one",
+                                  items=["1/16", "1/8", "1/4"])
+        valueof = patch.find(dial)["saved_attribute_attributes"]["valueof"]
+        self.assertEqual(valueof["parameter_enum"], ["1/16", "1/8", "1/4"])
+        self.assertEqual(valueof["parameter_initial"], [0])
+        with self.assertRaisesRegex(BuildError, "name the whole numbers 0..1"):
+            stages.editor_dial("Time", 1, "Time editor 1", "Time 2", 12, layout_rules.DIAL_Y, "one",
+                               items=["1/16", "1/8"])
+
     def test_editor_mistakes_fail(self):
         patch = builder()
         stages = stages_of(patch)
