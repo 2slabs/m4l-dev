@@ -6,7 +6,8 @@
 In order, and nothing is written until every check has passed:
   1. the patch's checks (DevicePatchBuilder.check: Init values, presets, gen~ Params, layout, Info text, names, wires)
   2. the scripts: the UI and views scripts from the kit's templates, and the device's own (`device_scripts`,
-     {file name: text}, already filled in), every one checked as ES5
+     {file name: text}, already filled in), every one checked as ES5; the patch and every script hold only numbers
+     that went through generated_number (m4l_dev/generated_numbers.py)
   3. the Live parameter lock (src/live-parameters.lock.json): fails with a diff on any change, unless
      --accept-live-parameter-changes is among `command_line_arguments`
   4. devices/<script name>/: the patch (.maxpat), the development device (.amxd), the scripts, and the Live presets
@@ -14,8 +15,8 @@ In order, and nothing is written until every check has passed:
   5. dist/<script name>-<version>/: the frozen device (the scripts embedded) with Live presets made for it, and that
      folder zipped as dist/<script name>-<version>.zip
 
-Every byte written depends only on the sources (no clock, no Python-version detail), so a rebuild of the same sources
-writes the same files.
+Every byte written depends only on the sources (no clock, no Python-version detail, no maths library's last digits),
+so a rebuild of the same sources writes the same files on every machine.
 """
 import argparse
 import json
@@ -26,6 +27,7 @@ import zipfile
 from m4l_dev import amxd
 from m4l_dev import live_parameter_identity
 from m4l_dev.build_error import BuildError
+from m4l_dev.generated_numbers import check_generated_text, literals_held_by_the_lock
 from m4l_dev.generated_scripts import check_es5
 from m4l_dev.live_preset_files import remove_stale_live_presets, write_live_presets
 
@@ -69,15 +71,20 @@ def build_device(repository, patch, layout, views_code, device_scripts, live_pre
             raise BuildError(f"{patch.device_name}: the device's scripts include {kit_script_name}, which the kit writes")
         scripts[kit_script_name] = kit_script_text
     check_es5(scripts)
+    identity = live_parameter_identity.device_identity(patch_json, patch.device_type)
+    held_by_the_lock = literals_held_by_the_lock(live_parameter_identity.lock_text(identity))
+    maxpat_text = json.dumps(patch_json, indent="\t")
+    for file_name, text in [(f"{patch.script_name}.maxpat", maxpat_text)] + sorted(scripts.items()):
+        check_generated_text(text, f"{patch.device_name}: {file_name}", held_by_the_lock)
     lock_path = repository.source_path(live_parameter_identity.LOCK_FILE_NAME)
-    log(live_parameter_identity.check_lock(lock_path, live_parameter_identity.device_identity(patch_json, patch.device_type),
-                                           arguments.accept_live_parameter_changes, repository.relative(lock_path)))
+    log(live_parameter_identity.check_lock(lock_path, identity, arguments.accept_live_parameter_changes,
+                                           repository.relative(lock_path)))
 
     # the development build: the device and its scripts side by side, in the repository
     device_directory = repository.device_directory(patch.script_name)
     os.makedirs(repository.check_writable(device_directory), exist_ok=True)
     maxpat_path = os.path.join(device_directory, f"{patch.script_name}.maxpat")
-    write_bytes(repository, maxpat_path, json.dumps(patch_json, indent="\t").encode())
+    write_bytes(repository, maxpat_path, maxpat_text.encode())
     device_path = os.path.join(device_directory, f"{patch.script_name}.amxd")
     write_bytes(repository, device_path, amxd.unfrozen_device_bytes(patch_json, patch.device_type))
     for script_name, script_text in sorted(scripts.items()):

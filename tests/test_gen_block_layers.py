@@ -21,9 +21,10 @@ PACKAGE_DIRECTORY = os.path.join(KIT_ROOT, "m4l_dev")
 LAYERS = {"techniques": Technique, "circuit_modules": CircuitModule}
 # What a block file may import from the kit, by layer (the standard library is always allowed).
 KIT_IMPORTS_ALLOWED = {
-    "techniques": ("m4l_dev.gen_blocks", "m4l_dev.build_error", "m4l_dev.generated_scripts", "m4l_dev.techniques"),
+    "techniques": ("m4l_dev.gen_blocks", "m4l_dev.build_error", "m4l_dev.generated_scripts",
+                   "m4l_dev.generated_numbers", "m4l_dev.techniques"),
     "circuit_modules": ("m4l_dev.gen_blocks", "m4l_dev.build_error", "m4l_dev.generated_scripts",
-                        "m4l_dev.techniques"),
+                        "m4l_dev.generated_numbers", "m4l_dev.techniques"),
 }
 
 

@@ -36,9 +36,11 @@ step (the upsampler's latency, read from it), so they meet the audio they belong
 """
 import cmath
 import math
+from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 
 DEFAULT_COEFFICIENT_COUNT = 8
@@ -80,7 +82,8 @@ def _accumulated_denominator(q, order, c):
 
 def halfband_coefficients(coefficient_count=DEFAULT_COEFFICIENT_COUNT, transition=DEFAULT_TRANSITION):
     """HIIR compute_coefs_spec_order_tbw: the all-pass coefficients for `coefficient_count` stages and a transition
-    band `transition` (a fraction of the doubled rate, in (0, 0.5))."""
+    band `transition` (a fraction of the doubled rate, in (0, 0.5)), each through generated_number (the model and the
+    written code hold the same numbers on every machine)."""
     if not isinstance(coefficient_count, int) or coefficient_count < 1:
         raise BuildError(f"halfband_coefficients: coefficient_count must be a whole number >= 1, got {coefficient_count!r}")
     if not 0 < transition < 0.5:
@@ -95,7 +98,7 @@ def halfband_coefficients(coefficient_count=DEFAULT_COEFFICIENT_COUNT, transitio
         ww = numerator / denominator
         wwsq = ww * ww
         x = math.sqrt((1 - wwsq * k) * (1 - wwsq / k)) / (1 + wwsq)
-        coefficients.append((1 - x) / (1 + x))
+        coefficients.append(generated_number((1 - x) / (1 + x)))
     return tuple(coefficients)
 
 
@@ -169,7 +172,7 @@ class HalfbandUpsampler(Technique):
         super().__init__(instance_name, input=input)
         self.coefficients = _check_coefficients(f"HalfbandUpsampler {instance_name}",
                                                 halfband_coefficients() if coefficients is None else coefficients)
-        self.latency_samples = halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2
+        self.latency_samples = generated_number(halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2)
 
     def declarations(self):
         return _stage_declarations(self.instance_name, self.coefficients)
@@ -195,7 +198,7 @@ class HalfbandDownsampler(Technique):
         super().__init__(instance_name, first=first, second=second)
         self.coefficients = _check_coefficients(f"HalfbandDownsampler {instance_name}",
                                                 halfband_coefficients() if coefficients is None else coefficients)
-        self.latency_samples = halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2 - 0.5
+        self.latency_samples = generated_number(halfband_phase_delay_doubled_rate_samples(self.coefficients) / 2 - 0.5)
 
     def declarations(self):
         return _stage_declarations(self.instance_name, self.coefficients)
@@ -238,7 +241,8 @@ def linear_phase_halfband_taps(attenuation_db=LINEAR_PHASE_HALFBAND_ATTENUATION_
     Discrete-Time Signal Processing 3rd ed., eqs. 7.62-7.63: beta = 0.1102 (A - 8.7) for A > 50, order
     M = (A - 8) / (2.285 dw), dw the transition's width 2 x `transition` of the doubled rate in radians), M raised to
     the next 4 K - 2 so the middle tap sits on a whole odd offset. Every even offset from the middle is exactly 0 (a
-    half-band), the middle exactly 0.5, the odd ones scaled to sum 0.5 (DC exactly 1)."""
+    half-band), the middle exactly 0.5, the odd ones (through generated_number: the window's maths library digits
+    rounded off) scaled exactly to sum 0.5 (DC exactly 1)."""
     if not 50 < attenuation_db < 200:
         raise BuildError(f"linear_phase_halfband_taps: attenuation_db is Kaiser's A > 50 dB (beta's formula there), "
                          f"under 200, got {attenuation_db!r}")
@@ -253,9 +257,10 @@ def linear_phase_halfband_taps(attenuation_db=LINEAR_PHASE_HALFBAND_ATTENUATION_
     for n in range(order + 1):
         offset = n - middle
         window = _bessel_i0(beta * math.sqrt(1 - (offset / middle) ** 2)) / _bessel_i0(beta)
-        raw.append(0.0 if offset % 2 == 0 else math.sin(math.pi * offset / 2) / (math.pi * offset) * window)
-    scale = 0.5 / sum(raw)
-    return tuple(0.5 if n == middle else value * scale for n, value in enumerate(raw))
+        raw.append(Fraction(0) if offset % 2 == 0 else
+                   Fraction(generated_number(math.sin(math.pi * offset / 2) / (math.pi * offset) * window)))
+    scale = Fraction(1, 2) / sum(raw)
+    return tuple(0.5 if n == middle else generated_number(value * scale) for n, value in enumerate(raw))
 
 
 def linear_phase_halfband_response(frequency_over_doubled_rate, taps):
@@ -276,7 +281,8 @@ class HalfbandLinearPhaseDownsampler(Technique):
         taps = linear_phase_halfband_taps() if taps is None else tuple(taps)
         length = len(taps)
         if length < 3 or length % 4 != 3 or taps != tuple(reversed(taps)) or taps[length // 2] != 0.5 \
-                or any(taps[n] != 0.0 for n in range(1, length, 2) if n != length // 2) or abs(sum(taps) - 1) > 1e-15:
+                or any(taps[n] != 0.0 for n in range(1, length, 2) if n != length // 2) \
+                or abs(sum(taps) - 1) > 1e-15:
             raise BuildError(f"HalfbandLinearPhaseDownsampler {instance_name}: taps must be a half-band's (4 K - 1, "
                              f"symmetric, middle 0.5, every other one 0, summing to 1), got {length} taps")
         self.taps = taps
@@ -376,10 +382,11 @@ class ControlsAtTheUpsampledSteps(Technique):
         lines.append(self.histories_start.statements())
         for step, delay in enumerate(self.step_delays_samples, start=1):
             whole = math.floor(delay)
-            fraction = delay - whole
+            fraction = Fraction(delay) - whole
             for control in self.control_names:
-                lines.append(f"{p}_{control}_step_{step} = {1 - fraction!r} * {self._past_name(control, whole)} + "
-                             f"{fraction!r} * {self._past_name(control, whole + 1)};")
+                lines.append(f"{p}_{control}_step_{step} = {generated_number(1 - fraction)!r} * "
+                             f"{self._past_name(control, whole)} + {generated_number(fraction)!r} * "
+                             f"{self._past_name(control, whole + 1)};")
         for control in self.control_names:
             lines += [f"{self._past_name(control, age)} = {self._past_name(control, age - 1)};"
                       for age in range(self.past_samples_kept, 0, -1)]

@@ -6,7 +6,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | partition | what it is | the pattern |
 |---|---|---|
 | `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
-| `m4l_dev/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
+| `m4l_dev/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, generated_numbers, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
 | `m4l_dev/circuit_modules/` | gen blocks, layer 2: one modelled piece of hardware per file (dsp-blocks.md) | one `CircuitModule` a file: inputs the circuit's controls in its units, character a frozen dataclass of numbers, cites its references/circuits/ file; built from techniques |
 | `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display, stored table), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `plugin/cpp/` | ([plugins.md](plugins.md): the approach a port follows) the C++ every 2sl plugin shares (no JUCE except MaxScript): `PluginTable.h` (the generated header's types; a route's value), `GenProgram.h` (one running copy of an exported gen~ program: Params, state, render), `MaxScript.h/.cpp` (a device's [js] brain run unchanged in JUCE's JavascriptEngine, QuickJS, with the Max globals it uses and a Task clock the plugin moves) | the generated header fills in the tables; a plugin's own wrapper connects the parts the way the device's Max objects do |
@@ -29,12 +29,13 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `live_preset_files.py` | the `.adv` writer (from references/ableton's example) |
 | `live_parameter_identity.py` | what Live knows a parameter by, and the lock file that keeps it |
 | `generated_scripts.py` | `fill_template` and the ES5 check of every generated script |
+| `generated_numbers.py` | `generated_number`, the one way a computed number reaches a written file, and `check_generated_text`, the check every written file passes (below, "Generated numbers") |
 | `device_build.py` | `build_device`: checks, scripts, lock, devices/, dist/ |
 | `amxd.py` | .amxd bytes: unfrozen and frozen |
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `c_library_cache.py` | the one place the kit runs a C compiler: `load_c_library(c_source, flags)` builds once per source / compiler / flags into the cache, loads once; the renderer and the patch matcher's analysis both use it |
 | `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
-| `build_comparison.py` | two builds of a device compared as the device tests compare them: everything exactly, except numbers, which only have to be close (maths libraries round the last digits differently between machines); `.amxd` by patch, `.adv` by XML (bar the device file's size and checksum), strings' numbers as numbers |
+| `build_comparison.py` | two builds of a device compared as the device tests compare them: exactly (every machine writes the same bytes: `generated_numbers.py`), `.adv` by its XML (not zlib's compression), saying where two differ (`.maxpat` value by value, `.amxd` by patch, `.adv` by tag, text by character) |
 | `plugin/parameters.py` | a device's host parameters for its plugin, read off its patch: the Live parameter lock for what the host knows them by, the patch's routes (`messages_for`, its tempo routes) for how each reaches the device's gen~ programs, script (brain) and raw boxes; Stored Only values as the plugin's state; presets as held, with their Stored values |
 | `plugin/header.py` | the plugin's generated C++ header from those: parameters, routes, Stored values, presets, latency, each exported gen~ program as a `ProgramSpec` |
 | `plugin/vstpreset.py` | VST3 presets (.vstpreset) the way Live saves them: JUCE's class id from the plugin codes, JUCE's state XML and private data, Live's meta info; rebuilds a preset Live saved byte for byte |
@@ -129,6 +130,25 @@ playback. The rule (ours, so no tie and no float crumb decides anything):
 - **`DevicePatchBuilder(latency_samples=...)` takes the declared int**, never a fraction (it would be rounded where no
   test sees it); the patcher's `"latency"` is that figure. A device's tests render each path and hold its delay to
   the declared figure.
+
+## Generated numbers
+
+Every machine writes the same bytes from the same sources. The one thing that varied was numbers computed through
+the platform's maths library (math / cmath / `**` round the last bit differently on glibc and macOS), so the rule
+(`m4l_dev/generated_numbers.py`, which holds the measurements behind it):
+
+- **Every computed number a build writes goes through `generated_number`, where it is computed**: a float is rounded
+  to 10 significant digits (well past what any filter needs, well short of the last-bit noise); a `Fraction`, exact
+  rational arithmetic and the same everywhere, is written as the nearest double with every digit (a polyBLEP's
+  1/24, an antiderivative's constants, a Thiran pad's coefficients, taps scaled to sum exactly). The Python model
+  keeps the number the code holds.
+- **The check**: `check_generated_text` fails on a decimal literal longer than 10 significant digits that
+  `generated_number` didn't write from a Fraction; `build_device` runs it on the patch and every script before
+  writing, the plugin layer (`plugin/generated_files.main`) on every generated file. A number the Live parameter lock
+  holds passes (the lock already holds it to the byte; it can't change without changing what Live knows).
+- **Hand-written code** obeys the same rule (a GenExpr constant: `pi`, `halfpi`; C: a hex literal).
+- **Proof**: tests/test_generated_numbers.py builds every gen block and the fixture device with every maths-library
+  result moved up to 16 units in the last place and holds every byte; `build_comparison` compares builds exactly.
 
 ## Layout: widths from text
 

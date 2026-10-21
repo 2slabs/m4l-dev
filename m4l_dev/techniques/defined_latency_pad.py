@@ -31,9 +31,11 @@ The pad (`DefinedLatencyPad`): a fixed delay of `pad_samples` (>= 0, fractional 
   bounds above are then in steps, at the step rate.
 """
 import math
+from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
 # Figures this close to a whole number are that whole number (float sums of block latencies: 0.5000000000000001).
 WHOLE_SAMPLE_CRUMB = 1e-9
@@ -63,16 +65,18 @@ def whole_if_within_a_crumb(samples):
 
 
 def thiran_allpass_coefficients(order, delay_samples):
-    """a_0 (1) .. a_order of the order-`order` Thiran all-pass with delay `delay_samples` at DC (JOS)."""
+    """a_0 (1) .. a_order of the order-`order` Thiran all-pass with delay `delay_samples` at DC (JOS), computed exactly
+    from `delay_samples` (Fractions) and written through generated_number."""
     if not order - 1 < delay_samples < order:
         raise BuildError(f"thiran_allpass_coefficients: the pad runs order {order} at a delay in ({order - 1}, "
                          f"{order}) (the range its stability is checked in), got {delay_samples!r}")
+    delay = Fraction(delay_samples)
     coefficients = [1.0]
     for k in range(1, order + 1):
-        product = 1.0
+        product = Fraction(1)
         for n in range(order + 1):
-            product *= (delay_samples - order + n) / (delay_samples - order + k + n)
-        coefficients.append((-1) ** k * math.comb(order, k) * product)
+            product *= (delay - order + n) / (delay - order + k + n)
+        coefficients.append(generated_number((-1) ** k * math.comb(order, k) * product))
     return tuple(coefficients)
 
 
@@ -88,6 +92,8 @@ class DefinedLatencyPad(Technique):
                              f"runs it a host sample, 1 at the host rate) is a whole number >= 1, got {oversampling!r}")
         pad_samples = whole_if_within_a_crumb(_checked_latency(f"DefinedLatencyPad {instance_name}", "pad_samples",
                                                                pad_samples))
+        if not isinstance(pad_samples, int):
+            pad_samples = generated_number(pad_samples)
         self.oversampling = oversampling
         self.latency_samples = pad_samples
         # the ring and the all-pass count steps
@@ -128,7 +134,7 @@ class DefinedLatencyPad(Technique):
         p, order, a = self.instance_name, self.thiran_order, self.thiran_coefficients
         lines = [f"// {p}: defined-latency pad, {self.latency_samples!r} samples ({self.oversampling} steps a sample): "
                  f"{self.whole_samples} whole steps"
-                 + (f" + a Thiran all-pass of order {order} at {self.thiran_delay_samples!r}" if order else "")
+                 + (f" + a Thiran all-pass of order {order} at {generated_number(self.thiran_delay_samples)!r}" if order else "")
                  + " (kit technique: defined-latency pad)",
                  f"{p}_x_0 = {self.input_expressions['input']};"]
         if order:

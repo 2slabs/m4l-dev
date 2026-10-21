@@ -62,7 +62,7 @@ HIGHEST_CUTOFF_OF_SAMPLE_RATE = 0.45     # fc held under 0.45 of the host rate (
 LOWEST_CUTOFF_HZ = 5.0
 STAGES = 4
 OVERSAMPLINGS = (1, 2)                   # once a sample, or twice through the kit's halfband oversampler
-REFERENCE_CUTOFF_HZ = 261.6255653005986  # [DESIGN] 0 V at the control node is middle C
+REFERENCE_CUTOFF_HZ = 261.6255653  # [DESIGN] 0 V at the control node is middle C (to generated_number's digits)
 REGENERATION_ONSET_FEEDBACK_GAIN = 4.0   # [VERIFIED] the ladder self-oscillates from k = 4 (Stinchcombe 2008 §2.5)
 
 

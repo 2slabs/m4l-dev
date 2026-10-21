@@ -52,6 +52,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
 from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import PiecewiseLinearTable
 
@@ -66,8 +67,8 @@ CELL_RESISTORS = [
 DRY_RESISTOR = 240e3                                       # R220 (DAFx R6,3)
 R7, RF1, RF2, TONE_CAPACITOR = 24.9e3, 24.9e3, 1.2e6, 100e-12   # R243, R242, R245, C24
 CELLS_INTO_THE_LOWER_SUMMER = (3, 4)                       # cells 4 and 5 (0-based) go through IC31b (eq. 10)
-DRIVE_STAGE_HZ = 1.0 / (2 * math.pi * 33e3 * 470e-12)     # IC29's R215 || C22: ~10.26 kHz
-TONE_FILTER_HZ = 1.0 / (2 * math.pi * RF2 * TONE_CAPACITOR)   # RF2 x C: the circuit's 1.33 kHz one-pole
+DRIVE_STAGE_HZ = generated_number(1.0 / (2 * math.pi * 33e3 * 470e-12))     # IC29's R215 || C22: ~10.26 kHz
+TONE_FILTER_HZ = generated_number(1.0 / (2 * math.pi * RF2 * TONE_CAPACITOR))   # RF2 x C: the circuit's 1.33 kHz one-pole
 OUTPUT_PEAK_VOLTS_AT_6_VOLT_RAILS = 3.2                    # the sum's peak for drives of 0.6-10 V (DAFx-17's sweep)
 LIMITER_OPEN_VOLTS = 1e3                                   # the outermost pieces are measured out to here
 
@@ -193,7 +194,7 @@ class Buchla259TimbreSection(CircuitModule):
     @property
     def output_peak_volts(self):
         """About where the output peaks for drives of 0.6-10 V: 3.2 V at 6 V rails, scaling with them."""
-        return OUTPUT_PEAK_VOLTS_AT_6_VOLT_RAILS * self.character.cell_rail_volts / 6.0
+        return generated_number(OUTPUT_PEAK_VOLTS_AT_6_VOLT_RAILS * self.character.cell_rail_volts / 6.0)
 
     @property
     def running_point(self):

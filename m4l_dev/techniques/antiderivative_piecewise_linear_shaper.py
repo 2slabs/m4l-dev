@@ -57,9 +57,11 @@ equalised for its oversampling out.
 """
 import hashlib
 import math
+from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
 
 # Below this input step the quotient loses digits to the antiderivative's rounding; the midpoint is exact on a
@@ -104,16 +106,15 @@ adaa2_ramp(u0, u1, u2) {
 }
 
 
-# a table's name is a digest of its pieces to this many significant digits: well past any real change, well short of
-# the last digits, which differ between machines
-NAME_DIGITS = 12
-
-
 class PiecewiseLinearTable:
     """A transfer as straight pieces: `pieces` is [(from x, slope, intercept)], sorted, the first from -inf. Its
-    GenExpr functions are named `<base_name>_<digest of the pieces>`, the pieces rounded to NAME_DIGITS significant
-    digits first: maths libraries round the last bits differently between machines, and the same table has to get
-    the same name on every machine (m4l_dev/build_comparison.py)."""
+    GenExpr functions are named `<base_name>_<digest of the pieces>`.
+
+    Its numbers go through generated_number (m4l_dev/generated_numbers.py), so the table, its code and its name are
+    the same on every machine: the starts, the slopes and the first intercept rounded; a continuous table's other
+    intercepts then computed exactly (Fractions) so each piece meets the last where it starts, as given; the
+    antiderivatives' constants computed exactly from the pieces. Rounding those too would open gaps at the corners,
+    which the ADAA quotients divide by tiny steps."""
 
     def __init__(self, base_name, pieces):
         if not pieces or pieces[0][0] != -math.inf:
@@ -123,9 +124,17 @@ class PiecewiseLinearTable:
             raise BuildError(f"PiecewiseLinearTable {base_name}: the pieces must start at rising x, got {starts}")
         if not all(math.isfinite(value) for piece in pieces for value in piece[1:]):
             raise BuildError(f"PiecewiseLinearTable {base_name}: every slope and intercept must be finite")
-        self.pieces = list(pieces)
-        rounded = [tuple(float(f"{value:.{NAME_DIGITS}g}") for value in piece) for piece in self.pieces]
-        digest = hashlib.sha256(repr(rounded).encode()).hexdigest()[:8]
+        self.is_continuous = self._continuous(pieces)
+        self.pieces = [(start if start == -math.inf else generated_number(start), generated_number(slope),
+                        generated_number(intercept)) for start, slope, intercept in pieces]
+        if self.is_continuous:
+            for index in range(1, len(self.pieces)):
+                (_, left_slope, left_intercept), (start, slope, _) = self.pieces[index - 1], self.pieces[index]
+                meeting = Fraction(left_slope) * Fraction(start) + Fraction(left_intercept)
+                self.pieces[index] = (start, slope, generated_number(meeting - Fraction(slope) * Fraction(start)))
+        self.exact_pieces = [tuple(value if value == -math.inf else Fraction(value) for value in piece)
+                             for piece in self.pieces]
+        digest = hashlib.sha256(repr(self.pieces).encode()).hexdigest()[:8]
         self.function_name = f"{base_name}_{digest}"
 
     def value(self, x):
@@ -133,45 +142,50 @@ class PiecewiseLinearTable:
         _, slope, intercept = self.pieces[max(i for i, piece in enumerate(self.pieces) if piece[0] <= x)]
         return slope * x + intercept
 
-    def integral(self, x):
-        """The antiderivative from 0 (closed form per piece), in Python: what the GenExpr integral holds."""
-        total, position = 0.0, 0.0
+    def integral(self, x, exact=False):
+        """The antiderivative from 0 (closed form per piece), in Python: what the GenExpr integral holds. `exact`:
+        from the pieces as Fractions, at a Fraction `x`, exactly."""
+        pieces = self.exact_pieces if exact else self.pieces
+        total, position = (Fraction(0), Fraction(0)) if exact else (0.0, 0.0)
         direction = 1 if x >= 0 else -1
         while position != x:
-            index = max(i for i, piece in enumerate(self.pieces) if piece[0] <= position) if direction > 0 else \
-                max(i for i, piece in enumerate(self.pieces) if piece[0] < position)
-            start, slope, intercept = self.pieces[index]
-            end = self.pieces[index + 1][0] if index + 1 < len(self.pieces) else math.inf
+            index = max(i for i, piece in enumerate(pieces) if piece[0] <= position) if direction > 0 else \
+                max(i for i, piece in enumerate(pieces) if piece[0] < position)
+            start, slope, intercept = pieces[index]
+            end = pieces[index + 1][0] if index + 1 < len(pieces) else math.inf
             target = min(x, end) if direction > 0 else max(x, start)
             total += slope / 2 * (target * target - position * position) + intercept * (target - position)
             position = target
         return total
 
-    def second_integral(self, x):
+    def second_integral(self, x, exact=False):
         """The second antiderivative from 0 (the integral of `integral` from 0), in Python: what the GenExpr second
-        integral holds."""
-        total, position = 0.0, 0.0
+        integral holds. `exact`: as `integral`'s."""
+        pieces = self.exact_pieces if exact else self.pieces
+        total, position = (Fraction(0), Fraction(0)) if exact else (0.0, 0.0)
         direction = 1 if x >= 0 else -1
         while position != x:
-            index = max(i for i, piece in enumerate(self.pieces) if piece[0] <= position) if direction > 0 else \
-                max(i for i, piece in enumerate(self.pieces) if piece[0] < position)
-            start, slope, intercept = self.pieces[index]
-            end = self.pieces[index + 1][0] if index + 1 < len(self.pieces) else math.inf
+            index = max(i for i, piece in enumerate(pieces) if piece[0] <= position) if direction > 0 else \
+                max(i for i, piece in enumerate(pieces) if piece[0] < position)
+            start, slope, intercept = pieces[index]
+            end = pieces[index + 1][0] if index + 1 < len(pieces) else math.inf
             target = min(x, end) if direction > 0 else max(x, start)
-            total += self._second_integral_over_piece(index, position, target)
+            total += self._second_integral_over_piece(index, position, target, exact)
             position = target
         return total
 
-    def _second_integral_over_piece(self, index, a, b):
+    def _second_integral_over_piece(self, index, a, b, exact):
         """The integral of `integral` from a to b, both on piece `index`: F1(a) (b - a) + the piece's own part."""
-        _, slope, intercept = self.pieces[index]
+        _, slope, intercept = (self.exact_pieces if exact else self.pieces)[index]
         width = b - a
-        return self.integral(a) * width + slope * ((b ** 3 - a ** 3) / 6 - a * a * width / 2) + intercept * width * width / 2
+        return self.integral(a, exact) * width + slope * ((b * b * b - a * a * a) / 6 - a * a * width / 2) \
+            + intercept * width * width / 2
 
-    @property
-    def is_continuous(self):
-        """Every piece meets the next where it starts (to CONTINUITY_TOLERANCE)."""
-        for (_, left_slope, left_intercept), (start, slope, intercept) in zip(self.pieces, self.pieces[1:]):
+    @staticmethod
+    def _continuous(pieces):
+        """Every piece meets the next where it starts (to CONTINUITY_TOLERANCE), as given: the table's own pieces,
+        rounded by generated_number, may part by that rounding (5e-11 of a piece's terms)."""
+        for (_, left_slope, left_intercept), (start, slope, intercept) in zip(pieces, pieces[1:]):
             left, right = left_slope * start + left_intercept, slope * start + intercept
             if abs(left - right) > CONTINUITY_TOLERANCE * max(1.0, abs(left)):
                 return False
@@ -207,8 +221,10 @@ class PiecewiseLinearTable:
             start, slope, intercept = self.pieces[index]
             if start == -math.inf:                      # anchor the first piece at its end instead
                 start = self.pieces[1][0]
-            return (f"({self.integral(start)!r} + {slope / 2!r} * (x * x - {start * start!r}) + "
-                    f"{intercept!r} * (x - {start!r}))")
+            start, slope, intercept = Fraction(start), Fraction(slope), Fraction(intercept)
+            return (f"({generated_number(self.integral(start, exact=True))!r} + {generated_number(slope / 2)!r} * "
+                    f"(x * x - {generated_number(start * start)!r}) + {generated_number(intercept)!r} * "
+                    f"(x - {generated_number(start)!r}))")
         indices = list(range(len(self.pieces)))
         functions = {
             name: f"""// a piecewise-linear transfer, {len(self.pieces)} straight pieces (kit technique: antiderivative piecewise-linear shaper)
@@ -238,9 +254,16 @@ class PiecewiseLinearTable:
             start, slope, intercept = self.pieces[index]
             if start == -math.inf:                      # anchor the first piece at its end instead
                 start = self.pieces[1][0]
-            return (f"({self.second_integral(start)!r} + {self.integral(start)!r} * (x - {start!r}) + {slope!r} * "
-                    f"((x * x * x - {start ** 3!r}) / 6 - {start * start / 2!r} * (x - {start!r})) + "
-                    f"{intercept / 2!r} * (x - {start!r}) * (x - {start!r}))")
+            start, slope, intercept = Fraction(start), Fraction(slope), Fraction(intercept)
+            number = {name: repr(generated_number(value)) for name, value in (
+                ("second_integral", self.second_integral(start, exact=True)),
+                ("integral", self.integral(start, exact=True)), ("start", start), ("slope", slope),
+                ("start_cubed", start * start * start), ("half_start_squared", start * start / 2),
+                ("half_intercept", intercept / 2))}
+            return (f"({number['second_integral']} + {number['integral']} * (x - {number['start']}) + "
+                    f"{number['slope']} * ((x * x * x - {number['start_cubed']}) / 6 - {number['half_start_squared']} * "
+                    f"(x - {number['start']})) + {number['half_intercept']} * (x - {number['start']}) * "
+                    f"(x - {number['start']}))")
         functions = dict(SHARED_SECOND_ORDER_FUNCTIONS)
         functions.update({
             f"{name}_second_integral": f"""// its second antiderivative from 0, closed form per piece

@@ -27,8 +27,9 @@ not the restart's.
 import math
 
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
-ATTACK_CURVATURE = math.log(1000.0)    # a: the exponential attack spans 60 dB of exp(-a (1 - u)) [UNVERIFIED]
+ATTACK_CURVATURE = generated_number(math.log(1000.0))    # a: the exponential attack spans 60 dB of exp(-a (1 - u)) [UNVERIFIED]
 DECAY_SPAN_DB = 60.0                   # the exponential decay falls this far over decay_ms [UNVERIFIED]
 SILENT_LEVEL = 1e-6                    # -120 dB: under it the exponential decay ends (the envelope is idle)
 SHORTEST_TIME_MS = 0.1                 # decay and spacing times are held above this (a step a sample at most)
@@ -37,12 +38,12 @@ STAGE_IDLE, STAGE_ATTACK, STAGE_DECAY = 0, 1, 2
 
 RISE_FUNCTION = f"""// the exponential rise (kit technique: drum envelope): 0 at u = 0, 1 at u = 1, an exponential decay reversed in time
 drum_envelope_exponential_rise(progress) {{
-\tfloor_level = {math.exp(-ATTACK_CURVATURE)!r};
+\tfloor_level = exp(-{ATTACK_CURVATURE!r});
 \treturn (exp(-{ATTACK_CURVATURE!r} * (1 - clamp(progress, 0, 1))) - floor_level) / (1 - floor_level);
 }}"""
 RISE_INVERSE_FUNCTION = f"""// the progress at which the exponential rise reaches a level (kit technique: drum envelope)
 drum_envelope_exponential_rise_progress(level) {{
-\tfloor_level = {math.exp(-ATTACK_CURVATURE)!r};
+\tfloor_level = exp(-{ATTACK_CURVATURE!r});
 \treturn 1 + log(clamp(level, 0, 1) * (1 - floor_level) + floor_level) / {ATTACK_CURVATURE!r};
 }}"""
 FUNCTIONS = {"drum_envelope_exponential_rise": RISE_FUNCTION,

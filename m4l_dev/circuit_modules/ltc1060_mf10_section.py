@@ -79,6 +79,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges
 
 CLOCK_RATIOS = (50, 100)             # pin 12: 50:1 tied to V+, 100:1 to half supply (LTC1060 p. 7)
@@ -171,7 +172,7 @@ class Ltc1060Mf10Section(CircuitModule):
             raise BuildError(f"Ltc1060Mf10Section {instance_name}: the chip's clock ratio is 50 or 100 (pin 12), "
                              f"got {clock_ratio!r}")
         self.clock_ratio = clock_ratio
-        self.tick_coefficient = 2 * math.sin(math.pi / clock_ratio)
+        self.tick_coefficient = tick_coefficient(clock_ratio)
         fit_key = (self.character.chip_mode, self.character.supply_volts, clock_ratio)
         if fit_key not in Q_ENHANCEMENT_FITS:
             raise BuildError(f"Ltc1060Mf10Section {instance_name}: the datasheet draws no Q error for mode "
@@ -352,7 +353,7 @@ def small_signal_response(frequency_hz, clock_hz, damping, clock_ratio=100):
     hp[n] = x - lp[n-1] - q bp[n-1], bp[n] = bp[n-1] + F hp[n], lp[n] = lp[n-1] + F bp[n]; the HP pin between ticks
     is x - lp - q bp with the live input, on average half a tick after the tick (z^(1/2)). So LP + HP (the notch) is
     about -30 dB deep at 100:1, not infinitely: the sampled data's own mismatch."""
-    F = 2 * math.sin(math.pi / clock_ratio)
+    F = tick_coefficient(clock_ratio)
     clock = min(max(clock_hz, clock_ratio * LOWEST_CENTER_HZ), clock_ratio * HIGHEST_CENTER_HZ)
     z_inverse = complex(math.cos(2 * math.pi * frequency_hz / clock), -math.sin(2 * math.pi * frequency_hz / clock))
     q = min(max(damping, LOWEST_DAMPING), highest_damping(clock_ratio))
@@ -372,9 +373,18 @@ def response_script_code():
         "LTC1060_MF10_LOWEST_CENTER_HZ": repr(LOWEST_CENTER_HZ),
         "LTC1060_MF10_HIGHEST_CENTER_HZ": repr(HIGHEST_CENTER_HZ),
         "LTC1060_MF10_LOWEST_DAMPING": repr(LOWEST_DAMPING),
-        "LTC1060_MF10_DAMPING_MARGIN": repr(DAMPING_MARGIN)}, "ltc1060-mf10-section-response.template.js")
+        "LTC1060_MF10_DAMPING_MARGIN": repr(DAMPING_MARGIN),
+        "LTC1060_MF10_TICK_COEFFICIENTS": "{" + ", ".join(f'"{ratio}": {tick_coefficient(ratio)!r}'
+                                                          for ratio in CLOCK_RATIOS) + "}"},
+        "ltc1060-mf10-section-response.template.js")
+
+
+def tick_coefficient(clock_ratio):
+    """F = 2 sin(pi / clock_ratio), the integrators' gain a tick, through generated_number (the model and the code
+    hold the same number)."""
+    return generated_number(2 * math.sin(math.pi / clock_ratio))
 
 
 def highest_damping(clock_ratio=100):
     """The most damping the section takes (q = 1/Q): past it, the tick matrix's eigenvalues would turn real."""
-    return 2 - 2 * math.sin(math.pi / clock_ratio) - DAMPING_MARGIN
+    return generated_number(2 - tick_coefficient(clock_ratio) - DAMPING_MARGIN)

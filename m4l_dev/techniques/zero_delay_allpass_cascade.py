@@ -37,6 +37,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip
 from m4l_dev.techniques.zero_delay_one_pole_filter import (HIGHEST_PREWARP_OF_SAMPLE_RATE, LOWEST_CUTOFF_HZ,
                                                            ZeroDelayOnePoleFilter)
@@ -94,7 +95,7 @@ class ZeroDelayAllpassCascade(Technique):
             f"{p}_coupling", input=f"{p}_out", cutoff_hz=coupling_highpass_hz)
         self.feedback_filter = None if feedback_lowpass_hz is None else ZeroDelayOnePoleFilter(
             f"{p}_feedback_filter", input=f"{p}_coupled", cutoff_hz=feedback_lowpass_hz)
-        self.loop_limit = None if loop_limit is None else float(loop_limit)
+        self.loop_limit = None if loop_limit is None else generated_number(float(loop_limit))
         self.limiter = None if loop_limit is None else KneeSoftClip(
             f"{p}_limit", input=f"{p}_loop_solved / {self.loop_limit!r}", knee=LOOP_LIMIT_KNEE)
 

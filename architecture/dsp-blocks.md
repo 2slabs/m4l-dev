@@ -174,8 +174,8 @@ Tests: `tests/test_circuit_module_<module>.py`.
 
 - every `GenBlock` subclass in `m4l_dev/` is in `techniques/` (a `Technique`) or `circuit_modules/` (a
   `CircuitModule`), never both;
-- a technique imports only `gen_blocks`, `build_error`, `generated_scripts`, other techniques and the standard
-  library (so never a circuit module); a circuit module the same plus techniques;
+- a technique imports only `gen_blocks`, `build_error`, `generated_scripts`, `generated_numbers`, other techniques
+  and the standard library (so never a circuit module); a circuit module the same plus techniques;
 - every block cites a `references_entry` that exists, has a `## ` heading naming the block's file and is named in
   its docstring; a module's is under `references/circuits/`;
 - a circuit module file holds exactly one `CircuitModule`, whose `character_type` is a frozen dataclass whose fields

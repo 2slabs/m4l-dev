@@ -30,6 +30,7 @@ from m4l_dev import genexpr
 from m4l_dev import layout_rules
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.preset_book import TOGGLE_ITEMS, SavedControl, SavedRecord, stored_only_values_of_preset
 from m4l_dev.themes import theme_from_live_js
@@ -286,7 +287,7 @@ class DevicePatchBuilder:
     def tell(self, source, message, destination, inlet=0, scale=None):
         """Wire `source`'s value to `destination` as `message value` (or raw when message is None). A control's value
         told a display becomes that display's starting value; told a gen~, the Param's default (the build writes it
-        into the code: write_gen_param_defaults). Every
+        into the code: write_gen_param_defaults), both through generated_number. Every
         control's route is recorded for messages_for (a raw value as the message None)."""
         if source in self.control_by_box:
             control_name, transform = self.control_by_box[source]
@@ -294,7 +295,7 @@ class DevicePatchBuilder:
         if source in self.control_by_box and message is not None:
             control_name, transform = self.control_by_box[source]
             if control_name in self.initial_values:
-                sent = transform(self.initial_values[control_name]) * (scale if scale is not None else 1)
+                sent = generated_number(transform(self.initial_values[control_name]) * (scale if scale is not None else 1))
                 if destination in self.view_mode_by_box:
                     self.view_defaults.setdefault(self.view_mode_by_box[destination], {})[message] = sent
                 elif destination in self.gen_params_by_box:
@@ -317,9 +318,10 @@ class DevicePatchBuilder:
         if control not in self.control_by_box:
             self.fail(f"menu_lookup of box {control}, which is no control's")
         control_name, transform = self.control_by_box[control]
-        expression = "expr " + " + ".join(f"($i1=={index})*{float(value)!r}" for index, value in enumerate(values))
+        values = [generated_number(float(value)) for value in values]
+        expression = "expr " + " + ".join(f"($i1=={index})*{value!r}" for index, value in enumerate(values))
         looked_up = self.derived(self.box(expression, rect=(1100, 1400 + 2 * len(self.boxes), 400, 22)), control_name,
-                                 lambda held: float(values[int(transform(held))]))
+                                 lambda held: values[int(transform(held))])
         self.wire(control, looked_up)
         return looked_up
 
@@ -727,7 +729,7 @@ class DevicePatchBuilder:
 
     def gen_param_defaults_by_box(self):
         """{gen~ box id: {Param name: default}}: each Param a control sets gets the value the initial values send it
-        (the sound before Live recalls the controls). Fails, listing every problem: a message to no Param, two
+        (the sound before Live recalls the controls; `tell` rounded it through generated_number). Fails, listing every problem: a message to no Param, two
         controls sending one Param different values, a value outside the Param's min / max, a Param whose code holds a
         default and is set by a control (one number, one source: leave it out of the code), and a Param with neither
         (its code leaves the default out, and no control sets it)."""

@@ -31,6 +31,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator
 from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 
@@ -73,7 +74,7 @@ class TapeStyleEcho(Technique):
         if right_lag_ms < 0 or rounds_kept < 0 or int(rounds_kept) != rounds_kept:
             raise BuildError(f"TapeStyleEcho {instance_name}: right_lag_ms must be >= 0, rounds_kept a whole number >= 0")
         self.longest_time_ms = float(longest_time_ms)
-        self.right_lag_ms = float(right_lag_ms)
+        self.right_lag_ms = generated_number(float(right_lag_ms))
         self.rounds_kept = int(rounds_kept)
         # the longest read: the longest time, the wobble's limit, the right side's lag, the spline's reach (3)
         self.tape_samples = int(math.ceil(HIGHEST_SAMPLE_RATE * (self.longest_time_ms + WOBBLE_LIMIT_MS
@@ -141,7 +142,7 @@ class TapeStyleEcho(Technique):
         shift_rounds = "".join(f"\n\t{p}_round_peak_{n} = {p}_round_peak_{n - 1};" for n in reversed(rounds) if n > 1)
         if self.rounds_kept:
             shift_rounds += f"\n\t{p}_round_peak_1 = {p}_round_peak_so_far;"
-        diffuser_scale = (f"min(1, {p}_steady_samples / (4 * mstosamps({max(sum(v) for v in DIFFUSION_ALLPASS_MS.values())!r})))"
+        diffuser_scale = (f"min(1, {p}_steady_samples / (4 * mstosamps({generated_number(max(sum(v) for v in DIFFUSION_ALLPASS_MS.values()))!r})))"
                           if self.has_diffusion else "0")
         diffusion_amount = "clamp(${diffusion}, 0, 0.7)" if self.has_diffusion else "0"
         loop_upper_bound = self.tape_samples - 8 - math.ceil(HIGHEST_SAMPLE_RATE * self.right_lag_ms / 1000)
@@ -170,9 +171,9 @@ if (${{stop_pressed}}) {{
 {p}_wow_2 = {p}_wow_2 + {p}_wow_pole * ({p}_wow_1 - {p}_wow_2);
 {p}_wow_pole_rest_2 = (1 - {p}_wow_pole) * (1 - {p}_wow_pole);
 {p}_wow_unit = {p}_wow_2 / sqrt((1 / 3) * pow({p}_wow_pole, 4) * (1 + {p}_wow_pole_rest_2) / pow(1 - {p}_wow_pole_rest_2, 3));
-{p}_wow_seconds = clamp(${{wow_cents}}, 0, {HIGHEST_WOW_CENTS!r}) * {NATURAL_LOG_OF_2 / 1200!r} / (twopi * {WOW_HZ!r}) * {p}_wow_unit;
+{p}_wow_seconds = clamp(${{wow_cents}}, 0, {HIGHEST_WOW_CENTS!r}) * {generated_number(NATURAL_LOG_OF_2 / 1200)!r} / (twopi * {WOW_HZ!r}) * {p}_wow_unit;
 {p}_flutter_phase = wrap({p}_flutter_phase + {FLUTTER_HZ!r} / samplerate, 0, 1);
-{p}_flutter_seconds = clamp(${{flutter_cents}}, 0, {HIGHEST_FLUTTER_CENTS!r}) * {NATURAL_LOG_OF_2 / 1200 * math.sqrt(2) / (2 * math.pi * FLUTTER_HZ)!r} * sin(twopi * {p}_flutter_phase);
+{p}_flutter_seconds = clamp(${{flutter_cents}}, 0, {HIGHEST_FLUTTER_CENTS!r}) * {generated_number(NATURAL_LOG_OF_2 / 1200 * math.sqrt(2) / (2 * math.pi * FLUTTER_HZ))!r} * sin(twopi * {p}_flutter_phase);
 {p}_wobble_samples = clamp({p}_wow_seconds + {p}_flutter_seconds, -{WOBBLE_LIMIT_MS / 1000!r}, {WOBBLE_LIMIT_MS / 1000!r}) * samplerate;
 
 // the loop's own delay D: re-reading the tape D early puts every repeat on n T
@@ -187,7 +188,7 @@ if (${{stop_pressed}}) {{
 {p}_lowpass_hz = clamp(${{loop_lowpass_hz}}, 20, samplerate * 0.45);
 {p}_highpass_hz = clamp(${{loop_highpass_hz}}, 1, samplerate * 0.45);
 {p}_filters_delay = 2 * samplerate / (twopi * {p}_lowpass_hz * (1 + {p}_highpass_hz / {p}_lowpass_hz))
-	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {self.saturators['left'].latency_samples!r};
+	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {generated_number(self.saturators['left'].latency_samples)!r};
 {p}_lowpass_pole = 1 - exp(-twopi * {p}_lowpass_hz / samplerate);
 {p}_highpass_pole = 1 - exp(-twopi * {p}_highpass_hz / samplerate);
 {p}_left_loop_delay = {diffusion_delay["left"]} + {p}_filters_delay;

@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
 FUNCTIONS = {
     "soft_clip_above_knee": """// clean up to the knee, then knee + headroom * tanh(excess / headroom): value and slope continuous, bounded by 1
@@ -37,7 +38,7 @@ class KneeSoftClip(Technique):
             raise BuildError(f"KneeSoftClip {instance_name}: the knee must be a number between 0 and 1 "
                              f"(exclusive), got {knee!r}")
         super().__init__(instance_name, input=input)
-        self.knee = float(knee)
+        self.knee = generated_number(float(knee))
         self.headroom = float(Decimal(1) - Decimal(repr(self.knee)))
         self.latency_samples = 0       # memoryless: the output is the input's own sample
 

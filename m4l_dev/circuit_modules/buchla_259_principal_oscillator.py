@@ -102,16 +102,13 @@ class Buchla259PrincipalOscillator(CircuitModule):
         self.edges.add_jump(f"{p}_reset_pending", "0", f"-{p}_naive_before")
 
     def _half_pi_drive_term(self):
-        """GenExpr: the shaper's K = drive x pi / 2: the build's number, or the run-time drive's expression in the
-        character property's arithmetic order (so a run-time drive equal to the build's renders the same bits)."""
-        if "sine_shaper_drive" in self.character_inputs:
-            return f"({self.character_term('sine_shaper_drive')} * {math.pi!r} / 2)"
-        return repr(self.character.sine_shaper_half_pi_drive)
+        """GenExpr: the shaper's K = drive x pi / 2 from the build's drive or the run-time drive's expression, in the
+        character property's arithmetic order (so a run-time drive equal to the build's renders the same bits, and
+        the code holds the drive as given, not a product a maths library rounds)."""
+        return f"({self.character_term('sine_shaper_drive')} * pi / 2)"
 
     def _normalisation_term(self):
-        if "sine_shaper_drive" in self.character_inputs:
-            return f"(1.0 / sin({self._half_pi_drive_term()}))"
-        return repr(self.character.sine_shaper_normalisation)
+        return f"(1.0 / sin({self._half_pi_drive_term()}))"
 
     def functions(self):
         return dict(FUNCTIONS, **self.edges.functions())

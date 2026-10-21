@@ -41,6 +41,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
 from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
 from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandLinearPhaseDownsampler,
@@ -52,11 +53,11 @@ from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps
 ILL_CONDITIONED_STEP = 1e-5
 
 FUNCTIONS = {
-    "tanh_antiderivative": """// log cosh x, the antiderivative of tanh x, without overflow (log cosh x = |x| + log(1 + e^-2|x|) - log 2)
-tanh_antiderivative(x) {
+    "tanh_antiderivative": f"""// log cosh x, the antiderivative of tanh x, without overflow (log cosh x = |x| + log(1 + e^-2|x|) - log 2)
+tanh_antiderivative(x) {{
 \tmagnitude = abs(x);
-\treturn magnitude + log(1 + exp(-2 * magnitude)) - 0.6931471805599453;
-}""",
+\treturn magnitude + log(1 + exp(-2 * magnitude)) - {generated_number(math.log(2))!r};
+}}""",
     "tanh_antialiased": f"""// tanh averaged over the step from the last input to this one (first-order ADAA)
 tanh_antialiased(x, previous_x) {{
 \tstep = x - previous_x;

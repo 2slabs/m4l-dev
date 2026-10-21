@@ -1278,7 +1278,7 @@ static uint32_t genexpr_mersenne_next(void) {
 }
 static double genexpr_noise(void) {
     uint32_t high = genexpr_mersenne_next() >> 5, low = genexpr_mersenne_next() >> 6;
-    return ((high * 67108864.0 + low) * (1.0 / 9007199254740992.0)) * 2.0 - 1.0;
+    return ((high * 67108864.0 + low) * (1.0 / 0x1p53)) * 2.0 - 1.0;
 }
 
 /* Python's min(a, b) / max(a, b): the second replaces the first only if strictly less / greater */
@@ -1350,14 +1350,14 @@ static double genexpr_sqrt(double x) { return (x >= 0 || x != x) ? sqrt(x) : 0.0
 static double genexpr_sin(double x) { return isinf(x) ? genexpr_python_nan() : sin(x); }
 static double genexpr_cos(double x) { return isinf(x) ? genexpr_python_nan() : cos(x); }
 static double genexpr_tan(double x) { return isinf(x) ? genexpr_python_nan() : tan(x); }
-/* math.atan2 (CPython m_atan2) */
+/* math.atan2 (CPython m_atan2); 0x1.921fb54442d18p+1 is math.pi to the bit */
 static double genexpr_atan2(double y, double x) {
     if (isnan(x) || isnan(y)) return genexpr_python_nan();
     if (isinf(y)) {
-        if (isinf(x)) return copysign(copysign(1., x) == 1. ? 0.25 * 3.141592653589793 : 0.75 * 3.141592653589793, y);
-        return copysign(0.5 * 3.141592653589793, y);
+        if (isinf(x)) return copysign(copysign(1., x) == 1. ? 0.25 * 0x1.921fb54442d18p+1 : 0.75 * 0x1.921fb54442d18p+1, y);
+        return copysign(0.5 * 0x1.921fb54442d18p+1, y);
     }
-    if (isinf(x) || y == 0.) return copysign(1., x) == 1. ? copysign(0., y) : copysign(3.141592653589793, y);
+    if (isinf(x) || y == 0.) return copysign(1., x) == 1. ? copysign(0., y) : copysign(0x1.921fb54442d18p+1, y);
     return atan2(y, x);
 }
 /* math.fmod (CPython math_fmod); a zero divisor reads 0 (our rule) */

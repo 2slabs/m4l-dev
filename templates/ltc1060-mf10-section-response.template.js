@@ -5,12 +5,15 @@ var LTC1060_MF10_LOWEST_CENTER_HZ = /*LTC1060_MF10_LOWEST_CENTER_HZ*/;
 var LTC1060_MF10_HIGHEST_CENTER_HZ = /*LTC1060_MF10_HIGHEST_CENTER_HZ*/;
 var LTC1060_MF10_LOWEST_DAMPING = /*LTC1060_MF10_LOWEST_DAMPING*/;
 var LTC1060_MF10_DAMPING_MARGIN = /*LTC1060_MF10_DAMPING_MARGIN*/;
+// F = 2 sin(pi / clock ratio) by clock ratio, as the module's code holds it
+var LTC1060_MF10_TICK_COEFFICIENTS = /*LTC1060_MF10_TICK_COEFFICIENTS*/;
 
 /** The section's pins at frequencyHz, for a clock (Hz, at the CLK pin), a damping (q = 1/Q) and the clock ratio (50 or 100):
  * {lpRe, lpIm, bpRe, bpIm, hpRe, hpIm}. Per tick: hp = x - z^-1 (lp + q bp), bp = F/(1 - z^-1) hp,
  * lp = F/(1 - z^-1) bp; the HP pin between ticks is x z^(1/2) - lp - q bp (ltc1060_mf10_section.py). */
 function ltc1060Mf10SectionResponse(frequencyHz, clockHz, damping, clockRatio) {
-  var F = 2 * Math.sin(Math.PI / clockRatio);
+  var F = LTC1060_MF10_TICK_COEFFICIENTS[clockRatio];
+  if (F === undefined) throw new Error("ltc1060Mf10SectionResponse: no clock ratio " + clockRatio + " (50 or 100)");
   var clock = Math.min(Math.max(clockHz, clockRatio * LTC1060_MF10_LOWEST_CENTER_HZ),
     clockRatio * LTC1060_MF10_HIGHEST_CENTER_HZ);
   var q = Math.min(Math.max(damping, LTC1060_MF10_LOWEST_DAMPING), 2 - F - LTC1060_MF10_DAMPING_MARGIN);

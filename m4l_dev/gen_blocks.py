@@ -26,6 +26,7 @@ import re
 import string
 
 from m4l_dev.build_error import BuildError
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.generated_scripts import fill_template
 
 GEN_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -41,7 +42,8 @@ smoothing_coefficient(time_constant_ms, sample_rate) {
 class GenBlock:
     """One instance of a kit gen block. Not subclassed directly: a block is a `Technique` or a `CircuitModule`
     (tests/test_gen_block_layers.py holds the kit to that). `substituted` fills string.Template text: `${p}` is the
-    instance name, `${<input>}` each input expression."""
+    instance name, `${<input>}` each input expression; a number given as a constant is written through
+    generated_number (m4l_dev/generated_numbers.py)."""
 
     # The references/ file whose `## ` heading names the block's source file: where its sources are quoted.
     references_entry = None
@@ -64,7 +66,7 @@ class GenBlock:
 
     def substituted(self, template_text, **constants):
         values = dict(self.input_expressions, p=self.instance_name)
-        values.update({name: repr(float(value)) if isinstance(value, (int, float)) else value
+        values.update({name: repr(generated_number(float(value))) if isinstance(value, (int, float)) else value
                        for name, value in constants.items()})
         try:
             return string.Template(template_text).substitute(values)

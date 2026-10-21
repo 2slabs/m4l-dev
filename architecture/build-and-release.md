@@ -15,9 +15,11 @@
 5. **Write the release**: `dist/<script name>-<version>/` with the frozen `.amxd` (scripts embedded, the device's
    own first, then the UI and views scripts) and presets made for it, zipped as `dist/<script name>-<version>.zip`.
 
-Nothing is written before steps 1-3 pass. Every byte depends only on the sources: the frozen files' dates are a fixed
-constant (`m4l_dev/amxd.py`), the `.adv` gzip header is written by hand (mtime 0, OS 3), the zip's entries carry a fixed
-date, `LastModDate` in presets is 0. A build under Python 3.9 and 3.11 writes the same bytes.
+Nothing is written before steps 1-3 pass (step 2 includes the generated-numbers check: overview.md, "Generated
+numbers"). Every byte depends only on the sources, on every machine: every computed number goes through
+`generated_number`, the frozen files' dates are a fixed constant (`m4l_dev/amxd.py`), the `.adv` gzip header is
+written by hand (mtime 0, OS 3), the zip's entries carry a fixed date, `LastModDate` in presets is 0. A build under
+Python 3.9 and 3.11 writes the same bytes.
 
 **Releasing**: bump the device's version, build, commit devices/ and the lock, tag, and upload
 `dist/<script name>-<version>.zip` to the repository's release.

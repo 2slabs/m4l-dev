@@ -19,6 +19,7 @@ from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
 LOOK_AHEAD_STEPS = 2
 TAP_NAMES = ("two_before", "one_before", "at", "one_after")   # samples n-2, n-1, n, n+1; n: the first after the edge
@@ -39,11 +40,11 @@ POLYBLAMP4_RESIDUAL = (
 
 
 def horner(coefficients, variable):
-    """GenExpr for the polynomial sum(c_i d^i), in Horner form."""
+    """GenExpr for the polynomial sum(c_i d^i), in Horner form, each coefficient (exact) through generated_number."""
     values = [Fraction(c) for c in coefficients]
-    expression = repr(float(values[-1]))
+    expression = repr(generated_number(values[-1]))
     for value in reversed(values[:-1]):
-        expression = f"({expression}) * {variable} + {float(value)!r}" if value else f"({expression}) * {variable}"
+        expression = f"({expression}) * {variable} + {generated_number(value)!r}" if value else f"({expression}) * {variable}"
     return expression
 
 

@@ -42,7 +42,7 @@ FUNCTIONS = {
 sidechain_pump_duck(ph, attack_fraction, release_end, curve) {{
 \tduck = 0;
 \tif (ph < attack_fraction) {{
-\t\tduck = sin({math.pi / 2!r} * ph / attack_fraction);
+\t\tduck = sin(halfpi * ph / attack_fraction);
 \t}} else {{
 \t\tduck = pow(1 - clamp((ph - attack_fraction) / (release_end - attack_fraction), 0, 1), 1 + curve * {CURVE_EXPONENT_PER_CURVE!r});
 \t}}

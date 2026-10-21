@@ -26,9 +26,11 @@ places its statements once a step; one that evaluates its ADAA at several points
 `output_expression(newest)` at each point and `remember_statements(newest)` for the point it keeps.
 """
 import math
+from fractions import Fraction
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
 
 class AntiderivativeAntialiasingKernel:
@@ -92,16 +94,17 @@ def adaa_equaliser_remez_design(order, edge_cycles, tap_pairs):
 
 
 # The decisions (the module docstring): the 2x taps are adaa_equaliser_remez_design(order, 5/24, 2)'s, recorded here
-# so a build does not run the exchange (tests/test_techniques.py designs them again, to 1e-12).
+# so a build does not run the exchange (tests/test_techniques.py designs them again, to 5e-10 of each), to
+# generated_number's digits (m4l_dev/generated_numbers.py); the middle tap takes up DC exactly (a Fraction).
 # Order 1: the product with cos(w / 2) within +-0.00114 (0.0099 dB) up to the edge.
 # Order 2: the product with (1 + 2 cos w) / 3 within +-0.0111 (0.0972 dB) up to the edge, and no higher up to the
 # host's Nyquist (1/4 of the 2x rate); above that, to the 2x Nyquist, it lifts the 3-tap mean's stop band (the product
 # +6.4 dB there, the equaliser alone +15.9 dB): the downsampler's.
 ADAA_EQUALISER_EDGE_AT_2X = 5 / 24
-FIRST_ORDER_OUTER_TAP_AT_2X = 0.039075017735941485
-FIRST_ORDER_INNER_TAP_AT_2X = -0.27311963220261654
-SECOND_ORDER_OUTER_TAP_AT_2X = 0.2663188927333224
-SECOND_ORDER_INNER_TAP_AT_2X = -1.3145767744925694
+FIRST_ORDER_OUTER_TAP_AT_2X = 0.03907501774
+FIRST_ORDER_INNER_TAP_AT_2X = -0.2731196322
+SECOND_ORDER_OUTER_TAP_AT_2X = 0.2663188927
+SECOND_ORDER_INNER_TAP_AT_2X = -1.314576774
 
 
 def checked_equaliser_taps(taps, where):
@@ -117,7 +120,8 @@ def checked_equaliser_taps(taps, where):
 
 
 def _five_symmetric_taps(outer, inner):
-    return checked_equaliser_taps((outer, inner, 1 - 2 * outer - 2 * inner, inner, outer), "ADAA_EQUALISER_DECISIONS")
+    middle = generated_number(1 - 2 * Fraction(outer) - 2 * Fraction(inner))
+    return checked_equaliser_taps((outer, inner, middle, inner, outer), "ADAA_EQUALISER_DECISIONS")
 
 
 ADAA_EQUALISER_DECISIONS = {

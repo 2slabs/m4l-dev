@@ -57,6 +57,7 @@ import math
 
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import CircuitModule
+from m4l_dev.generated_numbers import generated_number
 from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell
 from m4l_dev.techniques.zero_delay_allpass_cascade import FirstOrderAllpassStage, ZeroDelayAllpassCascade
 from m4l_dev.techniques.zero_delay_allpass_cascade import small_signal_response as cascade_response
@@ -270,7 +271,7 @@ def phasor_notches_hz(corner_hz, pot_position, stage_corner_spread, sample_rate,
 
 def _expression(term):
     """A character term (a number or a run-time expression) as GenExpr text."""
-    return term if isinstance(term, str) else repr(float(term))
+    return term if isinstance(term, str) else repr(generated_number(float(term)))
 
 
 def _ratio(numerator, denominator):
@@ -318,9 +319,9 @@ class MutronBiPhase(CircuitModule):
                                             attack_ms=_expression(term("cell_attack_ms")),
                                             release_ms=_expression(term("cell_release_ms")), **sweep_cell_law)
             bypass_cell = LedDrivenPhotocell(f"{p}_bypass_cell_{side}", drive_current_amps=f"{p}_bypass_led_{side}",
-                                             attack_ms=repr(c.cell_attack_ms), release_ms=repr(c.cell_release_ms),
+                                             attack_ms=_expression(c.cell_attack_ms), release_ms=_expression(c.cell_release_ms),
                                              **bypass_cell_law)
-            stages = [FirstOrderAllpassStage(f"{p}_corner_{side}_hz * {1 + spread * ratio!r}"
+            stages = [FirstOrderAllpassStage(f"{p}_corner_{side}_hz * {generated_number(1 + spread * ratio)!r}"
                                              if not isinstance(spread, str)
                                              else f"{p}_corner_{side}_hz * (1 + {spread} * {ratio!r})")
                       for ratio in STAGE_SPREAD_PATTERN[side]]
@@ -441,8 +442,8 @@ ${p}_dry_b = ${phasor_b_input} > 1.5 ? ${input_b_volts} : (${phasor_b_input} > 0
             "FEEDBACK_POT_OHMS": repr(FEEDBACK_POT_OHMS),
             "OUTPUT_COUPLING_FARADS": repr(OUTPUT_COUPLING_FARADS),
             "WET_INVERTER_INPUT_OHMS": repr(WET_INVERTER_INPUT_OHMS),
-            "MIX_WEIGHT": repr(alpha),
-            "MIX_CORNER_HZ": repr(mix_corner),
+            "MIX_WEIGHT": repr(generated_number(alpha)),
+            "MIX_CORNER_HZ": repr(generated_number(mix_corner)),
             "NOTCH_SEARCH_REACH": repr(NOTCH_SEARCH_REACH),
             "NOTCH_SEARCH_GRID": str(NOTCH_SEARCH_GRID),
             "NOTCH_SEARCH_SECTIONS": str(NOTCH_SEARCH_SECTIONS),

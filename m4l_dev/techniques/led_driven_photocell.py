@@ -27,6 +27,7 @@ current the cell is set to it on its first sample (a History starts at a number)
 """
 from m4l_dev.build_error import BuildError
 from m4l_dev.gen_blocks import Technique
+from m4l_dev.generated_numbers import generated_number
 
 
 def _positive_number(instance_name, name, value):
@@ -76,8 +77,10 @@ class LedDrivenPhotocell(Technique):
                                  f"a darker one, got {release_from_amps!r} A to {release_to_amps!r} A")
             self.release_span = 1 / release_to_amps - 1 / release_from_amps
         else:
-            release_from = release_from or repr(_positive_number(instance_name, "release_from_amps", release_from_amps))
-            release_to = release_to or repr(_positive_number(instance_name, "release_to_amps", release_to_amps))
+            release_from = release_from or repr(generated_number(_positive_number(instance_name, "release_from_amps",
+                                                                                  release_from_amps)))
+            release_to = release_to or repr(generated_number(_positive_number(instance_name, "release_to_amps",
+                                                                              release_to_amps)))
             self.release_span = f"(1 / {release_to} - 1 / {release_from})"
 
     def _numbers_only(self, what):

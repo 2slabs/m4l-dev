@@ -222,7 +222,8 @@ class AntiderivativeAntialiasingEqualiserTests(unittest.TestCase):
             equaliser = equaliser_of(order, 2)
             taps, worst = adaa_equaliser_remez_design(order, ADAA_EQUALISER_EDGE_AT_2X, 2)
             for designed, kept in zip(taps, equaliser.taps):
-                self.assertAlmostEqual(designed, kept, places=12, msg=order)
+                # kept to generated_number's 10 significant digits
+                self.assertAlmostEqual(designed, kept, delta=5e-10 * abs(designed), msg=order)
             self.assertEqual(equaliser.edge_cycles, ADAA_EQUALISER_EDGE_AT_2X)
             self.assertAlmostEqual(sum(equaliser.taps), 1.0, places=15)
             self.assertLess(-20 * math.log10(1 - worst), ripple_db, msg=order)
