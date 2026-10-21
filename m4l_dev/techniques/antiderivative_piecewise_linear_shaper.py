@@ -104,9 +104,16 @@ adaa2_ramp(u0, u1, u2) {
 }
 
 
+# a table's name is a digest of its pieces to this many significant digits: well past any real change, well short of
+# the last digits, which differ between machines
+NAME_DIGITS = 12
+
+
 class PiecewiseLinearTable:
     """A transfer as straight pieces: `pieces` is [(from x, slope, intercept)], sorted, the first from -inf. Its
-    GenExpr functions are named `<base_name>_<digest of the pieces>`."""
+    GenExpr functions are named `<base_name>_<digest of the pieces>`, the pieces rounded to NAME_DIGITS significant
+    digits first: maths libraries round the last bits differently between machines, and the same table has to get
+    the same name on every machine (m4l_dev/build_comparison.py)."""
 
     def __init__(self, base_name, pieces):
         if not pieces or pieces[0][0] != -math.inf:
@@ -117,7 +124,8 @@ class PiecewiseLinearTable:
         if not all(math.isfinite(value) for piece in pieces for value in piece[1:]):
             raise BuildError(f"PiecewiseLinearTable {base_name}: every slope and intercept must be finite")
         self.pieces = list(pieces)
-        digest = hashlib.sha256(repr(self.pieces).encode()).hexdigest()[:8]
+        rounded = [tuple(float(f"{value:.{NAME_DIGITS}g}") for value in piece) for piece in self.pieces]
+        digest = hashlib.sha256(repr(rounded).encode()).hexdigest()[:8]
         self.function_name = f"{base_name}_{digest}"
 
     def value(self, x):

@@ -656,6 +656,15 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
             area = sum(table.value(x * (k + 0.5) / 4000) for k in range(4000)) * x / 4000      # the area from 0
             self.assertAlmostEqual(table.integral(x), area, places=5, msg=x)
 
+    def test_a_tables_name_is_the_same_on_every_machine(self):
+        # the last digits of computed pieces differ between maths libraries; the name mustn't (build_comparison.py)
+        nudged = [(start, slope, intercept * (1 + 4e-16)) for start, slope, intercept in self.CLIP]
+        self.assertEqual(PiecewiseLinearTable("clip", nudged).function_name,
+                         PiecewiseLinearTable("clip", self.CLIP).function_name)
+        changed = [self.CLIP[0], self.CLIP[1], (0.5, 0.0, 0.5001)]
+        self.assertNotEqual(PiecewiseLinearTable("clip", changed).function_name,
+                            PiecewiseLinearTable("clip", self.CLIP).function_name)
+
     def test_the_mean_is_exact_on_a_piece_and_lowers_the_aliases(self):
         table = PiecewiseLinearTable("clip", self.CLIP)
         program = harness([AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, oversampling=1)], {},
