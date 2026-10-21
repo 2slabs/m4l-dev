@@ -179,6 +179,16 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(layout_rules.live_toggle_width("in key"), 40)
         self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 80)
 
+    def test_a_dial_is_as_wide_as_its_name_needs(self):
+        patch = builder(book=preset_book(init={"A": 0, "Volume": 0}), info_keys=("A",))
+        width = layout_rules.live_dial_width("Velocity Amount")
+        made = patch.dial("A", "Velocity Amount", patch.target, "a", 0, 1, 0, 12, 119, "one", width=width)
+        self.assertEqual(patch.find(made)["presentation_rect"][2], width)
+        patch.check()
+        for bad_width in (40, 46):
+            with self.assertRaisesRegex(BuildError, "at least 44, on the 4 px grid"):
+                patch.dial("B", "B", patch.target, "b", 0, 1, 0, 120, 119, "one", width=bad_width)
+
     def test_text_is_measured_by_its_characters_with_room_around_it(self):
         # capitals are wider: "FM amount" (9 characters) needs a wider dial than "Velocity" (8); two tab names of
         # three digits each get their padding ("246|248" read as "246248" with 1 px of slack)

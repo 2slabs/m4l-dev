@@ -308,8 +308,9 @@ def layout_facts(visible):
     for box in foreground:
         x, y, w, h = box["presentation_rect"]
         name, notes = box.get("varname", box["id"]), []
-        if box["maxclass"] == "live.dial" and (w, h) != (layout_rules.DIAL_WIDTH, layout_rules.DIAL_HEIGHT):
-            notes.append(f"dial {w:g} x {h:g}, the contract's is {layout_rules.DIAL_WIDTH} x {layout_rules.DIAL_HEIGHT}")
+        if box["maxclass"] == "live.dial" and (w < layout_rules.DIAL_WIDTH or h != layout_rules.DIAL_HEIGHT):
+            notes.append(f"dial {w:g} x {h:g}, the contract's is at least {layout_rules.DIAL_WIDTH} (wider for its "
+                         f"name) x {layout_rules.DIAL_HEIGHT}")
         if box["maxclass"] in ("live.menu", "live.tab", "live.text", "live.numbox") and h == layout_rules.ROW_H \
                 and y not in (layout_rules.HEADER_Y, layout_rules.ROW_Y):
             notes.append(f"a {layout_rules.ROW_H} px row control at y {y:g}, not in the row band (y {layout_rules.ROW_Y})")

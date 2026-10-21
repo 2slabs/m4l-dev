@@ -135,7 +135,8 @@ playback. The rule (ours, so no tie and no float crumb decides anything):
 Two rules, both in `layout_rules.py` and checked by `DevicePatchBuilder.check()`:
 - a live.tab's buttons hold their longest name and 6 px (`live_tab_button_problem`);
 - a live.dial holds its short name and 4 px, a live.menu its longest item, a 2 px inset and its arrow, a live.text
-  its text and 8 px (`live_text_problem`), at least 44 px for a dial, 40 for a menu.
+  its text and 8 px (`live_text_problem`), at least 44 px for a dial, 40 for a menu. A dial whose name needs more
+  is made wider: `dial(..., width=live_dial_width(short))`.
   All text is measured in Live's font as a stand-in gives it: Liberation Sans at 11 px, per character
   (`LIVE_FONT_ADVANCES`, `live_text_width`), so capitals count wider. No source gives Live's font metrics; the size
   is calibrated from one case seen in Live (SHORTCUTS.md); tools/render_pages.py draws with the same font, checks the

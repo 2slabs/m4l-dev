@@ -350,11 +350,15 @@ class DevicePatchBuilder:
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
              views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0,
-             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, width=layout_rules.DIAL_WIDTH):
         """A live.dial: a float by default; integer=True Live's Int type (256 values at most); items=[names] an
         enum (minimum, maximum, unit and exponent unused), showing the chosen name. Its value goes to `target` as
         `message value` (scaled by `scale`), and to each (view box, message) in `views`. visibility: see
-        `visibility_values`."""
+        `visibility_values`. width: DIAL_WIDTH, or wider for a short name that needs it
+        (layout_rules.live_dial_width(short)); on the grid."""
+        if width < layout_rules.DIAL_WIDTH or width % layout_rules.GRID:
+            self.fail(f"dial {name!r} is {width!r} px wide: at least {layout_rules.DIAL_WIDTH}, on the "
+                      f"{layout_rules.GRID} px grid")
         hidden = self.visibility_values("dial", name, visibility, initial_outside_presets)
         if integer and maximum - minimum >= INT_PARAMETER_VALUES:
             self.fail(f"dial {name!r}: an Int parameter holds {INT_PARAMETER_VALUES} values, {minimum}..{maximum} has more")
@@ -369,8 +373,8 @@ class DevicePatchBuilder:
             values = dict(parameter_mmin=float(minimum), parameter_mmax=float(maximum), parameter_unitstyle=unit,
                           parameter_exponent=float(exponent))
         box_id = self.live_parameter("live.dial", name, short,
-                                     (1500 + x, 700 + y, layout_rules.DIAL_WIDTH, layout_rules.DIAL_HEIGHT), kind,
-                                     (x, y, layout_rules.DIAL_WIDTH, layout_rules.DIAL_HEIGHT), parameter_initial_enable=1,
+                                     (1500 + x, 700 + y, width, layout_rules.DIAL_HEIGHT), kind,
+                                     (x, y, width, layout_rules.DIAL_HEIGHT), parameter_initial_enable=1,
                                      parameter_initial=[float(initial) if items is None else initial], **values,
                                      **hidden)
         varname = varname_for(name)
