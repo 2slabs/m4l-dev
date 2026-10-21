@@ -16,11 +16,13 @@ Things done the quick way, to come back to. Each with when it was taken.
   saved, for 2sl filter); the same file holds an Int parameter's form, not taught yet. A MIDI effect is still unseen.
 - 2026-10-16: a device without a Preset menu still gets the UI script's Preset-menu code (`PRESETS = []`, msg_int, which
   then only errors). Proper, if it matters: leave the code out when there is no menu.
-- 2026-10-18: how wide a live.dial / live.menu / live.text must be for its text (`m4l_dev/layout_rules.py`:
-  `LIVE_TEXT_PIXELS_PER_CHARACTER` = 5.5) is calibrated from one observation (2sl gate v0.5's 8-character dial names
-  in 44 px dials, played in Live), not from Live's font metrics, which no source gives (references/README.md, "Live's
-  control font"). Moved here from 2sl gate. Proper: measure Live's dial / menu / toggle text in Live (a screenshot of
-  known strings at known widths), or find the font and its metrics.
+- 2026-10-18 (re-done 2026-10-21): how wide a Live control must be for its text (`m4l_dev/layout_rules.py`) is
+  measured with a stand-in font (Liberation Sans at 11 px, `LIVE_FONT_ADVANCES`, the size calibrated from one
+  observation: 2sl gate v0.5's 8-character dial names in 44 px dials, played in Live), not Live's own font, whose
+  metrics no source gives (references/README.md, "Live's control font"). Since 2026-10-21 per character with padding
+  (renders showed touching labels), so "Symmetry" now measures over 44 px though Live showed it fitting: the stand-in
+  is wider than Live there. Proper: measure Live's dial / menu / toggle / tab text in Live (a screenshot of known
+  strings at known widths), or find the font and its metrics, and replace the table.
 - 2026-10-20: the Moog transistor ladder module's Emphasis runs the circuit's law (k 4 at 7.5 by the Regen Cal) on an
   UNVERIFIED pot curve: `emphasis_pot_audio_taper_at_half_rotation` 0.10, the common 10 %-at-half audio convention
   mirrored (references/circuits/moog-transistor-ladder.md §7), not the 50k REV AUD part's (no datasheet, no measured

@@ -47,18 +47,36 @@ class RenderPagesTests(unittest.TestCase):
             self.assertIn(f"{page}.png", facts)
 
     def test_a_column_of_five_taller_tabs_draws_its_names_and_keeps_the_contract(self):
-        """The mod page's tab column (2sl gate SPEC v0.7 §5): five lines of 24 px, 64 px wide, 'Random 1·2' the
-        longest, with a middle dot and an en dash Cozette has."""
+        """The mod page's tab column (2sl gate SPEC v0.7 §5): five lines of 24 px, 68 px wide ('Random 1·2', the
+        longest, and its padding), with a middle dot and an en dash."""
         items = ["Env 1·2", "Env 3·4", "Random 1·2", "Seq B–D", "Pressure"]
         with contextlib.redirect_stdout(io.StringIO()):
             fixture_device.build_fixture_device(self.root, patch_edit=lambda patch: patch.tabs(
-                "Mod tab", "Mod tab", items, 400, layout_rules.VIEW_Y, 64, "two", initial_outside_presets=0, rows=5,
+                "Mod tab", "Mod tab", items, 400, layout_rules.VIEW_Y, 68, "two", initial_outside_presets=0, rows=5,
                 row_height=24, visibility=2))
         render_pages.render_device(self.device_folder, self.output, scale=1)
         with open(os.path.join(self.output, "layout.txt"), encoding="utf-8") as facts_file:
             facts = facts_file.read()
-        self.assertIn("mod_tab [live.tab] x 400 w 64 h 120", facts)
+        self.assertIn("mod_tab [live.tab] x 400 w 68 h 120", facts)
         self.assertNotIn("contract: mod_tab", facts)
+
+    def test_a_text_that_does_not_fit_its_control_fails_saying_which(self):
+        # the build's own rules (layout_rules), on what the build wrote: a dial narrowed to 20 px after it
+        patcher_path = os.path.join(self.device_folder, f"{fixture_device.FIXTURE_SCRIPT_NAME}.maxpat")
+        with open(patcher_path, encoding="utf-8") as patcher_file:
+            patch = json.load(patcher_file)
+        narrowed = next(entry["box"] for entry in patch["patcher"]["boxes"]
+                        if entry["box"].get("maxclass") == "live.dial" and entry["box"].get("presentation") == 1)
+        narrowed["presentation_rect"][2] = 20
+        with open(patcher_path, "w", encoding="utf-8") as patcher_file:
+            json.dump(patch, patcher_file)
+        with self.assertRaises(render_pages.RenderFailure) as failure:
+            render_pages.render_device(self.device_folder, self.output)
+        self.assertIn(f"{narrowed['varname']} (live.dial): its text doesn't fit", str(failure.exception))
+
+    def test_the_stand_in_font_is_the_one_the_rules_measure_by(self):
+        font = render_pages.load_live_font()             # fails when the table and the font file disagree
+        self.assertAlmostEqual(font.getlength("FM amount"), layout_rules.live_text_width("FM amount"), places=6)
 
     def test_a_box_off_the_device_fails_saying_which(self):
         patcher_path = os.path.join(self.device_folder, f"{fixture_device.FIXTURE_SCRIPT_NAME}.maxpat")

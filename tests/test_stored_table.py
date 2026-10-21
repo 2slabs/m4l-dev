@@ -300,14 +300,14 @@ class ControlFormTests(unittest.TestCase):
     def test_a_column_of_five_tabs_with_taller_lines(self):
         patch = builder()
         items = ["Env 1·2", "Env 3·4", "Random 1·2", "Seq B–D", "Pressure"]
-        tabs = patch.tabs("Tab", "Tab", items, 12, layout_rules.VIEW_Y, 64, "one", initial_outside_presets=0, rows=5,
+        tabs = patch.tabs("Tab", "Tab", items, 12, layout_rules.VIEW_Y, 68, "one", initial_outside_presets=0, rows=5,
                           row_height=24, visibility=identity.VISIBILITY_HIDDEN)
         box = patch.find(tabs)
-        self.assertEqual(box["presentation_rect"], [12.0, float(layout_rules.VIEW_Y), 64.0, 120.0])
+        self.assertEqual(box["presentation_rect"], [12.0, float(layout_rules.VIEW_Y), 68.0, 120.0])
         self.assertEqual(box["num_lines_presentation"], 5)
-        self.assertEqual(layout_rules.live_tabs_width(items, rows=5), 64, "'Random 1·2': 10 x 6 + 1 = 61")
+        self.assertEqual(layout_rules.live_tabs_width(items, rows=5), 68, "'Random 1·2': 60.6 + 6 = 66.6")
         with self.assertRaisesRegex(BuildError, "less than the row band"):
-            patch.tabs("Pick", "Pick", items, 100, layout_rules.VIEW_Y, 64, "two", initial_outside_presets=0, rows=5,
+            patch.tabs("Pick", "Pick", items, 100, layout_rules.VIEW_Y, 68, "two", initial_outside_presets=0, rows=5,
                        row_height=12)
 
     def test_seed_as_a_dial_is_the_numbox_parameter_in_another_box(self):

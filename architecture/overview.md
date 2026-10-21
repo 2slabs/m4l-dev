@@ -21,7 +21,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 |---|---|
 | `device_repository.py` | `DeviceRepository`: where a device's sources are and where its build writes; refuses writes inside the kit |
 | `patch_builder.py` | `DevicePatchBuilder`: the patch, box by box, and every check of it (`check()`) |
-| `layout_rules.py` | the 2sl layout contract (169 px, the bands, the header), the overlap check, and how wide a control must be for its text (live.tab buttons in Cozette; live.dial / live.menu / live.text in Live's font, 5.5 px a character) |
+| `layout_rules.py` | the 2sl layout contract (169 px, the bands, the header), the overlap check, and how wide a control must be for its text (live.dial / live.menu / live.text / live.tab text in Live's font, measured per character by a stand-in, with padding) |
 | `seeded_random.py` | `SeededRandom`: the device's one random generator, its Seed and Loop controls (seeded-random.md) |
 | `chord_block.py` | `ChordBlock`: chord shapes, In key, held keys, names, Drift, the chord display (chord-block.md) |
 | `stored_table.py` | `StoredTable`: a table of values saved with the set and in presets as packed Stored Only parameters, not automated; its fields, its preset book form, its brain code and its Hidden editors (stored-table.md) |
@@ -133,9 +133,11 @@ playback. The rule (ours, so no tie and no float crumb decides anything):
 ## Layout: widths from text
 
 Two rules, both in `layout_rules.py` and checked by `DevicePatchBuilder.check()`:
-- a live.tab's buttons hold their longest item in Cozette (`live_tab_button_problem`, 6 px a character + 1);
-- a live.dial holds its short name, a live.menu its longest item and arrow, a live.text its text, in Live's own font
-  (`live_text_problem`): 5.5 px a character, at least 44 px for a dial, 40 for a menu. No source gives Live's font
-  metrics; 5.5 is calibrated from one case seen in Live (SHORTCUTS.md). A box taller than a dial (a pad) isn't
-  checked. `live_dial_width`, `live_menu_width`, `live_toggle_width`, `live_tabs_width` give the narrowest that
+- a live.tab's buttons hold their longest name and 6 px (`live_tab_button_problem`);
+- a live.dial holds its short name and 4 px, a live.menu its longest item, a 2 px inset and its arrow, a live.text
+  its text and 8 px (`live_text_problem`), at least 44 px for a dial, 40 for a menu.
+  All text is measured in Live's font as a stand-in gives it: Liberation Sans at 11 px, per character
+  (`LIVE_FONT_ADVANCES`, `live_text_width`), so capitals count wider. No source gives Live's font metrics; the size
+  is calibrated from one case seen in Live (SHORTCUTS.md); tools/render_pages.py draws with the same font, checks the
+  table against it and fails a page whose text doesn't fit. A box taller than a dial (a pad) isn't checked. `live_dial_width`, `live_menu_width`, `live_toggle_width`, `live_tabs_width` give the narrowest that
   passes, on the grid.

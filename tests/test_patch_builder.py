@@ -131,10 +131,10 @@ class LayoutTests(unittest.TestCase):
         patch.tabs("Tool", "Tool", ["one", "two", "three", "four"], 12, 40, 76, "one", initial_outside_presets=0, rows=2)
         self.assertEqual(find_by_varname(patch, "tool")["presentation_rect"][3], 30, "two rows of 15 px")
         self.assertEqual(find_by_varname(patch, "tool")["num_lines_presentation"], 2)
-        # 2 a row in 74 px: 37 px a button, "three" needs 6 x 5 + 1 = 31; "-2 pls" (2sl stab) needs 37
+        # 2 a row in 76 px: 38 px a button, "three" needs 25.1 + 6; "-2 pls" (2sl stab) needs 26.9 + 6 = 32.9
         with self.assertRaisesRegex(BuildError, "longest"):
-            patch.tabs("Pick", "Pick", ["-1 sq", "-2 sq", "-2 pls"], 12, 80, 110, "one", initial_outside_presets=0)
-        patch.tabs("Pick", "Pick", ["-1 sq", "-2 sq", "-2 pls"], 12, 80, 112, "one", initial_outside_presets=0)
+            patch.tabs("Pick", "Pick", ["-1 sq", "-2 sq", "-2 pls"], 12, 80, 96, "one", initial_outside_presets=0)
+        patch.tabs("Pick", "Pick", ["-1 sq", "-2 sq", "-2 pls"], 12, 80, 100, "one", initial_outside_presets=0)
 
     def test_the_page_switch_is_hidden(self):
         patch = builder()
@@ -175,9 +175,18 @@ class LayoutTests(unittest.TestCase):
         with self.assertRaises(BuildError) as failure:
             patch.check()
         self.assertIn("A (live.dial) is 44 px wide, its text needs 84", str(failure.exception))
-        self.assertIn("B (live.menu) is 40 px wide, its text needs 76", str(failure.exception))
-        self.assertEqual(layout_rules.live_toggle_width("in key"), 44)
-        self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 76)
+        self.assertIn("B (live.menu) is 40 px wide, its text needs 68", str(failure.exception))
+        self.assertEqual(layout_rules.live_toggle_width("in key"), 40)
+        self.assertEqual(layout_rules.live_tabs_width(["mono", "chords"]), 80)
+
+    def test_text_is_measured_by_its_characters_with_room_around_it(self):
+        # capitals are wider: "FM amount" (9 characters) needs a wider dial than "Velocity" (8); two tab names of
+        # three digits each get their padding ("246|248" read as "246248" with 1 px of slack)
+        self.assertGreater(layout_rules.live_text_width("FM amount"), layout_rules.live_text_width("Velocity") + 10)
+        self.assertEqual((layout_rules.live_dial_width("FM amount"), layout_rules.live_dial_width("Velocity")), (60, 44))
+        self.assertEqual(layout_rules.live_tabs_width(["246", "248"]), 52)
+        with self.assertRaisesRegex(BuildError, "doesn't measure"):
+            layout_rules.live_text_width("\u2603")
 
 
 class InfoTests(unittest.TestCase):

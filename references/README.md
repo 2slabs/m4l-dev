@@ -191,5 +191,5 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
 
 - **live.dial** (Max reference): https://docs.cycling74.com/reference/live.dial lists `fontname`, `fontsize`
   ("possible values from 8 to 72") and `fontface` with no default (checked 2026-10-18). No source here gives the
-  font Live draws a dial's name, a menu's item or a live.text's text in, or its metrics, so the kit's 5.5 px a
-  character (m4l_dev/layout_rules.py) stays a calibration (SHORTCUTS.md).
+  font Live draws a dial's name, a menu's item or a live.text's text in, or its metrics, so the kit's stand-in
+  (Liberation Sans at 11 px, m4l_dev/layout_rules.py) stays a calibration (SHORTCUTS.md).

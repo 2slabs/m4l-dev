@@ -10,12 +10,14 @@ band (x, width, the gap before it) and where a box leaves the layout contract (m
 
 Positions, sizes, labels and colours (m4l_dev/themes.py) are exact; the controls' insides are drawn the plain way
 (Live's own drawing isn't), and a display (jsui) is its frame and its name, not its drawing. Cozette text is drawn
-from the glyphs the views use (templates/cozette-glyphs.js); Live's own font, which no source gives, is
-the first of LIVE_FONT_CANDIDATES at the size where it is layout_rules.LIVE_TEXT_PIXELS_PER_CHARACTER a character.
+from the glyphs the views use (templates/cozette-glyphs.js); Live's own font, which no source gives, is the kit's
+stand-in (layout_rules.LIVE_FONT_FILE_NAME at LIVE_FONT_PIXELS, found among LIVE_FONT_CANDIDATES), whose advances
+layout_rules.LIVE_FONT_ADVANCES holds: checked against the font file here.
 
 Fails, saying why, when a shown box leaves the device or overlaps another shown with it (layout_rules), a control
-has no text to show, or a chrome label runs into a box or off the device. Whether text fits its box is the build's
-rule (layout_rules.live_text_problem), not this stand-in font's.
+has no text to show or its text doesn't fit it with its padding (a dial's name, a menu's item, a live.text's text, a
+tab's names: layout_rules.live_text_problem / live_tab_button_problem, the build's own rules), or a chrome label runs
+into a box or off the device.
 """
 import argparse
 import itertools
@@ -32,9 +34,9 @@ from m4l_dev import layout_rules  # noqa: E402
 from m4l_dev.themes import THEMES  # noqa: E402
 
 COZETTE_GLYPHS_PATH = os.path.join(KIT_DIRECTORY, "templates", "cozette-glyphs.js")
-LIVE_FONT_CANDIDATES = ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                        "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf")
+LIVE_FONT_CANDIDATES = (f"/usr/share/fonts/truetype/liberation/{layout_rules.LIVE_FONT_FILE_NAME}",
+                        f"/usr/share/fonts/liberation/{layout_rules.LIVE_FONT_FILE_NAME}",
+                        f"/Library/Fonts/{layout_rules.LIVE_FONT_FILE_NAME}")
 LIVE_DIAL_KNOB_DIAMETER = 22          # drawn size of a live.dial's knob, centred in its box (not a Live metric)
 
 
@@ -60,13 +62,18 @@ def load_cozette():
 
 
 def load_live_font():
+    """The stand-in for Live's font, checked against layout_rules.LIVE_FONT_ADVANCES (what the build measures by)."""
     for path in LIVE_FONT_CANDIDATES:
         if os.path.exists(path):
-            for size in range(14, 5, -1):          # the size whose average lowercase advance is closest to the rule
-                font = ImageFont.truetype(path, size)
-                if font.getlength("abcdefghijklmnopqrstuvwxyz") / 26 <= layout_rules.LIVE_TEXT_PIXELS_PER_CHARACTER:
-                    return font
-    raise RenderFailure(f"no stand-in for Live's font: none of {LIVE_FONT_CANDIDATES} exists")
+            font = ImageFont.truetype(path, layout_rules.LIVE_FONT_PIXELS)
+            wrong = {character: (advance, font.getlength(character))
+                     for character, advance in layout_rules.LIVE_FONT_ADVANCES.items()
+                     if abs(font.getlength(character) - advance) > 1e-6}
+            if wrong:
+                raise RenderFailure(f"{path} at {layout_rules.LIVE_FONT_PIXELS} px isn't the font "
+                                    f"layout_rules.LIVE_FONT_ADVANCES measures: (table, font) {wrong}")
+            return font
+    raise RenderFailure(f"no stand-in for Live's font: none of {LIVE_FONT_CANDIDATES} exists (install Liberation Sans)")
 
 
 class Device:
@@ -178,7 +185,7 @@ class Painter:
     def live_text(self, text, x, y, w, h, colour, align="centre"):
         """Text in the stand-in for Live's font, in the box (x, y, w, h)."""
         width = self.live_font.getlength(text)
-        left = x + (w - width) / 2 if align == "centre" else x + 3
+        left = x + (w - width) / 2 if align == "centre" else x + layout_rules.LIVE_MENU_TEXT_INSET_PIXELS
         ascent, descent = self.live_font.getmetrics()
         self.draw.text((left, y + (h - ascent - descent) / 2), text, font=self.live_font, fill=colour)
 
@@ -230,8 +237,7 @@ class Painter:
                 selected = i == picked
                 self.rect(round(bx), round(by), round(button_w), round(button_h), t["ink"] if selected else t["pad"])
                 self.frame(round(bx), round(by), round(button_w), round(button_h), t["ink"])
-                text_x = bx + (button_w - self.cozette_width(item)) / 2
-                self.cozette_text(item, text_x, by + button_h - 3, t["inverse"] if selected else t["ink"])
+                self.live_text(item, bx, by, button_w, button_h, t["inverse"] if selected else t["ink"])
         elif kind == "live.menu":
             self.rect(x, y, w, h, t["well"])
             self.frame(x, y, w, h, self.mix(t["unlit"], 0.6))
@@ -259,6 +265,18 @@ def text_problems(device, page, visible):
         if box["maxclass"].startswith("live.") and not (box.get("text") or values.get("parameter_shortname")
                                                        or values.get("parameter_enum")):
             problems.append(f"{box.get('varname', box['id'])} ({box['maxclass']}) has no text to show")
+        _, _, w, h = box["presentation_rect"]
+        if box["maxclass"] == "live.tab":
+            problem = layout_rules.live_tab_button_problem(values["parameter_enum"], w,
+                                                           int(box.get("num_lines_presentation", 1)))
+        elif h > layout_rules.DIAL_HEIGHT:
+            problem = None                       # a pad: its text has the room of its height (the build's rule)
+        else:
+            problem = layout_rules.live_text_problem(box["maxclass"], values.get("parameter_shortname", ""),
+                                                     values.get("parameter_enum", []), box.get("text", ""), w)
+        if problem:
+            problems.append(f"page {page!r}: {box.get('varname', box['id'])} ({box['maxclass']}): its text doesn't "
+                            f"fit: {problem}")
     page_layout = device.layout["pages"][device.page_names.index(page)]
     for text, x, baseline, _ in page_layout["labels"]:
         left, top, right, bottom = x, baseline - 9, x + layout_rules.COZETTE_ADVANCE * len(text), baseline + 2
