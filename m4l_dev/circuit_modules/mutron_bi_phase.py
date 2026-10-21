@@ -46,7 +46,11 @@ square); `depth_a`, `depth_b`, `feedback_a`, `feedback_b` (pot rotations 0..1); 
 `sweep_b_source` (0 Gen 1, 1 Gen 2, 2 Pedal); `sweep_sync` (0 Norm, 1 Rev); `phasor_b_input` (0 In A, 1 Out A, 2 In B);
 `foot_switch_a`, `foot_switch_b` (1 on: the phasor in); `pedal_volts` (0-5 V, the C-100's span).
 Outputs: `<name>_out_a`, `<name>_out_b` (volts, Outputs A and B), `<name>_corner_a_hz`, `<name>_corner_b_hz` (each
-phasor's nominal stage corner now), `<name>_sweep_a`, `<name>_sweep_b` (each phasor's sweep, 0..1, after Rev).
+phasor's nominal stage corner now), `<name>_sweep_a`, `<name>_sweep_b` (each phasor's sweep, 0..1, after Rev),
+`<name>_pot_a`, `<name>_pot_b` (each feedback pot's wiper position now, after the taper) and
+`<name>_stage_corner_spread` (the stages' spread now). The corner, the wiper and the spread are all a display needs of
+the running unit: `response_script_code()` gives the ES5 `<name>_phasor_response` and `<name>_phasor_notches_hz`
+(templates/mutron-bi-phase-response.template.js), the Python `phasor_response` and `phasor_notches_hz` step for step.
 """
 import dataclasses
 import math
@@ -56,7 +60,8 @@ from m4l_dev.gen_blocks import CircuitModule
 from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell
 from m4l_dev.techniques.zero_delay_allpass_cascade import FirstOrderAllpassStage, ZeroDelayAllpassCascade
 from m4l_dev.techniques.zero_delay_allpass_cascade import small_signal_response as cascade_response
-from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter
+from m4l_dev.techniques.zero_delay_one_pole_filter import (HIGHEST_PREWARP_OF_SAMPLE_RATE, LOWEST_CUTOFF_HZ,
+                                                           ZeroDelayOnePoleFilter)
 from m4l_dev.techniques.zero_delay_one_pole_filter import small_signal_response as one_pole_response
 
 # The drawing's parts (77204 sheets 1-2; references/circuits/mutron-bi-phase.md §2)
@@ -118,31 +123,46 @@ class MutronBiPhaseCharacter:
     rail_volts: float = 13.0
 
 
-def feedback_gain(rotation, character=MutronBiPhaseCharacter()):
-    """k: the fraction of J1-1 that comes back at the input stage's output (positive feedback), from the pot's rotation
-    0..1, with the wiper loaded by R7 + R6: 0.862 at full."""
-    position = min(max(rotation, 0.0), 1.0) ** character.feedback_pot_taper_exponent
+def feedback_pot_position(rotation, character=MutronBiPhaseCharacter()):
+    """The feedback pot's wiper position 0..1 at a rotation 0..1: rotation^taper (the module's `<name>_pot_a/b`)."""
+    return min(max(rotation, 0.0), 1.0) ** character.feedback_pot_taper_exponent
+
+
+def feedback_gain_at_position(position):
+    """k: the fraction of J1-1 that comes back at the input stage's output (positive feedback), from the wiper's
+    position, the wiper loaded by R7 + R6: 0.862 at full."""
     load = FEEDBACK_DIVIDER_TOP_OHMS + FEEDBACK_DIVIDER_BOTTOM_OHMS
     wiper = position * load / (load + position * (1 - position) * FEEDBACK_POT_OHMS)
     return INPUT_STAGE_GAIN_ON_PLUS * FEEDBACK_DIVIDER_BOTTOM_OHMS / load * wiper
 
 
-def feedback_lowpass_hz(rotation, character=MutronBiPhaseCharacter()):
+def feedback_lowpass_hz_at_position(position):
     """C5 against R6 || (R7 + the wiper's source resistance)."""
-    position = min(max(rotation, 0.0), 1.0) ** character.feedback_pot_taper_exponent
     source = FEEDBACK_DIVIDER_TOP_OHMS + position * (1 - position) * FEEDBACK_POT_OHMS
     resistance = 1 / (1 / FEEDBACK_DIVIDER_BOTTOM_OHMS + 1 / source)
     return 1 / (2 * math.pi * resistance * FEEDBACK_NODE_CAPACITOR_FARADS)
 
 
-def coupling_highpass_hz(rotation, character=MutronBiPhaseCharacter()):
+def coupling_highpass_hz_at_position(position):
     """C12 into J1-1's load: R26 (to a virtual ground) || the pot, its wiper loaded by R7 + R6."""
-    position = min(max(rotation, 0.0), 1.0) ** character.feedback_pot_taper_exponent
     load = FEEDBACK_DIVIDER_TOP_OHMS + FEEDBACK_DIVIDER_BOTTOM_OHMS
     lower = position * FEEDBACK_POT_OHMS
     pot = (1 - position) * FEEDBACK_POT_OHMS + (lower * load / (lower + load) if lower > 0 else 0.0)
     resistance = 1 / (1 / WET_INVERTER_INPUT_OHMS + 1 / pot)
     return 1 / (2 * math.pi * resistance * OUTPUT_COUPLING_FARADS)
+
+
+def feedback_gain(rotation, character=MutronBiPhaseCharacter()):
+    """k at the pot's rotation 0..1 (feedback_gain_at_position at the taper's position)."""
+    return feedback_gain_at_position(feedback_pot_position(rotation, character))
+
+
+def feedback_lowpass_hz(rotation, character=MutronBiPhaseCharacter()):
+    return feedback_lowpass_hz_at_position(feedback_pot_position(rotation, character))
+
+
+def coupling_highpass_hz(rotation, character=MutronBiPhaseCharacter()):
+    return coupling_highpass_hz_at_position(feedback_pot_position(rotation, character))
 
 
 def stage_corner_hz(cell_ohms):
@@ -178,18 +198,74 @@ def phasor_small_signal_response(frequency_hz, sweep_cell_ohms, feedback_rotatio
                                  character=MutronBiPhaseCharacter(), foot_switch_on=True):
     """One phasor's output over its input (complex) at `frequency_hz`, the cells steady at `sweep_cell_ohms`, as the
     module renders it (each one-pole the bilinear transform prewarped as the module prewarps it). The rails left out."""
-    corner = stage_corner_hz(sweep_cell_ohms)
-    stages = cascade_response(frequency_hz, [(corner * (1 + character.stage_corner_spread * ratio),)
-                                             for ratio in STAGE_SPREAD_PATTERN[phasor]], sample_rate, prewarp_hz=corner)
-    coupling = one_pole_response(frequency_hz, coupling_highpass_hz(feedback_rotation, character),
-                                 sample_rate)["highpass"]
-    fed_back = one_pole_response(frequency_hz, feedback_lowpass_hz(feedback_rotation, character), sample_rate)["lowpass"]
-    k = feedback_gain(feedback_rotation, character)
+    return phasor_response(frequency_hz, stage_corner_hz(sweep_cell_ohms),
+                           feedback_pot_position(feedback_rotation, character), character.stage_corner_spread,
+                           sample_rate, phasor, character, foot_switch_on)
+
+
+def phasor_response(frequency_hz, corner_hz, pot_position, stage_corner_spread, sample_rate, phasor="a",
+                    character=MutronBiPhaseCharacter(), foot_switch_on=True):
+    """phasor_small_signal_response from what the module computes as it runs: the stage corner now (`<name>_corner_
+    <side>_hz`), the feedback pot's wiper position (`<name>_pot_<side>`) and the stages' spread
+    (`<name>_stage_corner_spread`): the run-time character's other fields act only through these. `character` gives the
+    bypass cell's numbers (never moved at run time)."""
+    stages = cascade_response(frequency_hz, [(corner_hz * (1 + stage_corner_spread * ratio),)
+                                             for ratio in STAGE_SPREAD_PATTERN[phasor]], sample_rate, prewarp_hz=corner_hz)
+    coupling = one_pole_response(frequency_hz, coupling_highpass_hz_at_position(pot_position), sample_rate)["highpass"]
+    fed_back = one_pole_response(frequency_hz, feedback_lowpass_hz_at_position(pot_position), sample_rate)["lowpass"]
+    k = feedback_gain_at_position(pot_position)
     loop_input = -1 / (1 - k * fed_back * coupling * stages)
     wet = -coupling * stages * loop_input
     bypass_current = character.bypass_led_current_amps if foot_switch_on else character.led_current_dark_amps
     alpha, mix_corner = mix_weight_and_corner_hz(cell_ohms(bypass_current, character), character)
     return 1 + alpha * one_pole_response(frequency_hz, mix_corner, sample_rate)["highpass"] * (wet - 1)
+
+
+# The notch search (phasor_notches_hz and the display script's, the same steps): each of the STAGES / 2 notches is
+# looked for between two of the equal-stage peaks (2N atan(f / fc) a multiple of 2 pi: tan(m pi / N) x the corner),
+# the outer two brackets reaching NOTCH_SEARCH_REACH past the outer notches' nominal places; a log grid of
+# NOTCH_SEARCH_GRID points, then golden sections on the grid step either side of the least point
+NOTCH_SEARCH_REACH = 4.0
+NOTCH_SEARCH_GRID = 48
+NOTCH_SEARCH_SECTIONS = 60
+NOTCH_SEARCH_HIGHEST_OF_SAMPLE_RATE = 0.49
+
+
+def notch_search_brackets(corner_hz, sample_rate):
+    """[(low_hz, high_hz)] for each notch, held inside 1 Hz .. 0.49 x the sample rate."""
+    half = STAGES_PER_PHASOR // 2
+    edges = [corner_hz * math.tan(math.pi / (2 * STAGES_PER_PHASOR)) / NOTCH_SEARCH_REACH] + \
+        [corner_hz * math.tan(m * math.pi / STAGES_PER_PHASOR) for m in range(1, half)] + \
+        [corner_hz * math.tan((STAGES_PER_PHASOR - 1) * math.pi / (2 * STAGES_PER_PHASOR)) * NOTCH_SEARCH_REACH]
+    highest = NOTCH_SEARCH_HIGHEST_OF_SAMPLE_RATE * sample_rate
+    edges = [min(max(edge, 1.0), highest) for edge in edges]
+    return [(edges[m], edges[m + 1]) for m in range(half)]
+
+
+def phasor_notches_hz(corner_hz, pot_position, stage_corner_spread, sample_rate, phasor="a",
+                      character=MutronBiPhaseCharacter()):
+    """The phasor's notches now (Hz, low to high): the least |phasor_response| in each notch_search_brackets bracket.
+    The display script's `<name>_phasor_notches_hz` takes the same steps (response_script_code)."""
+    def level(log_hz):
+        response = phasor_response(math.exp(log_hz), corner_hz, pot_position, stage_corner_spread, sample_rate, phasor,
+                                   character)
+        return response.real * response.real + response.imag * response.imag
+    notches = []
+    golden = (math.sqrt(5) - 1) / 2
+    for low_hz, high_hz in notch_search_brackets(corner_hz, sample_rate):
+        low, high = math.log(low_hz), math.log(high_hz)
+        step = (high - low) / (NOTCH_SEARCH_GRID - 1)
+        levels = [level(low + i * step) for i in range(NOTCH_SEARCH_GRID)]
+        least = levels.index(min(levels))
+        a, b = low + max(least - 1, 0) * step, low + min(least + 1, NOTCH_SEARCH_GRID - 1) * step
+        for _ in range(NOTCH_SEARCH_SECTIONS):
+            c, d = b - golden * (b - a), a + golden * (b - a)
+            if level(c) < level(d):
+                b = d
+            else:
+                a = c
+        notches.append(math.exp((a + b) / 2))
+    return notches
 
 
 def _expression(term):
@@ -334,8 +410,41 @@ ${p}_sweep_a = ${sweep_a_source} > 0.5 ? ${p}_pedal : ${p}_gen_1;
 ${p}_sweep_b_selected = ${sweep_b_source} > 1.5 ? ${p}_pedal : (${sweep_b_source} > 0.5 ? ${p}_gen_2 : ${p}_gen_1);
 ${p}_sweep_b = ${sweep_sync} > 0.5 ? 1 - ${p}_sweep_b_selected : ${p}_sweep_b_selected;
 ${p}_dry_a = ${input_a_volts};""", pedal_full_scale=PEDAL_FULL_SCALE_VOLTS),
+            self.substituted("${p}_stage_corner_spread = ${spread};",
+                             spread=_expression(self.character_term("stage_corner_spread"))),
             self._phasor_statements("a"),
             self.substituted("""// S1, Phasor B's input: In A, Out A (series: A's output), In B
 ${p}_dry_b = ${phasor_b_input} > 1.5 ? ${input_b_volts} : (${phasor_b_input} > 0.5 ? ${p}_out_a : ${input_a_volts});"""),
             self._phasor_statements("b"),
         ])
+
+    def response_script_code(self):
+        """ES5 for a display: `<name>_phasor_response(frequencyHz, cornerHz, potPosition, spread, sampleRate, phasor)`
+        (|phasor_response|, the foot switch on) and `<name>_phasor_notches_hz(cornerHz, potPosition, spread,
+        sampleRate, phasor)` (phasor_notches_hz's steps), fed from the module's own outputs (`<name>_corner_<side>_hz`,
+        `<name>_pot_<side>`, `<name>_stage_corner_spread`) and the sample rate; this instance's bypass cell and the
+        drawing's parts filled in (templates/mutron-bi-phase-response.template.js)."""
+        from m4l_dev.generated_scripts import fill_template, kit_template_text
+        alpha, mix_corner = mix_weight_and_corner_hz(cell_ohms(self.character.bypass_led_current_amps, self.character),
+                                                     self.character)
+        return fill_template(kit_template_text("mutron-bi-phase-response.template.js"), {
+            "NAME": self.instance_name,
+            "STAGE_SPREAD_PATTERN": "{" + ", ".join(f"{side}: [" + ", ".join(repr(float(r)) for r in pattern) + "]"
+                                                    for side, pattern in STAGE_SPREAD_PATTERN.items()) + "}",
+            "STAGES_PER_PHASOR": str(STAGES_PER_PHASOR),
+            "LOWEST_CUTOFF_HZ": repr(LOWEST_CUTOFF_HZ),
+            "HIGHEST_PREWARP_OF_SAMPLE_RATE": repr(HIGHEST_PREWARP_OF_SAMPLE_RATE),
+            "INPUT_STAGE_GAIN_ON_PLUS": repr(INPUT_STAGE_GAIN_ON_PLUS),
+            "FEEDBACK_DIVIDER_TOP_OHMS": repr(FEEDBACK_DIVIDER_TOP_OHMS),
+            "FEEDBACK_DIVIDER_BOTTOM_OHMS": repr(FEEDBACK_DIVIDER_BOTTOM_OHMS),
+            "FEEDBACK_NODE_CAPACITOR_FARADS": repr(FEEDBACK_NODE_CAPACITOR_FARADS),
+            "FEEDBACK_POT_OHMS": repr(FEEDBACK_POT_OHMS),
+            "OUTPUT_COUPLING_FARADS": repr(OUTPUT_COUPLING_FARADS),
+            "WET_INVERTER_INPUT_OHMS": repr(WET_INVERTER_INPUT_OHMS),
+            "MIX_WEIGHT": repr(alpha),
+            "MIX_CORNER_HZ": repr(mix_corner),
+            "NOTCH_SEARCH_REACH": repr(NOTCH_SEARCH_REACH),
+            "NOTCH_SEARCH_GRID": str(NOTCH_SEARCH_GRID),
+            "NOTCH_SEARCH_SECTIONS": str(NOTCH_SEARCH_SECTIONS),
+            "NOTCH_SEARCH_HIGHEST_OF_SAMPLE_RATE": repr(NOTCH_SEARCH_HIGHEST_OF_SAMPLE_RATE)},
+            "mutron-bi-phase-response.template.js")

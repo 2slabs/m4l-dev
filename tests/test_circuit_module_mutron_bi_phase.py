@@ -9,9 +9,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.generated_scripts import check_es5  # noqa: E402
 from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
                                                      RUNTIME_CHARACTER_FIELDS, cell_ohms, feedback_gain,
+                                                     feedback_pot_position, phasor_notches_hz, phasor_response,
                                                      phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
 
@@ -240,6 +243,82 @@ class MutronBiPhaseTests(unittest.TestCase):
                           shape_2="0", depth_a="1", depth_b="1", feedback_a="0", feedback_b="0", sweep_a_source="0",
                           sweep_b_source="0", sweep_sync="0", phasor_b_input="0", foot_switch_a="1",
                           foot_switch_b="1", pedal_volts="0")
+
+
+def unit_with_spread_and_taper_at_run_time(**panel):
+    """The unit with the stages' spread and the feedback taper as Params (`spread`, `taper`), and the readings a
+    display takes: [out a, out b, corner a, corner b, pot a, pot b, spread]."""
+    made = MutronBiPhase("unit", input_a_volts="in1", input_b_volts="in1", rate_1_hz="rate_1", rate_2_hz="rate_2",
+                         shape_1="shape_1", shape_2="shape_2", depth_a="depth_a", depth_b="depth_b",
+                         feedback_a="feedback_a", feedback_b="feedback_b", sweep_a_source="sweep_a_source",
+                         sweep_b_source="sweep_b_source", sweep_sync="sweep_sync", phasor_b_input="phasor_b_input",
+                         foot_switch_a="foot_switch_a", foot_switch_b="foot_switch_b", pedal_volts="pedal",
+                         character_inputs={"stage_corner_spread": "spread", "feedback_pot_taper_exponent": "taper"})
+    params = dict(PANEL, **dict(dict(spread=0.05, taper=1.0), **panel))
+    readings = ["unit_out_a", "unit_out_b", "unit_corner_a_hz", "unit_corner_b_hz", "unit_pot_a", "unit_pot_b",
+                "unit_stage_corner_spread"]
+    return made, harness([made], params, readings, samplerate=SAMPLERATE)
+
+
+def rendered_notch_hz(program, output, around_hz, step=0.01):
+    """The rendered response's least point near `around_hz`: |H|^2 at around x e^-step, around, around x e^step (each
+    a settled sine), the parabola's vertex on log frequency. Fails unless the middle probe is the least."""
+    levels = [level ** 2 for level in responses(program, [around_hz * math.exp(k * step) for k in (-1, 0, 1)],
+                                                outputs=(output,))[0]]
+    if not levels[1] < min(levels[0], levels[2]):
+        raise AssertionError(f"no minimum of output {output} around {around_hz:.1f} Hz: |H|^2 {levels}")
+    return around_hz * math.exp(step * (levels[0] - levels[2]) / (2 * (levels[0] - 2 * levels[1] + levels[2])))
+
+
+class DisplayResponseTests(unittest.TestCase):
+    # the display script (response_script_code) = the Python model (phasor_response, phasor_notches_hz), and the
+    # notches it finds from the module's own readings (the corner, the wiper, the spread) are the rendered unit's
+
+    def test_the_readings_are_the_wiper_and_the_spread(self):
+        _, program = unit_with_spread_and_taper_at_run_time(feedback_a=0.6, feedback_b=0.3, spread=0.2, taper=2.0)
+        out = program.run(64, [[0.0] * 64])
+        self.assertAlmostEqual(out[4][-1], feedback_pot_position(0.6, MutronBiPhaseCharacter(
+            feedback_pot_taper_exponent=2.0)), places=12)
+        self.assertAlmostEqual(out[5][-1], 0.09, places=12)
+        self.assertAlmostEqual(out[6][-1], 0.2, places=12)
+
+    def test_the_display_script_is_the_modules_response_and_notches(self):
+        for character in (MutronBiPhaseCharacter(), MutronBiPhaseCharacter(wet_trim_ohms=2000.0,
+                                                                           bypass_led_current_amps=4e-3)):
+            block = MutronBiPhase("bi_phase", input_a_volts="0", input_b_volts="0", rate_1_hz="1", rate_2_hz="1",
+                                  shape_1="0", shape_2="0", depth_a="1", depth_b="1", feedback_a="0", feedback_b="0",
+                                  sweep_a_source="0", sweep_b_source="0", sweep_sync="0", phasor_b_input="0",
+                                  foot_switch_a="1", foot_switch_b="1", pedal_volts="0", character=character)
+            script = block.response_script_code()
+            check_es5({"mutron-bi-phase-response.js": script})
+            for corner, position, spread, rate, phasor in ((112.0, 0.0, 0.05, 44100, "a"), (500.0, 0.4, 0.05, 48000, "b"),
+                                                           (1800.0, 1.0, 0.3, 22050, "a"), (3400.0, 0.7, 0.0, 96000, "b")):
+                with self.subTest(corner=corner, position=position, spread=spread, rate=rate, phasor=phasor):
+                    for frequency in (30.0, corner, 7000.0):
+                        drawn = float(es5.evaluate(script + f"\nbi_phase_phasor_response({frequency}, {corner}, "
+                                                            f"{position}, {spread}, {rate}, '{phasor}')"))
+                        self.assertAlmostEqual(drawn / abs(phasor_response(frequency, corner, position, spread, rate,
+                                                                           phasor, character)), 1.0, places=9)
+                    drawn = [float(v) for v in es5.evaluate(script + f"\nbi_phase_phasor_notches_hz({corner}, "
+                                                                     f"{position}, {spread}, {rate}, '{phasor}')"
+                                                                     ".join(',')").split(",")]
+                    model = phasor_notches_hz(corner, position, spread, rate, phasor, character)
+                    self.assertEqual(len(drawn), 3)
+                    for x, y in zip(drawn, model):
+                        self.assertAlmostEqual(x / y, 1.0, places=6)
+
+    def test_the_rendered_notches_are_where_phasor_notches_hz_finds_them(self):
+        # from the low end (the coupling capacitors pull the low notch far up: ~1.9 x its equal-stage place at a
+        # 112 Hz corner) to the top, with feedback, spread and a taper; both phasors (their own spread patterns)
+        for settings in (dict(pedal=0.4), dict(pedal=2.5, feedback_a=0.6, feedback_b=0.3, spread=0.15),
+                         dict(pedal=4.6, feedback_a=1.0, feedback_b=0.8, spread=0.3, taper=2.0)):
+            block, program = unit_with_spread_and_taper_at_run_time(**settings)
+            silence = program.run(8820, [[0.0] * 8820])
+            for side, output in (("a", 0), ("b", 1)):
+                corner, position, spread = silence[2 + output][-1], silence[4 + output][-1], silence[6][-1]
+                for notch in phasor_notches_hz(corner, position, spread, SAMPLERATE, side, block.character):
+                    with self.subTest(side=side, notch=round(notch), **settings):
+                        self.assertAlmostEqual(rendered_notch_hz(program, output, notch) / notch, 1.0, delta=0.002)
 
 
 if __name__ == "__main__":
