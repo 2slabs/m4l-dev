@@ -227,16 +227,21 @@ test("the chord block: a key plays the Init shape (minor), held notes play the k
   assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Am", 57, 60, 64], "still held");
   deliverMessage(context, 0, "list", [57, 0]);
   assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord"], "released: nothing");
-  deliverMessage(context, 1, "chord_shape", [0]);
+  deliverMessage(context, 1, "chord_shape", [1]);
+  assert.ok(context.chordShapeIsHeldNotes() && !context.chordShapeIsOneNote());
   deliverMessage(context, 0, "list", [60, 100]);
   assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "C3", 60], "one note: its name and octave");
-  deliverMessage(context, 1, "chord_shape", [9]);
-  assert.ok(record.errors.some((e) => /Chord got 9, outside 0..7/.test(e)));
+  deliverMessage(context, 0, "list", [60, 0]);
+  deliverMessage(context, 1, "chord_shape", [0]);                  // the fixture has "one note" first
+  assert.ok(context.chordShapeIsOneNote() && !context.chordShapeIsHeldNotes());
+  assert.deepStrictEqual(Array.from(context.chordOnKey(62)), [62], "one note: the key alone");
+  deliverMessage(context, 1, "chord_shape", [10]);
+  assert.ok(record.errors.some((e) => /Chord got 10, outside 0..8/.test(e)));
 });
 
 test("the chord block fits m11 to the fixture's 4 notes: the fifth and the ninth go", () => {
   const { context, record } = load(BRAIN_SOURCE);
-  deliverMessage(context, 1, "chord_shape", [4]);
+  deliverMessage(context, 1, "chord_shape", [5]);
   deliverMessage(context, 0, "list", [57, 100]);
   assert.deepStrictEqual(chordsShown(record).pop(), [1, "chord", "Am11", 57, 60, 67, 74]);
 });
@@ -259,8 +264,8 @@ test("In key stacks Live's scale; under 5 notes it falls back to the fixed shape
   deliverMessage(context, 1, "chord_in_key", [0]);
   assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice"], "In key off: no notice");
   deliverMessage(context, 1, "chord_in_key", [1]);
-  context.setChordShapesInUse(false);
-  assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice"], "shapes not in use: none");
+  deliverMessage(context, 1, "chord_shape", [0]);
+  assert.deepStrictEqual(record.outlets.filter((o) => o[1] === "notice").pop(), [1, "notice"], "one note: no shape, no notice");
   assert.deepStrictEqual(record.errors, []);
 });
 

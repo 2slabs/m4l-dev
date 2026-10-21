@@ -8,15 +8,15 @@
 // every control message to chordBlockMessage(name, args) (true when it took it: chord_shape, chord_in_key,
 // scale_root, scale_intervals). The block tells the chord display (outlet CHORD_DISPLAY_OUTLET) what chordShow
 // gives it and the In key notice.
-var CHORD_SHAPES = /*CHORD_SHAPES*/;              // per Chord item: null (held notes) or semitones above the key
+var CHORD_SHAPES = /*CHORD_SHAPES*/;              // per Chord item: null (one note, held notes) or semitones above the key
 var CHORD_SHAPE_STEPS = /*CHORD_SHAPE_STEPS*/;    // the same chords as scale steps above the key (In key)
 var CHORD_DISPLAY_OUTLET = /*CHORD_DISPLAY_OUTLET*/;
+var CHORD_ONE_NOTE_ITEM = /*CHORD_ONE_NOTE_ITEM*/;   // the Chord item "one note" (-1: the device has none)
 var CHORD_IN_KEY_LEAST_SCALE_NOTES = 5;           // a smaller scale can't stack these shapes: the fixed shapes play
 var CHORD_NOTE_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 var chordShape = /*INITIAL_CHORD_SHAPE*/, chordInKey = /*INITIAL_CHORD_IN_KEY*/;
 var scaleRoot = 0, scaleIntervals = [], scaleKnown = false;   // Live's Scale Mode, once Live has reported it
-var chordShapesInUse = true;                      // the device plays the shapes now (2sl gate: Chords, not Mono)
 var chordKeysHeld = [];                           // {key, velocity}, the oldest first
 var chordKeyHolds = {};                           // key -> note-ons not yet released
 
@@ -46,12 +46,6 @@ function chordBlockMessage(name, args) {
   return true;
 }
 
-/** The device plays the shapes now, or not (2sl gate's Mono): the In key notice shows only while it does. */
-function setChordShapesInUse(inUse) {
-  chordShapesInUse = !!inUse;
-  updateChordInKeyNotice();
-}
-
 // ---- In key ---------------------------------------------------------------------------------------------------------
 
 function chordScaleIsUsable() { return chordInKey && scaleIntervals.length >= CHORD_IN_KEY_LEAST_SCALE_NOTES; }
@@ -60,7 +54,7 @@ function chordScaleIsUsable() { return chordInKey && scaleIntervals.length >= CH
  *  must show: the chord display says so, and the Max window logs each change. */
 var chordFixedShapesNoticeShown = false;
 function updateChordInKeyNotice() {
-  var inKeyApplies = !!(chordShapesInUse && chordInKey && CHORD_SHAPES[chordShape]);
+  var inKeyApplies = !!(chordInKey && CHORD_SHAPES[chordShape]);
   var fallingBack = inKeyApplies && scaleKnown && scaleIntervals.length < CHORD_IN_KEY_LEAST_SCALE_NOTES;
   if (fallingBack === chordFixedShapesNoticeShown) return;
   chordFixedShapesNoticeShown = fallingBack;
@@ -90,9 +84,13 @@ function chordInScale(key, steps) {
 
 // ---- what a key plays -----------------------------------------------------------------------------------------------
 
-function chordShapeIsHeldNotes() { return !CHORD_SHAPES[chordShape]; }
+/** Chord is "one note": the key alone, the device sounding the last key held. */
+function chordShapeIsOneNote() { return chordShape === CHORD_ONE_NOTE_ITEM; }
+/** Chord is "held notes": each key held plays itself. */
+function chordShapeIsHeldNotes() { return !CHORD_SHAPES[chordShape] && !chordShapeIsOneNote(); }
 
-/** The pitches `key` plays: the key itself (held notes), or the shape on it, from Live's scale while In key can. */
+/** The pitches `key` plays: the key itself (one note, held notes), or the shape on it, from Live's scale while In key
+ *  can. */
 function chordOnKey(key) {
   var shape = CHORD_SHAPES[chordShape];
   if (!shape) return [key];

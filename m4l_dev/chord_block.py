@@ -6,8 +6,8 @@ A key plays a stored chord shape stacked on it (fixed intervals, or Live 12's Sc
 seeded random), and tells the chord display (templates/chord-block.template.js, chord-display.template.js).
 
     chords = ChordBlock(patch, seeded_random, brain, brain_control_inlet, brain_display_outlet, display_box,
-                        most_notes_per_chord)
-    chords.chord_menu(name, short, x, y, w, page)         # a live.menu of CHORD_SHAPE_NAMES
+                        most_notes_per_chord, one_note=False)
+    chords.chord_menu(name, short, x, y, w, page)         # a live.menu of chords.menu_items
     chords.in_key_toggle(name, short, x, y, w, h, page)   # a live.text
     chords.brain_code()       # fills the device brain's /*CHORD_BLOCK*/ (after both controls)
     ChordBlock.display_code() # fills the device views' /*CHORD_DISPLAY*/
@@ -22,6 +22,8 @@ from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.seeded_random import SeededRandom
 
 HELD_NOTES = "held notes"
+# A device with one oscillator for a key (2sl gate) can offer "one note" first: the last key wins, nothing stacked.
+ONE_NOTE = "one note"
 # The stored shapes: (Chord item, its tones as (degree, semitones above the key, scale steps above the key for In
 # key)). A minor triad is the dub stab (2sl stab's README, "Sources"); "dark" is Attack's +5 +8 variant.
 CHORD_SHAPES = [
@@ -34,6 +36,11 @@ CHORD_SHAPES = [
     ("dark", [("1", 0, 0), ("4", 5, 3), ("b6", 8, 5)]),
 ]
 CHORD_SHAPE_NAMES = [HELD_NOTES] + [name for name, _ in CHORD_SHAPES]
+
+
+def chord_menu_items(one_note):
+    """The Chord menu's items: ("one note",) "held notes", then the shapes."""
+    return ([ONE_NOTE] if one_note else []) + CHORD_SHAPE_NAMES
 # A device that sounds fewer notes than a shape has drops these degrees, in this order: the fifth first, then the
 # ninth (the root, third, seventh and the shape's top extension carry the chord). 2sl gate's 4 oscillators play m11
 # as 1 b3 b7 11.
@@ -59,16 +66,19 @@ def fitted_shapes(most_notes_per_chord):
 
 class ChordBlock:
     def __init__(self, patch, seeded_random, brain, brain_control_inlet, brain_display_outlet, display_box,
-                 most_notes_per_chord):
+                 most_notes_per_chord, one_note=False):
         """The chord block in `brain` (a js box), its controls told to `brain_control_inlet`, the display
         `display_box` (a view the device made) told from `brain_display_outlet`. `most_notes_per_chord`: how many
         notes the device can sound for one key's chord (2sl stab 16 voices, 2sl gate 4 oscillators). Drift draws from
-        `seeded_random` (the device's SeededRandom), so the block needs one."""
+        `seeded_random` (the device's SeededRandom), so the block needs one. `one_note`: the Chord menu starts with
+        "one note" (the key alone, the last key held winning: chordShapeIsOneNote() in the brain)."""
         if not isinstance(seeded_random, SeededRandom):
             patch.fail("the chord block draws its voicings from the kit's seeded random: pass the device's SeededRandom")
         self.patch, self.brain, self.brain_control_inlet = patch, brain, brain_control_inlet
         self.brain_display_outlet = brain_display_outlet
         self.shapes = fitted_shapes(most_notes_per_chord)
+        self.one_note = bool(one_note)
+        self.menu_items = chord_menu_items(self.one_note)
         self.chord_menu_name = self.in_key_toggle_name = None
         patch.wire(brain, display_box, brain_display_outlet, 0)
         for property_name, message in (("root_note", "scale_root"), ("scale_intervals", "scale_intervals")):
@@ -77,7 +87,7 @@ class ChordBlock:
             patch.wire(to_brain, brain, 0, brain_control_inlet)
 
     def chord_menu(self, name, short, x, y, w, page, group=None):
-        box_id = self.patch.menu(name, short, CHORD_SHAPE_NAMES, x, y, w, page, group=group)
+        box_id = self.patch.menu(name, short, self.menu_items, x, y, w, page, group=group)
         self.patch.tell(box_id, "chord_shape", self.brain, self.brain_control_inlet)
         self.chord_menu_name = name
         return box_id
@@ -93,9 +103,11 @@ class ChordBlock:
         if self.chord_menu_name is None or self.in_key_toggle_name is None:
             raise BuildError(f"{self.patch.device_name}: the chord block's brain code needs its controls first "
                              "(chord_menu, in_key_toggle)")
+        unstacked = [None] * (len(self.menu_items) - len(self.shapes))     # one note, held notes: the key itself
         return fill_template(kit_template_text("chord-block.template.js"), {
-            "CHORD_SHAPES": json.dumps([None] + [[semitones for _, semitones, _ in tones] for _, tones in self.shapes]),
-            "CHORD_SHAPE_STEPS": json.dumps([None] + [[steps for _, _, steps in tones] for _, tones in self.shapes]),
+            "CHORD_SHAPES": json.dumps(unstacked + [[semitones for _, semitones, _ in tones] for _, tones in self.shapes]),
+            "CHORD_SHAPE_STEPS": json.dumps(unstacked + [[steps for _, _, steps in tones] for _, tones in self.shapes]),
+            "CHORD_ONE_NOTE_ITEM": str(self.menu_items.index(ONE_NOTE) if self.one_note else -1),
             "CHORD_DISPLAY_OUTLET": str(self.brain_display_outlet),
             "INITIAL_CHORD_SHAPE": str(self.patch.initial_values[self.chord_menu_name]),
             "INITIAL_CHORD_IN_KEY": str(self.patch.initial_values[self.in_key_toggle_name])},

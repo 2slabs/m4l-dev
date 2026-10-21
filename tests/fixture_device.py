@@ -111,7 +111,8 @@ def fixture_patch(preset_book):
     seeded_random.seed_control(180, layout_rules.DIAL_Y, 40, "two")
     seeded_random.loop_control(224, layout_rules.DIAL_Y, 56, "two")
     chord_view = patch.view("chord", 180, layout_rules.VIEW_Y, 184, layout_rules.VIEW_H, "two", info="Chord view")
-    chords = ChordBlock(patch, seeded_random, brain, 1, 1, chord_view, most_notes_per_chord=4)
+    chords = ChordBlock(patch, seeded_random, brain, 1, 1, chord_view, most_notes_per_chord=4,
+                        one_note=True)
     chords.chord_menu("Chord", "Chord", 180, layout_rules.ROW_Y, 80, "two")
     chords.in_key_toggle("In key", "In key", 264, layout_rules.ROW_Y, 52, 15, "two")
     stages = StoredTable(patch, "Stage", [ContinuousField("Pitch", -24, 24), ChoiceField("Pulse", ["off", "on"]),

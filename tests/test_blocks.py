@@ -45,6 +45,7 @@ class ChordShapeTests(unittest.TestCase):
     def test_the_menu_items_are_held_notes_then_the_shapes(self):
         self.assertEqual(chord_block.CHORD_SHAPE_NAMES,
                          ["held notes", "minor", "m7", "m9", "m11", "sus4", "fifths", "dark"])
+        self.assertEqual(chord_block.chord_menu_items(True), ["one note"] + chord_block.CHORD_SHAPE_NAMES)
 
 
 def block_patch():
