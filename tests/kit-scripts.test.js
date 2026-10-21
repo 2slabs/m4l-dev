@@ -197,6 +197,21 @@ test("Loop starts the sequence over at each Loop boundary while Live plays, and 
   assert.deepStrictEqual(record.errors, []);
 });
 
+test("seededRandomStarts() counts each start over (Seed, transport start, a Loop boundary), for scripts that draw ahead", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  const starts = () => context.seededRandomStarts();
+  assert.strictEqual(starts(), 0, "the sequence Seed began with is no start over");
+  deliverMessage(context, 1, "random_seed", [3]);
+  assert.strictEqual(starts(), 1, "a new Seed");
+  deliverMessage(context, 1, "random_loop", [1]);
+  assert.strictEqual(starts(), 1, "a new Loop length starts nothing");
+  deliverMessage(context, 1, "playing", [1]);
+  assert.strictEqual(starts(), 2, "Live starting");
+  for (let sixteenth = 0; sixteenth < 17; sixteenth++) deliverMessage(context, 1, "tick", [sixteenth * 120]);
+  assert.strictEqual(starts(), 3, "bar 2's first 16th, a Loop boundary");
+  assert.deepStrictEqual(record.errors, []);
+});
+
 test("Loop off never restarts while Live plays; a new Loop length doesn't restart it either", () => {
   const { context } = load(BRAIN_SOURCE);
   deliverMessage(context, 1, "random_loop", [0]);

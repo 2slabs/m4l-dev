@@ -34,3 +34,6 @@ random reset (how many bars until we go back to the seed restart) and a way to s
 - **The device's part**: include `/*SEEDED_RANDOM*/` in the brain; pass control messages to
   `seededRandomMessage`; call `seededRandomTransport(playing)` on Live starting or stopping and
   `seededRandomAtSongSixteenth(n)` on each 16th of the song it plays, before anything draws there.
+- **Drawing ahead**: a brain that draws numbers before they are used (2sl gate holds its next hits' draws in its gen~
+  core, so a sequencer pulse there has its own draw at its sample) reads `seededRandomStarts()`, the count of times
+  the sequence started over, and draws its held numbers again when it changes, so they come from the new start.

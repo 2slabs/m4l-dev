@@ -8,6 +8,8 @@
 // The script that includes this defines DEVICE_NAME, passes every control message to seededRandomMessage(name,
 // args) (true when it took it: random_seed, random_loop), calls seededRandomTransport(playing) when Live starts or
 // stops, and seededRandomAtSongSixteenth(sixteenth) on each 16th of the song it plays, before anything draws at it.
+// A script that draws ahead of the numbers' use (2sl gate: the next hits' draws, held in its gen~ core) reads
+// seededRandomStarts(), a count of the times the sequence started over, and draws again when it changes.
 /*SEEDED_SEQUENCE*/
 
 var RANDOM_LOOP_BARS = /*LOOP_BARS*/;            // the Loop menu's items, in bars (0: off)
@@ -18,9 +20,11 @@ var randomLoopBars = RANDOM_LOOP_BARS[/*INITIAL_LOOP*/];
 var randomSequence = seededSequence(randomSeed);
 var randomLoopNumber = null;                      // the Loop the song position was last in (null: not yet heard)
 var randomLivePlaying = 0;                        // the 16ths of the song count only while Live plays
+var randomStartCount = 0;                         // how often the sequence has started over (seededRandomStarts)
 
 function randomNext() { return randomSequence(); }
-function randomRestart() { randomSequence = seededSequence(randomSeed); }
+function randomRestart() { randomSequence = seededSequence(randomSeed); randomStartCount++; }
+function seededRandomStarts() { return randomStartCount; }
 
 function seededRandomMessage(name, args) {
   var value = args[0];
