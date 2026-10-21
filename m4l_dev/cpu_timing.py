@@ -7,8 +7,12 @@ time measured (never the wall clock), one run (no best-of-N, no averaging), and 
     if not timing.judged: ...   # a test that would judge the number says NOT JUDGED instead
 
 THREAD is the calling thread's CPU clock (`time.thread_time`): work done on this thread, a ctypes call included.
-PROCESS_AND_CHILDREN is this process's CPU time plus its reaped children's (`os.times()`), for work spread over worker
-processes (a ProcessPoolExecutor's workers count once the pool has shut down and reaped them).
+PROCESS_AND_CHILDREN is this process's CPU time plus its reaped children's (`resource.getrusage`, RUSAGE_SELF +
+RUSAGE_CHILDREN), for work spread over worker processes (a ProcessPoolExecutor's workers count once the pool has shut
+down and reaped them). Not `os.times()`: it truncates each of its four fields to a clock tick (1/SC_CLK_TCK, 10 ms on
+Linux), so a reading can be up to 4 ticks short and a difference 40 ms off; getrusage's fields are microsecond timevals
+(RESOLUTION_SECONDS below), and on Linux a reaped child's user + system is its whole CPU time (cputime_adjust keeps
+their sum equal to the scheduler's runtime), the same count its own `time.process_time()` read.
 
 CPU time is far steadier than the wall clock under load, but not immune: cores shared between hyper-threads and other
 programs' cache traffic slow each instruction. So a timing is judged only when the machine had room for it: the
@@ -16,6 +20,7 @@ programs' cache traffic slow each instruction. So a timing is judged only when t
 says NOT JUDGED, loudly, with the numbers.
 """
 import os
+import resource
 import time
 from dataclasses import dataclass, field
 
@@ -23,9 +28,14 @@ THREAD = "thread CPU"
 PROCESS_AND_CHILDREN = "process + children CPU"
 
 
+# PROCESS_AND_CHILDREN's resolution: each of a reading's four timeval fields is truncated to a microsecond
+PROCESS_AND_CHILDREN_RESOLUTION_SECONDS = 1e-6
+
+
 def _process_and_children_seconds():
-    times = os.times()
-    return times.user + times.system + times.children_user + times.children_system
+    self_usage = resource.getrusage(resource.RUSAGE_SELF)
+    children_usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return self_usage.ru_utime + self_usage.ru_stime + children_usage.ru_utime + children_usage.ru_stime
 
 
 _CLOCKS = {THREAD: time.thread_time, PROCESS_AND_CHILDREN: _process_and_children_seconds}

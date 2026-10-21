@@ -82,8 +82,8 @@ largest sample difference and where; quote it. Bit-identical is a claim about a 
 ## Timing tests
 
 A test that times something reads the machine's load first (`os.getloadavg()`) and reports it with the result,
-measures CPU time (the thread's or process's clock: `time.thread_time`, `CLOCK_THREAD_CPUTIME_ID`), not wall
-clock, and times one run: no best-of-N, no averaging. `m4l_dev/cpu_timing.py`'s `CpuTiming` is the one way: THREAD
+measures CPU time (the thread's clock, `time.thread_time`, or the process's and its children's, `getrusage`'s
+microsecond fields; never `os.times()`, whose fields are truncated to 10 ms ticks), not wall clock, and times one run: no best-of-N, no averaging. `m4l_dev/cpu_timing.py`'s `CpuTiming` is the one way: THREAD
 for work on the calling thread, PROCESS_AND_CHILDREN for work over worker processes (the patch matcher's), and a
 timing whose load before it plus the cores it uses is over the machine's cores says NOT JUDGED with its numbers: a
 test that would judge it skips, loudly, and a report (the recovery tests' CPU seconds a search) prints it.

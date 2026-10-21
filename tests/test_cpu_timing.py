@@ -7,21 +7,28 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.cpu_timing import PROCESS_AND_CHILDREN, THREAD, CpuTiming  # noqa: E402
+from m4l_dev.cpu_timing import PROCESS_AND_CHILDREN, PROCESS_AND_CHILDREN_RESOLUTION_SECONDS, THREAD, CpuTiming  # noqa: E402
 
-BUSY_CHILD = "import time\nend = time.process_time() + 0.2\nwhile time.process_time() < end: pass\n"
+BUSY_CHILD_SECONDS = 0.2
+# the child spins until its own CPU clock has passed BUSY_CHILD_SECONDS, so its CPU time is at least that by
+# construction, whatever the load (load stretches the wall time, not the CPU time it spins for)
+BUSY_CHILD = f"import time\nwhile time.process_time() < {BUSY_CHILD_SECONDS}: pass\n"
+# a PROCESS_AND_CHILDREN difference is two readings of four fields each truncated to the clock's resolution: it can
+# read at most 4 resolutions short (the end reading's truncation; the start's only makes it longer)
+PROCESS_AND_CHILDREN_MOST_SHORT_SECONDS = 4 * PROCESS_AND_CHILDREN_RESOLUTION_SECONDS
 
 
 class CpuTimingTests(unittest.TestCase):
     def test_a_childs_cpu_time_counts_on_process_and_children(self):
         with CpuTiming("a busy child", PROCESS_AND_CHILDREN) as timing:
             subprocess.run([sys.executable, "-c", BUSY_CHILD], check=True)
-        self.assertGreaterEqual(timing.cpu_seconds, 0.2, timing.report())
+        self.assertGreaterEqual(timing.cpu_seconds, BUSY_CHILD_SECONDS - PROCESS_AND_CHILDREN_MOST_SHORT_SECONDS,
+                                timing.report())
 
     def test_a_childs_cpu_time_is_not_the_threads(self):
         with CpuTiming("waiting on a busy child", THREAD) as timing:
             subprocess.run([sys.executable, "-c", BUSY_CHILD], check=True)
-        self.assertLess(timing.cpu_seconds, 0.2, timing.report())
+        self.assertLess(timing.cpu_seconds, BUSY_CHILD_SECONDS, timing.report())
 
     def test_no_room_on_the_machine_is_not_judged_and_says_so(self):
         with mock.patch("os.getloadavg", return_value=(7.5, 7.0, 7.0)), mock.patch("os.cpu_count", return_value=8):
