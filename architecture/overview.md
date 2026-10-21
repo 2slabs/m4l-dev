@@ -32,6 +32,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `genexpr.py` | our GenExpr subset checker and renderer (not Max's compiler): the renderer translates a program to C once, builds it with the system C compiler into a cache, runs it through ctypes, and gives Python's float arithmetic bit for bit |
 | `c_library_cache.py` | the one place the kit runs a C compiler: `load_c_library(c_source, flags)` builds once per source / compiler / flags into the cache, loads once; the renderer and the patch matcher's analysis both use it |
 | `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
+| `build_comparison.py` | two builds of a device compared as the device tests compare them: everything exactly, except numbers, which only have to be close (maths libraries round the last digits differently between machines); `.amxd` by patch, `.adv` by XML (bar the device file's size and checksum), strings' numbers as numbers |
 | `gen_blocks.py` | the gen block pattern: `GenBlock` and its two layers' bases `Technique` and `CircuitModule`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `techniques/`, `circuit_modules/` | the gen blocks, by layer (their own partitions, above) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
