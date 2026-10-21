@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4l_dev import es5  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.circuit_modules import moog_transistor_ladder  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 from m4l_dev.techniques import halfband_oversampler  # noqa: E402
 from m4l_dev.circuit_modules.moog_transistor_ladder import (  # noqa: E402
     MoogTransistorLadder, MoogTransistorLadderCharacter, control_volts_for_cutoff_hz, cutoff_hz_at_control_volts,
@@ -235,8 +236,7 @@ class LargeSignalTests(unittest.TestCase):
             self.assertAlmostEqual(peak, 0.11 * VOLTS_PER_UNIT_DRIVE, delta=0.015 * VOLTS_PER_UNIT_DRIVE, msg=cutoff)
 
     def test_two_newton_iterations_are_the_solved_loop(self):
-        # a hot saw-like drive at fc 6 kHz, k 3.9: the output with NEWTON_ITERATIONS = 2 against 8, within 1e-3 of
-        # the signal's peak
+        # a hot saw-like drive at fc 6 kHz, k 3.9: the output with NEWTON_ITERATIONS = 2 is the same sound as with 8
         count = 8820
         rng = random.Random(3)
         x = [VOLTS_PER_UNIT_DRIVE * 8 * (((i * 330.0 / SAMPLERATE) % 1) * 2 - 1) + rng.uniform(-1, 1) for i in range(count)]
@@ -246,8 +246,7 @@ class LargeSignalTests(unittest.TestCase):
                 program = ladder_program()
             set_ladder(program, 6000.0, 3.9)
             outputs[iterations] = program.run(count, [x])[1]
-        peak = max(abs(v) for v in outputs[8])
-        self.assertLess(max(abs(a - b) for a, b in zip(outputs[2], outputs[8])) / peak, 1e-3)
+        assert_renders_similar(outputs[8], outputs[2], SAMPLERATE, "two Newton iterations against eight")
 
     def test_bounded_under_a_hot_input_and_a_jumping_cutoff(self):
         # 30 V noise (x up to 580) at full emphasis, the control node jumping over 12 octaves every sample: every

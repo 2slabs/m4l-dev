@@ -19,7 +19,19 @@ The user's rule (2026-10-21): "the build should be the same, but the tests aren'
   measured exactly). Every other pair of sample sequences compared with each other is two renders.
 - **Accuracy bounds stay**: a test holding a block to its equation or to a twin within a bound on each sample far
   over the last bits and far under the comparator's (1e-9 on a signal near 1) claims more than "the same sound" and
-  keeps its bound; another machine's last bits (1e-16) pass it.
+  keeps its bound; another machine's last bits (1e-16) pass it. It says so through `m4l_dev/model_accuracy.py`, the
+  one way: `assert_matches_model(actual, expected, tolerance, what, tolerance_reason)`, every sample within an
+  absolute tolerance, the reason for that tolerance stated at the call.
+
+## Two sequences compared: which claim, which tool
+
+| the claim | examples | the tool |
+|---|---|---|
+| **these two renders are the same sound** | a refactor, a reset, a re-hit, a seed, an alternate path (a Param for a constant, fewer Newton iterations than the converged loop, plugin vs device) | `assert_renders_similar` (no bound of the test's own) |
+| **the DSP computes this math** | an identity (low-pass + high-pass = the input, a cut undoing its boost, Rev's sweep = 1 - Norm's), a twin, a reference model in Python (a pad's Thiran all-pass, a whole-sample delay) | `assert_matches_model` with a tolerance and its reason |
+
+A bound looser than the comparator's (1e-3 of the peak, 1e-6 on a signal near 1) is not an accuracy claim: it says
+"the same sound" and goes to the comparator. A test's own `max(abs(a - b)) < bound` is neither, so it isn't written.
 
 ## The measure
 
@@ -71,4 +83,7 @@ largest sample difference and where; quote it. Bit-identical is a claim about a 
 
 A test that times something reads the machine's load first (`os.getloadavg()`) and reports it with the result,
 measures CPU time (the thread's or process's clock: `time.thread_time`, `CLOCK_THREAD_CPUTIME_ID`), not wall
-clock, and times one run: no best-of-N, no averaging.
+clock, and times one run: no best-of-N, no averaging. `m4l_dev/cpu_timing.py`'s `CpuTiming` is the one way: THREAD
+for work on the calling thread, PROCESS_AND_CHILDREN for work over worker processes (the patch matcher's), and a
+timing whose load before it plus the cores it uses is over the machine's cores says NOT JUDGED with its numbers: a
+test that would judge it skips, loudly, and a report (the recovery tests' CPU seconds a search) prints it.

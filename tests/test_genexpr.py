@@ -6,13 +6,13 @@ import os
 import random
 import struct
 import sys
-import time
 import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from m4l_dev.c_library_cache import CLibraryBuildError  # noqa: E402
 from m4l_dev.build_error import BuildError  # noqa: E402
+from m4l_dev.cpu_timing import THREAD, CpuTiming  # noqa: E402
 from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
 from m4l_dev.genexpr import GenExprError, GenProgram, analyze, check, code_with_param_defaults  # noqa: E402
 
@@ -414,15 +414,15 @@ class SpeedTests(unittest.TestCase):
         num_samples = 20000
         # one run on this thread's CPU clock (the render is a ctypes call on it), the machine's load read first and
         # reported with it (architecture/testing.md, "Timing tests")
-        load_report = f"1-minute load {os.getloadavg()[0]:.2f} on {os.cpu_count()} cores"
-        started = time.thread_time()
-        output = program.run(num_samples, [0.1])[0]
-        elapsed = time.thread_time() - started
-        rate = num_samples / max(elapsed, 1e-9)
-        print(f"\n[speed] ~300 statements: {rate:,.0f} samples per CPU second ({load_report})")
+        with CpuTiming("~300 statements, 20000 samples", THREAD) as timing:
+            output = program.run(num_samples, [0.1])[0]
+        rate = num_samples / max(timing.cpu_seconds, 1e-9)
+        print(f"\n[speed] {rate:,.0f} samples per CPU second ({timing.report()})")
         self.assertTrue(all(math.isfinite(sample) for sample in output))
+        if not timing.judged:
+            self.skipTest(timing.report())
         self.assertGreater(rate, 250_000, f"the renderer runs compiled C: ~1M samples/s here; Python's was ~120k "
-                                          f"({load_report})")
+                                          f"({timing.report()})")
 
 
 if __name__ == "__main__":

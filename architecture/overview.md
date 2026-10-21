@@ -43,6 +43,8 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `gen_blocks.py` | the gen block pattern: `GenBlock` and its two layers' bases `Technique` and `CircuitModule`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `techniques/`, `circuit_modules/` | the gen blocks, by layer (their own partitions, above) |
 | `render_comparison.py` | `renders_are_similar` / `assert_renders_similar`: the one way a test compares two renders, by the residual's level against the reference's, whole and in 10 ms windows, with its limits (testing.md) |
+| `model_accuracy.py` | `assert_matches_model`: the one way a test holds a sample sequence to its equation, a twin or a reference model, every sample within a stated tolerance and its reason (testing.md) |
+| `cpu_timing.py` | `CpuTiming`: the one way a test times something: the load read first, one run on a CPU clock (a thread's, or a process's with its children's), NOT JUDGED without room (testing.md) |
 | `bs1770.py` | ITU-R BS.1770-5 loudness and true peak, EBU Tech 3341's momentary loudness (references/itu-r-bs1770.md, ebu-tech-3341.md) |
 | `patch_match_voice.py`, `patch_match_score.py` (+ `patch_match_features.c`), `patch_match_search.py` | the patch matcher: a voice's parameters for a target hit (render, score, CMA-ES strands), the 2sl drums' acceptance test (patch-matcher.md) |
 | `wave_files.py` | WAV in (PCM 8-32 bit, float 32/64) and out (float 32), failing loudly on anything else |

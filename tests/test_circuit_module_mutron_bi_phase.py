@@ -17,6 +17,8 @@ from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhas
                                                      feedback_pot_position, phasor_notches_hz, phasor_response,
                                                      phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
+from m4l_dev.model_accuracy import assert_matches_model  # noqa: E402
+from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 
 SAMPLERATE = 44100.0
 MATCHED = MutronBiPhaseCharacter(stage_corner_spread=0.0)
@@ -158,7 +160,8 @@ class MutronBiPhaseTests(unittest.TestCase):
             covariance = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b))
             correlation = covariance / math.sqrt(sum((x - mean_a) ** 2 for x in a) * sum((y - mean_b) ** 2 for y in b))
             with self.subTest(sync="Rev" if sync else "Norm"):
-                self.assertLess(max(abs(x - y) for x, y in zip(mirrored, rendered[7])), 1e-12)
+                assert_matches_model(rendered[7], mirrored, 1e-12, "B's sweep against A's",
+                                     "Rev makes B's sweep 1 - A's, Norm A's own: a double's rounding on a value in [0, 1]")
                 self.assertGreater(sign * correlation, least)
                 self.assertGreater(max(a) - min(a), math.log(10), "a full-depth sweep spans over a decade")
 
@@ -213,8 +216,8 @@ class MutronBiPhaseTests(unittest.TestCase):
         moved = harness([made], dict(PANEL, **settings, **fields), OUTPUTS, samplerate=SAMPLERATE)
         fixed = unit(character=MutronBiPhaseCharacter(), **settings)
         music = sine(220.0, 22050, 2.0)
-        for fixed_out, moved_out in zip(fixed.run(22050, [music]), moved.run(22050, [music])):
-            self.assertLess(max(abs(x - y) for x, y in zip(fixed_out, moved_out)), 1e-6)
+        for index, (fixed_out, moved_out) in enumerate(zip(fixed.run(22050, [music]), moved.run(22050, [music]))):
+            assert_renders_similar(fixed_out, moved_out, SAMPLERATE, f"the character as Params, output {index}")
         moved.set_param("led_current_dark_amps", 400e-6)
         moved.set_param("sweep_a_source", 1.0)
         moved.set_param("pedal", 0.0)

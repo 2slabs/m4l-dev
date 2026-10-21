@@ -44,6 +44,7 @@ from m4l_dev.techniques.zero_delay_one_pole_filter import \
 from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
                                                                  ring_time_constant_seconds, small_signal_response)
 from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
+from m4l_dev.model_accuracy import assert_matches_model  # noqa: E402
 from m4l_dev.techniques import drum_envelope  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
 from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
@@ -479,7 +480,8 @@ class AntiderivativeTanhSaturatorLinearTwinTests(unittest.TestCase):
             saturator = AntiderivativeTanhSaturator("drive", input="in1", oversampling=oversampling)
             twin = AntiderivativeTanhSaturatorLinearTwin("dry", input="in1", oversampling=oversampling)
             saturated, twinned = harness([saturator, twin], {}, ["drive_out", "dry_out"]).run(len(quiet), [quiet])
-            self.assertLess(max(abs(a - b) for a, b in zip(saturated, twinned)), 1e-9, msg=oversampling)
+            assert_matches_model(saturated, twinned, 1e-9, f"the linear twin, {oversampling}x",
+                                 "tanh's curvature and log cosh's rounding on a 1e-4 signal, measured 2e-11")
             self.assertEqual(twin.latency_samples, saturator.latency_samples)
             self.assertNotIn("tanh", "".join(twin.functions()) + "".join(
                 line for line in twin.statements().splitlines() if not line.startswith("//")), "no tanh in the twin")
@@ -998,7 +1000,8 @@ class ZeroDelayStateVariableFilterTests(unittest.TestCase):
                           samplerate=self.SAMPLERATE)
         signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
         rebuilt = program.run(2000, [signal])[0]
-        self.assertLess(max(abs(a - b) for a, b in zip(rebuilt, signal)), 1e-12)
+        assert_matches_model(rebuilt, signal, 1e-12, "low-pass + normalised band-pass + high-pass",
+                             "the outputs sum to the input by the filter's algebra: a double's rounding on a signal near 1")
 
     def test_an_impulse_rings_at_q_over_pi_fc(self):
         # the 909 rim shot's 495 Hz bridged-T: Q 7.3, tau 4.7 ms (2sl drums references/voices.md)
@@ -1229,7 +1232,8 @@ class ZeroDelayOnePoleFilterTests(unittest.TestCase):
         program = harness([ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="20 + 9000 * (0.5 + 0.5 * sin(in1 * 300))")],
                           {}, ["pole_lowpass + pole_highpass"], samplerate=self.SAMPLERATE)
         signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
-        self.assertLess(max(abs(a - b) for a, b in zip(program.run(2000, [signal])[0], signal)), 1e-12)
+        assert_matches_model(program.run(2000, [signal])[0], signal, 1e-12, "low-pass + high-pass",
+                             "the outputs sum to the input by the filter's algebra: a double's rounding on a signal near 1")
 
     def test_it_says_what_it_is_given_wrong(self):
         for bad in ("0", "-5", "inf", "nan"):
@@ -1728,7 +1732,8 @@ class BellEqualizerTests(unittest.TestCase):
         cut = BellEqualizer("bell", input="boost_out", frequency_hz="1000", gain_db="-15", q="3")
         noise = park_miller_sequence(4242.0, 4000)
         out = self.bell(boost, cut).run(4000, [noise])[0]
-        self.assertLess(max(abs(x - y) for x, y in zip(out, noise)), 1e-9)
+        assert_matches_model(out, noise, 1e-9, "a 15 dB boost then the same cut",
+                             "the cut is the boost's inverse: a double's rounding through two biquads on noise near 1")
         flat = self.bell().run(4000, [noise])[0]
         self.assertEqual(flat, noise)
 

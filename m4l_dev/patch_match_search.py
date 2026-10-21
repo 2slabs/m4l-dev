@@ -55,6 +55,10 @@ class SearchSettings:
     workers: int = 0                      # 0: one process per strand, at most the CPUs; 1: in this process
     progress: bool = False                # a line on stderr per strand phase / restart
 
+    def worker_count(self):
+        """The processes a search runs its strands on: `workers`, or with 0 one per strand, at most the CPUs."""
+        return self.workers or min(self.strands, os.cpu_count() or 1)
+
     def __post_init__(self):
         if self.strands < 1:
             raise BuildError(f"strands must be at least 1, not {self.strands}")
@@ -407,7 +411,7 @@ def match_patch(voice, target_samples, rate, settings=SearchSettings()):
     started = time.time()
     target_samples = array.array("d", target_samples)
     MatchTarget(target_samples, rate)          # a silent / too short target fails here, before any process starts
-    workers = settings.workers or min(settings.strands, os.cpu_count() or 1)
+    workers = settings.worker_count()
     jobs = [(voice, target_samples, rate, settings, strand) for strand in range(settings.strands)]
     if workers == 1:
         strands = [run_strand(*job) for job in jobs]
