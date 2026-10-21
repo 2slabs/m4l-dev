@@ -10,6 +10,11 @@ value, a value out of its control's range, and preset names used twice.
 
 One book serves both preset outputs (architecture/presets.md): Live preset files (.adv, m4l_dev/live_preset_files.py)
 and the header's Preset menu (the UI script sets every saved control from it).
+
+A saved record (`SavedRecord`: a stored table, m4l_dev/stored_table.py) is saved like a control but holds many values:
+its value is an object of fields, each a list of one value per row, in the field's own units. Init gives every field;
+a preset gives the fields it changes, each whole, and keeps Init's others. It reaches Live as Stored Only parameters
+(`stored_only_values_of_preset`), not as an automatable parameter.
 """
 import json
 from collections import namedtuple
@@ -26,8 +31,51 @@ SavedControl = namedtuple("SavedControl", "name varname items minimum maximum")
 Preset = namedtuple("Preset", "name group idea values")
 
 
-def value_as_held(control, value_in_own_units, where):
-    """`value_in_own_units` as `control` holds it (an item name becomes its index), or fail the build."""
+class SavedRecord:
+    """A saved value that is many values (a stored table): the preset book holds it as {field: [value per row]}.
+    A subclass gives `name`, `held_from_own_units(value, where, init_held)` (a HeldRecord; `init_held` None for Init,
+    which must give every field, else Init's HeldRecord, whose fields a preset leaves alone are kept) and
+    `parameter_varnames()` (its Stored Only parameters' scripting names)."""
+    name = None
+
+    def held_from_own_units(self, value_in_own_units, where, init_held):
+        raise NotImplementedError(f"{type(self).__name__} must say how it holds a value")
+
+    def parameter_varnames(self):
+        raise NotImplementedError(f"{type(self).__name__} must name its parameters")
+
+
+class HeldRecord:
+    """A saved record's value as held, in a preset's values: it knows its Stored Only parameters' values."""
+
+    def stored_only_values(self):
+        """{Stored Only parameter long name: number}."""
+        raise NotImplementedError(f"{type(self).__name__} must say how it is stored")
+
+
+def stored_only_values_of_preset(preset_values, device_stored_only_values_of_preset, where):
+    """A preset's Stored Only parameters: every saved record's (a HeldRecord in `preset_values`) and the device's own
+    (`device_stored_only_values_of_preset(preset_values)`; None when it has none), {long name: number}. Live preset
+    files, the Preset menu and the plugin's presets all fill a preset's Stored values here. A name both give fails."""
+    values = {}
+    for held in preset_values.values():
+        if isinstance(held, HeldRecord):
+            values.update(held.stored_only_values())
+    if device_stored_only_values_of_preset is not None:
+        device_values = device_stored_only_values_of_preset(preset_values)
+        twice = sorted(set(device_values) & set(values))
+        if twice:
+            raise BuildError(f"{where}: the device's stored_only_values_of_preset gives {twice}, which a stored table "
+                             "already stores")
+        values.update(device_values)
+    return values
+
+
+def value_as_held(control, value_in_own_units, where, init_held=None):
+    """`value_in_own_units` as `control` holds it (an item name becomes its index; a saved record's, its own way:
+    `init_held` is Init's, for the fields a preset leaves alone), or fail the build."""
+    if isinstance(control, SavedRecord):
+        return control.held_from_own_units(value_in_own_units, where, init_held)
     if control.items is not None:
         if value_in_own_units not in control.items:
             raise BuildError(f"{where}: {control.name} is {value_in_own_units!r}, not one of {control.items}")
@@ -92,10 +140,16 @@ class PresetBook:
         return [preset["name"] for preset in self.presets_in_own_units]
 
     def values_in_own_units(self, preset_name):
-        """`preset_name`'s values in each control's own units, Init's filled in for every control it leaves alone."""
+        """`preset_name`'s values in each control's own units, Init's filled in for every control it leaves alone (and,
+        in a saved record, {field: [value per row]}, for every field it leaves alone)."""
         for preset in self.presets_in_own_units:
             if preset["name"] == preset_name:
-                return {**self.init_values_in_own_units, **preset["values"]}
+                values = dict(self.init_values_in_own_units)
+                for name, value in preset["values"].items():
+                    init_value = values.get(name)
+                    values[name] = ({**init_value, **value} if isinstance(init_value, dict) and isinstance(value, dict)
+                                    else value)
+                return values
         raise BuildError(f"no preset named {preset_name!r} in {self.source_name}")
 
     def presets_as_held(self, saved_controls):
@@ -112,6 +166,7 @@ class PresetBook:
                 raise BuildError(f"{where} sets controls the device doesn't have: {sorted(unknown)}")
             values = dict(init_as_held)
             for control_name, value in preset["values"].items():
-                values[control_name] = value_as_held(saved_controls[control_name], value, where)
+                values[control_name] = value_as_held(saved_controls[control_name], value, where,
+                                                     init_as_held[control_name])
             presets.append(Preset(preset["name"], preset["group"], preset["idea"], values))
         return presets

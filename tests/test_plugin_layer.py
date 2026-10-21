@@ -58,11 +58,19 @@ class FixtureParameterTests(unittest.TestCase):
         self.assertEqual(self.by_name["Stop"]["kind"], "Button")
         self.assertEqual(self.by_name["Kick"]["kind"], "Button")    # wired straight to the brain: the plugin's to handle
         self.assertNotIn("Page", self.by_name)
-        (memory,) = self.stored
-        self.assertEqual((memory["name"], [r["message"] for r in memory["routes"]]), ("Memory", ["memory"]))
+        stored_by_name = {s["name"]: s for s in self.stored}
+        self.assertEqual(sorted(stored_by_name), ["Memory", "Stage Pitch 1", "Stage Pitch 2", "Stage switches 1",
+                                                  "Stage switches 2"])
+        memory = stored_by_name["Memory"]
+        self.assertEqual([r["message"] for r in memory["routes"]], ["memory"])
+        self.assertEqual([r["message"] for r in stored_by_name["Stage Pitch 2"]["routes"]], ["stage_pitch_2"])
         presets = presets_as_held(self.patch, self.params, self.stored, fixture_device.stored_memory_of_preset)
         self.assertEqual(presets[0][0], "init")
-        self.assertEqual(presets[0][2], [7 + presets[0][1][[p["name"] for p in self.params].index("Level")]])
+        stored_init = dict(zip([s["name"] for s in self.stored], presets[0][2]))
+        self.assertEqual(stored_init["Memory"], 7 + presets[0][1][[p["name"] for p in self.params].index("Level")])
+        # the stored table's from the preset book itself: Init's Pitch 0, 7; row 2's Pulse on, Wait keyed
+        self.assertEqual([stored_init[n] for n in ("Stage Pitch 1", "Stage Pitch 2", "Stage switches 2")],
+                         [24 * 1365, 31 * 1365, 7])
 
     def test_the_header_names_every_route(self):
         text = header.plugin_header("twosl::fixture", ["gen", "brain"], self.params, self.stored,

@@ -303,6 +303,85 @@ test("the chord display draws a chord and a notice, and is loud about a bad chor
   assert.ok(record.errors.some((e) => /not all MIDI pitches/.test(e)));
 });
 
+// ---- the stored table (the fixture's Stage: 2 rows of Pitch -24..24, Pulse off / on, Wait go / stop / hold / keyed)
+
+const PITCH_CODES_PER_SEMITONE = 1365;           // 65535 // 48, so every whole semitone is exact
+const pitchCode = (semitones) => (semitones + 24) * PITCH_CODES_PER_SEMITONE;
+const tableWrites = (record) => record.outlets.filter((o) => o[0] === 2);
+const plain = (value) => JSON.parse(JSON.stringify(value));             // the script's objects, out of its realm
+
+test("the stored table starts at Init, and reads by row and field", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  assert.strictEqual(context.storedTableValue("Stage", "Pitch", 1), 7);
+  assert.deepStrictEqual(plain(context.storedTableRow("Stage", 1)), { Pitch: 7, Pulse: 1, Wait: 3 });
+  assert.deepStrictEqual(record.errors, []);
+  assert.strictEqual(context.storedTableValue("Stage", "Pitch", 2), undefined);
+  assert.strictEqual(context.storedTableValue("Stage", "Time", 0), undefined);
+  assert.strictEqual(context.storedTableValue("Steps", "Pitch", 0), undefined);
+  assert.strictEqual(record.errors.length, 3, "a row, field or table that doesn't exist is an error each");
+});
+
+test("a recalled stored value is unpacked, heard, and shown on its editors once the device is ready", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "stage_pitch_1", [pitchCode(12)]);
+  deliverMessage(context, 1, "stage_switches_1", [1 + (2 << 1)]);           // Pulse on, Wait hold
+  assert.deepStrictEqual(plain(context.storedTableRow("Stage", 0)), { Pitch: 12, Pulse: 1, Wait: 2 });
+  assert.deepStrictEqual(plain(context.stageChanges), [["Pitch", 0, 12], ["Pulse", 0, 1], ["Wait", 0, 2]]);
+  assert.deepStrictEqual(tableWrites(record), [], "nothing is written back, and no editor is set before ready");
+  deliverMessage(context, 1, "ready", []);
+  assert.deepStrictEqual(tableWrites(record), [[2, "stage_pitch_edit_1", "set", 12], [2, "stage_pitch_edit_2", "set", 7],
+                                               [2, "stage_pulse_edit_1", "set", 1], [2, "stage_wait_edit_2", "set", 3]]);
+  record.outlets.length = 0;
+  deliverMessage(context, 1, "stage_pitch_2", [pitchCode(-3)]);
+  assert.deepStrictEqual(tableWrites(record), [[2, "stage_pitch_edit_2", "set", -3]]);
+  assert.deepStrictEqual(record.errors, []);
+});
+
+test("an editor sets its value once the device is ready: stored, heard, not told back; the echo changes nothing", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "stage_pitch_edit_1", [5]);
+  assert.strictEqual(context.storedTableValue("Stage", "Pitch", 0), 0, "before ready an editor is the set loading");
+  deliverMessage(context, 1, "ready", []);
+  record.outlets.length = 0;
+  context.stageChanges.length = 0;
+  deliverMessage(context, 1, "stage_pitch_edit_1", [5]);
+  assert.deepStrictEqual(tableWrites(record), [[2, "stage_pitch_1", pitchCode(5)]]);
+  assert.deepStrictEqual(plain(context.stageChanges), [["Pitch", 0, 5]]);
+  deliverMessage(context, 1, "stage_pitch_1", [pitchCode(5)]);              // the stored parameter puts it out again
+  assert.deepStrictEqual(plain(context.stageChanges), [["Pitch", 0, 5]], "the echo is no change");
+  record.outlets.length = 0;
+  deliverMessage(context, 1, "stage_wait_edit_2", [1]);                    // row 2: Pulse on (1), Wait stop (1)
+  deliverMessage(context, 1, "stage_pulse_edit_1", [1]);                   // row 1: Pulse on, Wait go
+  assert.deepStrictEqual(tableWrites(record), [[2, "stage_switches_2", 1 + (1 << 1)], [2, "stage_switches_1", 1]]);
+  assert.deepStrictEqual(record.errors, []);
+});
+
+test("storedTableSet keeps a value on the stored grid and refuses one out of range, loudly", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  const kept = context.storedTableSet("Stage", "Pitch", 0, 0.3);
+  assert.ok(Math.abs((kept + 24) * PITCH_CODES_PER_SEMITONE - Math.round((kept + 24) * PITCH_CODES_PER_SEMITONE)) < 1e-9);
+  assert.ok(Math.abs(kept - 0.3) <= 0.5 / PITCH_CODES_PER_SEMITONE);
+  assert.strictEqual(context.storedTableValue("Stage", "Pitch", 0), kept);
+  assert.deepStrictEqual(tableWrites(record), [[2, "stage_pitch_1", Math.round(24.3 * PITCH_CODES_PER_SEMITONE)]]);
+  assert.deepStrictEqual(record.errors, []);
+  assert.strictEqual(context.storedTableSet("Stage", "Pitch", 0, 25), undefined);
+  assert.strictEqual(context.storedTableSet("Stage", "Wait", 0, 4), undefined);
+  assert.strictEqual(context.storedTableSet("Stage", "Pulse", 0, 0.5), undefined);
+  assert.strictEqual(record.errors.length, 3);
+  assert.strictEqual(context.storedTableValue("Stage", "Pitch", 0), kept, "a refused value changes nothing");
+});
+
+test("a recalled code that isn't one is an error, and changes nothing", () => {
+  const { context, record } = load(BRAIN_SOURCE);
+  deliverMessage(context, 1, "stage_pitch_1", [70000]);
+  deliverMessage(context, 1, "stage_pitch_1", [65530]);                    // past +24 (48 x 1365 = 65520)
+  deliverMessage(context, 1, "stage_switches_1", [8]);                     // past the row's 3 bits
+  deliverMessage(context, 1, "stage_switches_1", [2.5]);
+  assert.strictEqual(record.errors.length, 4);
+  assert.deepStrictEqual(plain(context.storedTableRow("Stage", 0)), { Pitch: 0, Pulse: 0, Wait: 0 });
+  assert.deepStrictEqual(plain(context.stageChanges), []);
+});
+
 let failed = 0;
 for (const { name, body } of tests) {
   try { body(); console.log("ok   " + name); } catch (problem) { failed++; console.log("FAIL " + name + "\n     " + problem.stack); }

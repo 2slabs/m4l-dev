@@ -7,6 +7,7 @@ device's Seed and Loop mean the same.
 
     random = SeededRandom(patch, brain, brain_control_inlet)
     random.seed_control(x, y, w, page)          # a live.numbox: Seed, 0-999
+    random.seed_dial(x, y, page)                 # or Seed as a live.dial (one form a device)
     random.loop_control(x, y, w, page)          # a live.menu: Loop, off / 1 bar ... 64 bars
     brain_code = random.brain_code()             # fills the device brain's /*SEEDED_RANDOM*/
     SeededRandom.sequence_code()                 # the generator alone, for a device that only needs numbers from
@@ -23,6 +24,7 @@ LOOP_NAME = "Loop"
 # knows only float and enum parameters (an Int's form hasn't been seen in a file Live wrote), and Live's Int type
 # would hold only 256 seeds.
 SEED_HIGHEST = 999
+SEED_UNIT_STYLE = 0                  # Live's Int unit style: whole numbers shown
 LOOP_CHOICES = [("off", 0), ("1 bar", 1), ("2 bars", 2), ("4 bars", 4), ("8 bars", 8), ("16 bars", 16),
                 ("32 bars", 32), ("64 bars", 64)]
 INFO = {
@@ -45,8 +47,23 @@ class SeededRandom:
         self.made = set()
 
     def seed_control(self, x, y, w, page, group=None):
-        box_id = self.patch.numbox(SEED_NAME, SEED_NAME, self.brain, "random_seed", 0, SEED_HIGHEST, 0, x, y, w, page,
-                                   inlet=self.brain_control_inlet, group=group)
+        """Seed as a live.numbox, `w` px wide in the row band (seed_dial: as a dial)."""
+        if SEED_NAME in self.made:
+            raise BuildError(f"{self.patch.device_name}: Seed is made twice (seed_control or seed_dial: one)")
+        box_id = self.patch.numbox(SEED_NAME, SEED_NAME, self.brain, "random_seed", 0, SEED_HIGHEST, SEED_UNIT_STYLE,
+                                   x, y, w, page, inlet=self.brain_control_inlet, group=group)
+        self.made.add(SEED_NAME)
+        return box_id
+
+    def seed_dial(self, x, y, page, group=None):
+        """Seed as a live.dial (DIAL_WIDTH x DIAL_HEIGHT, the dial band): the same parameter as seed_control's number
+        box (a float 0-999 with Live's Int unit style, so it shows whole numbers; the brain takes the nearest), so
+        Live keeps a set's Seed, its automation and its mappings when a device moves from one to the other (they go
+        by its long name and range: architecture/live-parameter-identity.md); only the lock's maxclass changes."""
+        if SEED_NAME in self.made:
+            raise BuildError(f"{self.patch.device_name}: Seed is made twice (seed_control or seed_dial: one)")
+        box_id = self.patch.dial(SEED_NAME, SEED_NAME, self.brain, "random_seed", 0, SEED_HIGHEST, SEED_UNIT_STYLE, x, y,
+                                 page, inlet=self.brain_control_inlet, group=group)
         self.made.add(SEED_NAME)
         return box_id
 

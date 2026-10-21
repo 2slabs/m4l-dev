@@ -8,7 +8,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
 | `m4l_dev/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
 | `m4l_dev/circuit_modules/` | gen blocks, layer 2: one modelled piece of hardware per file (dsp-blocks.md) | one `CircuitModule` a file: inputs the circuit's controls in its units, character a frozen dataclass of numbers, cites its references/circuits/ file; built from techniques |
-| `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
+| `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display, stored table), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
 | `plugin/cpp/` | ([plugins.md](plugins.md): the approach a port follows) the C++ every 2sl plugin shares (no JUCE except MaxScript): `PluginTable.h` (the generated header's types; a route's value), `GenProgram.h` (one running copy of an exported gen~ program: Params, state, render), `MaxScript.h/.cpp` (a device's [js] brain run unchanged in JUCE's JavascriptEngine, QuickJS, with the Max globals it uses and a Task clock the plugin moves) | the generated header fills in the tables; a plugin's own wrapper connects the parts the way the device's Max objects do |
 | `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests); `match_patch.py` (the patch matcher's CLI, patch-matcher.md); `render_pages.py` (a built device's pages and group choices as PNGs at the device's size, plus layout.txt: every box's x / width / gap by band and its breaks of the layout contract; fails on the overlap check, a control with no text or a chrome label in a box) |
 | `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing |
@@ -24,7 +24,8 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `layout_rules.py` | the 2sl layout contract (169 px, the bands, the header), the overlap check, and how wide a control must be for its text (live.tab buttons in Cozette; live.dial / live.menu / live.text in Live's font, 5.5 px a character) |
 | `seeded_random.py` | `SeededRandom`: the device's one random generator, its Seed and Loop controls (seeded-random.md) |
 | `chord_block.py` | `ChordBlock`: chord shapes, In key, held keys, names, Drift, the chord display (chord-block.md) |
-| `preset_book.py` | `PresetBook`: the Init values and presets, in control units, checked against the controls |
+| `stored_table.py` | `StoredTable`: a table of values saved with the set and in presets as packed Stored Only parameters, not automated; its fields, its preset book form, its brain code and its Hidden editors (stored-table.md) |
+| `preset_book.py` | `PresetBook`: the Init values and presets, in control units, checked against the controls; saved records (a stored table) and every preset's Stored Only values (`stored_only_values_of_preset`) |
 | `live_preset_files.py` | the `.adv` writer (from references/ableton's example) |
 | `live_parameter_identity.py` | what Live knows a parameter by, and the lock file that keeps it |
 | `generated_scripts.py` | `fill_template` and the ES5 check of every generated script |
@@ -65,13 +66,17 @@ from m4l_dev.device_build import build_device            # build_device(reposito
 from m4l_dev.seeded_random import SeededRandom           # SeededRandom(patch, brain, brain_control_inlet)
 from m4l_dev.chord_block import ChordBlock               # ChordBlock(patch, seeded_random, brain, control inlet,
                                                          #   display outlet, display box, most_notes_per_chord)
+from m4l_dev.stored_table import StoredTable, ContinuousField, ChoiceField, stored_tables_brain_code
+                                                         # StoredTable(patch, name, fields, row_count, brain,
+                                                         #   brain_inlet, brain_outlet); .editor_dial / _menu / _toggle
 from m4l_dev.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
 from m4l_dev.techniques.zero_delay_ladder_filter import ZeroDelayLadderFilter   # one module per technique
 from m4l_dev.circuit_modules.ltc1060_mf10_section import Ltc1060Mf10Section     # one module per circuit
 ```
 
 The builder's helpers: `box`, `wire`, `find`, `gen_box(code, ins, outs, rect, box_text, outlet_type)`, `dial`, `menu`,
-`tabs` (with `visibility`), `toggle`, `numbox`, `stored` (Stored Only), `view`, `derived`, `tell`, `on_page`, `group_selector`,
+`tabs` (with `rows`, `row_height`), `toggle`, `numbox` (`dial`, `menu`, `tabs` and `toggle` take `visibility`: Hidden for
+a control the patch drives), `stored` (Stored Only), `saved_record` (a stored table registers itself), `view`, `derived`, `tell`, `on_page`, `group_selector`,
 `groups_selected_by`, `header(output_level_target, output_level_name, preset_menu)`, `live_set_observer(property)`,
 `live_transport(brain, inlet, also_tell_playing)`, `stop_action(brain, inlet, panic_destinations)`,
 `turned_off_by_stop(control)`, `menu_lookup(control, values)`, `tempo_synced_milliseconds(control, beats_by_item, tempo,
@@ -96,7 +101,7 @@ A block is a piece of a device that is the same in every device that has it, and
   generates it, tests/test_blocks.py their build rules.
 
 The blocks: the transport clock (templates/transport-clock.template.js), the seeded random (seeded-random.md), the
-chord block (chord-block.md).
+chord block (chord-block.md), the stored table (stored-table.md).
 
 ## Gen blocks: kit gen~ code a device includes, in layers
 

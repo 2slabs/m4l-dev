@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ElementTree
 
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
+from m4l_dev.preset_book import HeldRecord, stored_only_values_of_preset
 
 KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIVE_PRESET_TEMPLATES = os.path.join(KIT_DIRECTORY, "references", "ableton")
@@ -34,8 +35,9 @@ GZIP_HEADER = b"\x1f\x8b\x08\x00" + b"\x00\x00\x00\x00" + b"\x02\x03"
 
 class LivePresetFiles:
     """The device's choice to ship its presets as Live preset files. `stored_only_values_of_preset(values)`: the
-    device's Stored Only parameters' values for a preset ({control name: value as held} -> {parameter long name:
-    number}); every Stored Only parameter must get one. None when the device has none."""
+    device's own Stored Only parameters' values for a preset ({control name: value as held} -> {parameter long name:
+    number}); with a stored table's (m4l_dev/stored_table.py, which stores its own), every Stored Only parameter must
+    get one. None when the device has no Stored Only parameters of its own."""
 
     def __init__(self, stored_only_values_of_preset=None):
         self.stored_only_values_of_preset = stored_only_values_of_preset
@@ -201,20 +203,17 @@ def write_live_presets(device_path, patch, device_type, presets, live_preset_fil
     listed_names = {valueof["parameter_longname"] for valueof in writer.listed_parameters}
     written = []
     for preset in presets:
-        unlisted = set(preset.values) - listed_names
+        unlisted = {name for name, value in preset.values.items() if not isinstance(value, HeldRecord)} - listed_names
         if unlisted:
             raise BuildError(f"Live preset files: preset {preset.name!r} sets controls that aren't Automated and "
                              f"Stored parameters, which a Live preset can't hold: {sorted(unlisted)}")
-        stored_only_values = {}
-        if writer.stored_only_names:
-            if live_preset_files.stored_only_values_of_preset is None:
-                raise BuildError(f"Live preset files: the device has Stored Only parameters {writer.stored_only_names} "
-                                 "but gave no stored_only_values_of_preset to fill them")
-            stored_only_values = live_preset_files.stored_only_values_of_preset(preset.values)
+        stored_only_values = stored_only_values_of_preset(preset.values, live_preset_files.stored_only_values_of_preset,
+                                                          f"Live preset files: preset {preset.name!r}")
         if sorted(stored_only_values) != sorted(writer.stored_only_names):
             raise BuildError(f"Live preset files: preset {preset.name!r} gives Stored Only values for "
                              f"{sorted(stored_only_values)}, the device's Stored Only parameters are "
-                             f"{sorted(writer.stored_only_names)}")
+                             f"{sorted(writer.stored_only_names)} (a device's own Stored Only parameters need its "
+                             "stored_only_values_of_preset; a stored table's are its own)")
         file_name = live_preset_file_name(preset)
         with open(os.path.join(preset_folder, file_name), "wb") as preset_file:
             preset_file.write(writer.preset_bytes(preset, os.path.basename(device_path), device_size, device_crc,

@@ -31,7 +31,7 @@ from m4l_dev import layout_rules
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
 from m4l_dev.generated_scripts import fill_template, kit_template_text
-from m4l_dev.preset_book import TOGGLE_ITEMS, SavedControl
+from m4l_dev.preset_book import TOGGLE_ITEMS, SavedControl, SavedRecord, stored_only_values_of_preset
 from m4l_dev.themes import theme_from_live_js
 
 # what a tempo-synced time (tempo_synced_milliseconds) is computed at before Live tells the tempo: the [pak]'s initial
@@ -186,6 +186,29 @@ class DevicePatchBuilder:
         self.initial_values[name] = value
         return value
 
+    def saved_record(self, record):
+        """Register a saved record (a stored table, m4l_dev/stored_table.py): presets set it like a control, its Init
+        value is the preset book's, and it reaches Live as its Stored Only parameters. Returns its Init value as held."""
+        if not isinstance(record, SavedRecord):
+            self.fail(f"saved_record of {record!r}, which is no SavedRecord")
+        if record.name in self.initial_values:
+            self.fail(f"two controls are called {record.name!r}")
+        value = self.preset_book.init_value_as_held(record)
+        self.saved_controls[record.name] = record
+        self.initial_values[record.name] = value
+        return value
+
+    def visibility_values(self, what, name, visibility, initial_outside_presets):
+        """The saved values for Live's Parameter Visibility `visibility` of a shown control: Automated and Stored (the
+        default, which Max leaves out) or Hidden (not saved with the set or in presets, not automated, not in Live's
+        undo history: a page or tab switch, or a control the patch drives itself, like a stored table's editors).
+        Hidden needs `initial_outside_presets`, since presets can't set what Live doesn't store."""
+        if visibility not in (identity.VISIBILITY_AUTOMATED_AND_STORED, identity.VISIBILITY_HIDDEN):
+            self.fail(f"{what} {name!r}: visibility {visibility!r} is neither Automated and Stored nor Hidden")
+        if visibility == identity.VISIBILITY_HIDDEN and initial_outside_presets is None:
+            self.fail(f"{what} {name!r} is Hidden, so presets can't set it: give it initial_outside_presets")
+        return {"parameter_invisible": visibility} if visibility == identity.VISIBILITY_HIDDEN else {}
+
     def live_parameter(self, cls, name, short, rect, kind, prect, **values):
         """A Live parameter shown in presentation at `prect`, with its Info View text from `info`."""
         saved_values = {"parameter_longname": name, "parameter_shortname": short, "parameter_type": kind}
@@ -315,10 +338,13 @@ class DevicePatchBuilder:
         return prepend
 
     def dial(self, name, short, target, message, minimum, maximum, unit, x, y, page, exponent=1.0, scale=1.0,
-             views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0):
+             views=(), group=None, initial_outside_presets=None, integer=False, items=None, inlet=0,
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
         """A live.dial: a float by default; integer=True Live's Int type (256 values at most); items=[names] an
         enum (minimum, maximum, unit and exponent unused), showing the chosen name. Its value goes to `target` as
-        `message value` (scaled by `scale`), and to each (view box, message) in `views`."""
+        `message value` (scaled by `scale`), and to each (view box, message) in `views`. visibility: see
+        `visibility_values`."""
+        hidden = self.visibility_values("dial", name, visibility, initial_outside_presets)
         if integer and maximum - minimum >= INT_PARAMETER_VALUES:
             self.fail(f"dial {name!r}: an Int parameter holds {INT_PARAMETER_VALUES} values, {minimum}..{maximum} has more")
         if items is not None:
@@ -334,7 +360,8 @@ class DevicePatchBuilder:
         box_id = self.live_parameter("live.dial", name, short,
                                      (1500 + x, 700 + y, layout_rules.DIAL_WIDTH, layout_rules.DIAL_HEIGHT), kind,
                                      (x, y, layout_rules.DIAL_WIDTH, layout_rules.DIAL_HEIGHT), parameter_initial_enable=1,
-                                     parameter_initial=[float(initial) if items is None else initial], **values)
+                                     parameter_initial=[float(initial) if items is None else initial], **values,
+                                     **hidden)
         varname = varname_for(name)
         self.on_page(page, box_id, varname, group)
         self.controls_by_kind["dial"].append(varname)
@@ -343,34 +370,33 @@ class DevicePatchBuilder:
             self.tell(box_id, view_message, view_box, 0, scale if scale != 1.0 else None)
         return box_id
 
-    def menu(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None):
+    def menu(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None,
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
+        """A live.menu. visibility: see `visibility_values`."""
+        hidden = self.visibility_values("menu", name, visibility, initial_outside_presets)
         initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
         box_id = self.live_parameter("live.menu", name, short, (1500 + x, 640 + y, w, layout_rules.ROW_H),
                                      identity.PARAMETER_TYPE_ENUM, (x, y, w, layout_rules.ROW_H),
                                      parameter_enum=list(items), parameter_mmax=len(items) - 1,
-                                     parameter_initial_enable=1, parameter_initial=[initial])
+                                     parameter_initial_enable=1, parameter_initial=[initial], **hidden)
         varname = varname_for(name)
         self.controls_by_kind["menu"].append(varname)
         return self.on_page(page, box_id, varname, group)
 
     def tabs(self, name, short, items, x, y, w, page, initial_outside_presets=None, group=None, rows=1,
-             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
-        """Selector buttons (a live.tab): one enum parameter, a button per item, in `rows` lines of ROW_H. live.tab
-        splits each line's width equally; every button must hold its longest name (layout_rules).
-
-        visibility: Live's Parameter Visibility. VISIBILITY_HIDDEN (not saved with the set or in presets, not
-        automated, not in Live's undo history: a page or tab switch) needs `initial_outside_presets`, since presets
-        can't set what Live doesn't store."""
+             visibility=identity.VISIBILITY_AUTOMATED_AND_STORED, row_height=layout_rules.ROW_H):
+        """Selector buttons (a live.tab): one enum parameter, a button per item, in `rows` lines of `row_height` px
+        (ROW_H by default, the row band's; a column of tabs, one a line, can be taller: live.tab splits its height
+        equally between its lines). live.tab splits each line's width equally; every button must hold its longest
+        name (layout_rules). visibility: see `visibility_values`."""
         problem = layout_rules.live_tab_button_problem(items, w, rows)
         if problem:
             self.fail(f"tabs {name!r}: {problem}")
-        if visibility not in (identity.VISIBILITY_AUTOMATED_AND_STORED, identity.VISIBILITY_HIDDEN):
-            self.fail(f"tabs {name!r}: visibility {visibility!r} is neither Automated and Stored nor Hidden")
-        if visibility == identity.VISIBILITY_HIDDEN and initial_outside_presets is None:
-            self.fail(f"tabs {name!r} is Hidden, so presets can't set it: give it initial_outside_presets")
+        if not (isinstance(row_height, int) and row_height >= layout_rules.ROW_H):
+            self.fail(f"tabs {name!r}: a line is {row_height!r} px high, less than the row band's {layout_rules.ROW_H}")
+        hidden = self.visibility_values("tabs", name, visibility, initial_outside_presets)
         initial = self.initial(name, items=items, initial_outside_presets=initial_outside_presets)
-        height = layout_rules.ROW_H * rows
-        hidden = {"parameter_invisible": visibility} if visibility == identity.VISIBILITY_HIDDEN else {}
+        height = row_height * rows
         box_id = self.live_parameter("live.tab", name, short, (1500 + x, 600 + y, w, height),
                                      identity.PARAMETER_TYPE_ENUM, (x, y, w, height), parameter_enum=list(items),
                                      parameter_mmax=len(items) - 1, parameter_initial_enable=1,
@@ -399,15 +425,18 @@ class DevicePatchBuilder:
         self.groups_selected_by(box_id, len(items), page)
         return box_id
 
-    def toggle(self, name, short, x, y, w, h, page, mode=1, initial_outside_presets=None, group=None):
+    def toggle(self, name, short, x, y, w, h, page, mode=1, initial_outside_presets=None, group=None,
+               visibility=identity.VISIBILITY_AUTOMATED_AND_STORED):
         """A live.text: mode 1 a toggle (saved; in presets unless it has its own initial value), mode 0 a
-        momentary button (neither)."""
+        momentary button (neither). visibility: see `visibility_values` (a button, saved in nothing, needs no initial
+        value to be Hidden)."""
+        hidden = self.visibility_values("toggle", name, visibility, initial_outside_presets if mode == 1 else 0)
         initial_values = ({"parameter_initial_enable": 1,
                            "parameter_initial": [self.initial(name, items=TOGGLE_ITEMS,
                                                               initial_outside_presets=initial_outside_presets)]}
                           if mode == 1 else {})
         box_id = self.live_parameter("live.text", name, short, (1500 + x, 660 + y, w, h), identity.PARAMETER_TYPE_ENUM,
-                                     (x, y, w, h), _mode=mode, **initial_values)
+                                     (x, y, w, h), _mode=mode, **initial_values, **hidden)
         varname = varname_for(name)
         self.controls_by_kind["text"].append(varname)
         return self.on_page(page, box_id, varname, group)
@@ -741,7 +770,11 @@ class DevicePatchBuilder:
 
     def ui_lookups(self):
         """Every scripting name the UI script looks up."""
-        return ({control.varname for control in self.saved_controls.values()}
+        saved_varnames = set()
+        for control in self.saved_controls.values():
+            saved_varnames |= (set(control.parameter_varnames()) if isinstance(control, SavedRecord)
+                               else {control.varname})
+        return (saved_varnames
                 | {n for names in self.controls_by_kind.values() for n in names} | set(self.view_varnames)
                 | {n for names in self.pages.values() for n in names} | set(self.stop_turns_off))
 
@@ -784,8 +817,7 @@ class DevicePatchBuilder:
         """The UI script (templates/ui-script.template.js): pages, groups, the Preset menu, Stop, the theme."""
         presets_for_menu = []
         if self.header_boxes["preset"] is not None:
-            presets_for_menu = [{self.saved_controls[name].varname: value for name, value in preset.values.items()}
-                                for preset in presets]
+            presets_for_menu = [self.preset_menu_values(preset) for preset in presets]
         return fill_template(kit_template_text("ui-script.template.js"), {
             "DEVICE_NAME": json.dumps(self.device_name), "SCRIPT_NAME": self.script_name,
             "PAGE_NAMES": json.dumps(self.page_names), "PAGES": json.dumps(self.pages),
@@ -793,6 +825,17 @@ class DevicePatchBuilder:
             "GROUPS": json.dumps(self.groups), "VIEWS": json.dumps(self.view_varnames),
             "STOP_TURNS_OFF": json.dumps(self.stop_turns_off), "THEME_FROM_LIVE": theme_from_live_js()},
             "the kit's UI script template")
+
+    def preset_menu_values(self, preset):
+        """{scripting name: value} the Preset menu sets for `preset`: each control's value as held, and each saved
+        record's Stored Only parameters (the UI script sets them; each tells the brain its value, as Live's recall does)."""
+        values = {}
+        for name, value in preset.values.items():
+            if not isinstance(self.saved_controls[name], SavedRecord):
+                values[self.saved_controls[name].varname] = value
+        for long_name, number in stored_only_values_of_preset(preset.values, None, f"preset {preset.name!r}").items():
+            values[varname_for(long_name)] = number
+        return values
 
     def views_script(self, layout, device_views_code):
         """The views script (templates/views.template.js): the chrome and link chip, the drawing helpers, and the

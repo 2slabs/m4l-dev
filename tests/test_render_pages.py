@@ -46,6 +46,20 @@ class RenderPagesTests(unittest.TestCase):
         for page in device.page_names:
             self.assertIn(f"{page}.png", facts)
 
+    def test_a_column_of_five_taller_tabs_draws_its_names_and_keeps_the_contract(self):
+        """The mod page's tab column (2sl gate SPEC v0.7 §5): five lines of 24 px, 64 px wide, 'Random 1·2' the
+        longest, with a middle dot and an en dash Cozette has."""
+        items = ["Env 1·2", "Env 3·4", "Random 1·2", "Seq B–D", "Pressure"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            fixture_device.build_fixture_device(self.root, patch_edit=lambda patch: patch.tabs(
+                "Mod tab", "Mod tab", items, 400, layout_rules.VIEW_Y, 64, "two", initial_outside_presets=0, rows=5,
+                row_height=24, visibility=2))
+        render_pages.render_device(self.device_folder, self.output, scale=1)
+        with open(os.path.join(self.output, "layout.txt"), encoding="utf-8") as facts_file:
+            facts = facts_file.read()
+        self.assertIn("mod_tab [live.tab] x 400 w 64 h 120", facts)
+        self.assertNotIn("contract: mod_tab", facts)
+
     def test_a_box_off_the_device_fails_saying_which(self):
         patcher_path = os.path.join(self.device_folder, f"{fixture_device.FIXTURE_SCRIPT_NAME}.maxpat")
         with open(patcher_path, encoding="utf-8") as patcher_file:

@@ -40,6 +40,11 @@ def fingerprints(root):
     return found
 
 
+# the "loud" preset's Stored Only blob: the device's own Memory, and the stored table Stage (Pitch 12, -24 at 1365
+# codes a semitone from -24; row 2's switches: Pulse on (bit 0) + Wait keyed (3, bits 1-2) = 7)
+LOUD_STORED_ONLY_BLOB = ('{\n    "Memory": [ 97 ],\n    "Stage Pitch 1": [ 49140 ],\n    "Stage Pitch 2": [ 0 ],\n'
+                         '    "Stage switches 1": [ 0 ],\n    "Stage switches 2": [ 7 ]\n}')
+
 class FixtureBuildTests(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="kit-fixture-")
@@ -74,7 +79,7 @@ class FixtureBuildTests(unittest.TestCase):
         self.assertIn('<Name Value="Level" />', xml_text)
         self.assertNotIn('Value="Page"', xml_text, "the Hidden page switch is in no preset")
         blob_hex = xml_text.split("<Blob>")[1].split("</Blob>")[0]
-        self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(), '{\n    "Memory": [ 97 ]\n}')
+        self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(), LOUD_STORED_ONLY_BLOB)
 
     def test_a_changed_parameter_fails_with_a_diff_and_writes_nothing(self):
         before = fingerprints(self.root)
@@ -130,8 +135,7 @@ class FixtureBuildTests(unittest.TestCase):
                 self.assertIn('<Name Value="Level" />', xml_text)
                 self.assertNotIn("<Path ", xml_text, "no absolute path: the preset finds the device next to it")
                 blob_hex = xml_text.split("<Blob>")[1].split("</Blob>")[0]
-                self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(),
-                                 '{\n    "Memory": [ 97 ]\n}')
+                self.assertEqual(bytes.fromhex("".join(blob_hex.split())).rstrip(b"\0").decode(), LOUD_STORED_ONLY_BLOB)
         finally:
             shutil.rmtree(audio_root)
 

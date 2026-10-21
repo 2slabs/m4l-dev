@@ -13,6 +13,7 @@ Stored Only parameters (visibility 1) are not host parameters: they're the plugi
 import json
 
 from m4l_dev.build_error import BuildError
+from m4l_dev.preset_book import stored_only_values_of_preset
 
 LIVE_FLOAT, LIVE_INT, LIVE_ENUM = 0, 1, 2
 LIVE_STORED_ONLY = 1
@@ -121,19 +122,18 @@ def host_parameters(patch, lock_path, destinations, left_out=("Page",)):
 
 def presets_as_held(patch, parameters, stored, stored_values_of_preset=None):
     """[(title, [held value per parameter], [value per stored])]: the device's presets, as its patch holds them
-    ("group: name", or the name alone where they're the same). A device with Stored Only parameters gives
+    ("group: name", or the name alone where they're the same). A device with Stored Only parameters of its own gives
     `stored_values_of_preset(preset values) -> {name: value}`, the same function its Live preset files use
-    (live_preset_files.LivePresetFiles)."""
-    if stored and stored_values_of_preset is None:
-        raise BuildError(f"plugin parameters: the device has Stored Only parameters {[s['name'] for s in stored]} but "
-                         "gave no stored_values_of_preset to fill a preset's")
+    (live_preset_files.LivePresetFiles); a stored table's come from the preset (preset_book.stored_only_values_of_preset)."""
     result = []
     for preset in patch.preset_book.presets_as_held(patch.saved_controls):
         title = preset.name if preset.group == preset.name else f"{preset.group}: {preset.name}"
         held = [0.0 if p["kind"] == "Button" else float(preset.values.get(p["name"], p["initial"])) for p in parameters]
-        values = stored_values_of_preset(preset.values) if stored else {}
+        values = stored_only_values_of_preset(preset.values, stored_values_of_preset,
+                                              f"plugin parameters: preset {preset.name!r}")
         if sorted(values) != sorted(s["name"] for s in stored):
             raise BuildError(f"plugin parameters: preset {preset.name!r} gives Stored Only values for {sorted(values)}, "
-                             f"not {sorted(s['name'] for s in stored)}")
+                             f"not {sorted(s['name'] for s in stored)} (a device's own Stored Only parameters need its "
+                             "stored_values_of_preset; a stored table's are its own)")
         result.append((title, held, [float(values[s["name"]]) for s in stored]))
     return result

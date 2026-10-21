@@ -23,8 +23,11 @@ random reset (how many bars until we go back to the seed restart) and a way to s
 - **Draws compare against the control** where a control sets a chance (fire if the draw is under Density): turning
   the control thins or thickens what plays. Drawing more or fewer numbers (another chord size, another Density)
   moves every later draw; that is accepted (user).
-- **Controls** (`m4l_dev/seeded_random.py`): Seed, a live.numbox 0-999 (a float with Live's Int unit style, the brain
-  taking the nearest whole number: the Live preset writer knows only float and enum parameters), and Loop, a
+- **Controls** (`m4l_dev/seeded_random.py`): Seed, 0-999 (a float with Live's Int unit style, the brain taking the
+  nearest whole number: the Live preset writer knows only float and enum parameters), a live.numbox in the row band
+  (`seed_control`) or a live.dial in the dial band (`seed_dial`); the two are one parameter to Live (its long name,
+  range and unit), so a device moving between them keeps its sets' Seed and automation, and only the lock's maxclass
+  changes; and Loop, a
   live.menu (off, 1 bar ... 64 bars). The kit names them and writes their Info text; each device places them where
   its randomness is. Both are saved in presets (Init: Seed 0, Loop 16 bars, unless a device's preset book says
   otherwise).
