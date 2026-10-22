@@ -188,6 +188,25 @@ TOKEN_PATTERN = re.compile(r"""
 
 NEWLINE_PATTERN = re.compile(r"\n")
 
+# Numbers Max's GenExpr lexer refuses though they are numbers here (references/dsp.md, "gen~ numbers"):
+# - an exponent with a sign of '+' (its grammar's exponent is e or E, then an optional '-', then digits: genpatcher's
+#   GenExpr.Language, read 2026-10-21);
+# - a whole-number mantissa with a two-digit positive exponent: Max's parser stopped at the bbd's History initial -1e18
+#   ("function call missing '('", found by a probe device of every prefix of the code, 2026-10-21), while 1e9 and
+#   -1.4528355093231122e-05 compile in every 2sl device. Why its lexer splits it isn't read; the measured line is.
+MAX_REFUSED_PLUS_EXPONENT = re.compile(r"[eE]\+")
+MAX_REFUSED_WHOLE_MANTISSA_LONG_EXPONENT = re.compile(r"^\d+[eE]\d{2,}$")
+
+
+def refused_by_max_number_lexer(text):
+    """Why Max's GenExpr would refuse the number `text`, or None (see MAX_REFUSED_*)."""
+    if MAX_REFUSED_PLUS_EXPONENT.search(text):
+        return "Max's GenExpr has no '+' in an exponent (write 1e9, not 1e+9)"
+    if MAX_REFUSED_WHOLE_MANTISSA_LONG_EXPONENT.match(text):
+        return ("Max's GenExpr parser refused a whole-number mantissa with a two-digit positive exponent (-1e18, 2026-10-21): "
+                "write it as a number Max has compiled (1e9, or digits)")
+    return None
+
 
 def tokenize(code):
     tokens = []
@@ -217,6 +236,9 @@ def tokenize(code):
             following = code[end:end + 1]
             if following and (following.isalpha() or following == "_"):
                 raise GenExprError(f"malformed number '{text}{following}'", line, col)
+            refused = refused_by_max_number_lexer(text)
+            if refused:
+                raise GenExprError(f"number '{text}': {refused}", line, col)
             tokens.append(Token("number", text, line, col))
         elif kind == "string":
             tokens.append(Token("string", text[1:-1], line, col))

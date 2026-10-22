@@ -384,8 +384,8 @@ class BucketBrigadeEcho(Technique):
         lines += [self.substituted(f"Delay ${{p}}_{side}_heard(${{size}});", size=str(self.heard_samples))
                   for side in ("left", "right")]
         histories = ["${p}_time_ms(0)", "${p}_wow_1(0)", "${p}_wow_2(0)", "${p}_flutter_phase(0)",
-                     "${p}_since_stop(1e9)", "${p}_stop_fade(0)", "${p}_left_stop_index(-1e18)",
-                     "${p}_right_stop_index(-1e18)", "${p}_reset_done(1)",
+                     "${p}_since_stop(1e9)", "${p}_stop_fade(0)", "${p}_left_stop_index(-1e9)",
+                     "${p}_right_stop_index(-1e9)", "${p}_reset_done(1)",
                      "${p}_level(0)", "${p}_round_elapsed(0)", "${p}_round_peak_so_far(0)"]
         if self.has_stereo_mode:
             histories += ["${p}_cross(0)", "${p}_wide(0)", "${p}_mono(0)"]

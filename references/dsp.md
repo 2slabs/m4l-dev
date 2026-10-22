@@ -715,6 +715,18 @@ whole idle core 1.83.
 
 `neutral_damping_hz` and `sections_for_round_trip` are DESIGN, stated in the module.
 
+## gen~ numbers (what Max's GenExpr lexer takes)
+
+Max's GenExpr grammar is in Max itself: Live's Max.app, `Contents/Resources/C74/extensions/max/genpatcher.mxo`, which
+holds the Lua source of `gen2.GenExpr.Language` as text (read 2026-10-21 with `strings`). A float there is a fraction
+with an optional exponent, or digits with an exponent, the exponent `e` or `E`, then an optional `-`, then digits: no
+`+`. And a measurement: 2sl dub 0.1.0's core didn't compile in Live ("error parsing tokens: function call missing
+'('"); a probe device with one gen~ per prefix of the bucket-brigade echo's code compiled through the line before its
+History declaration and failed with it, whose one new token was the initial value -1e18. 1e9 and
+-1.4528355093231122e-05 compile in every 2sl device, as do negative exponents like 1e-06. The renderer refuses a `+` exponent and a whole-number mantissa with a two-digit positive exponent (`refused_by_max_number_lexer`).
+That error message is Max's furthest-token report (codepeg2.Parser keeps the error contexts at the furthest token it
+reached), so it names what could have come next, not what was wrong.
+
 ## gen~ (what Max accepts)
 
 - **delay** (Cycling '74, Gen reference: https://docs.cycling74.com/reference/gen_dsp_delay/, read 2026-10-19):

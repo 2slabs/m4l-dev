@@ -414,7 +414,7 @@ class BoundedLoopTests(unittest.TestCase):
         self.assert_rejected("for (i = 0; i < 10; i += -1) {\n}\nout1 = 0;", "more than 0", 1)
         self.assert_rejected("for (i = 0; i < 10; i += 1) {\n\ti = 0;\n}\nout1 = 0;", "cannot assign to the loop counter", 2)
         self.assert_rejected("for (i = 0; i < 1e9; i += 1) {\n}\nout1 = 0;", "more than 65536", 1)
-        self.assert_rejected("for (i = 1e20; i < 2e20; i += 1) {\n}\nout1 = 0;", "more than 65536", 1)
+        self.assert_rejected("for (i = 1e9; i < 2e9; i += 1) {\n}\nout1 = 0;", "more than 65536", 1)
         self.assert_rejected("for (i = 0; i < 10 + 1; i += 1) {\n}\nout1 = 0;", "one number literal", 1)
         self.assert_rejected("for (i = 0; j < 10; i += 1) {\n}\nout1 = 0;", "must test the counter 'i'", 1)
 
@@ -452,6 +452,19 @@ class SpeedTests(unittest.TestCase):
             self.skipTest(timing.report())
         self.assertGreater(rate, 250_000, f"the renderer runs compiled C: ~1M samples/s here; Python's was ~120k "
                                           f"({timing.report()})")
+
+
+class MaxNumberLexerTests(unittest.TestCase):
+    def test_numbers_max_refused_are_refused(self):
+        # references/dsp.md, "gen~ numbers": no '+' in an exponent; Max stopped at -1e18 (2026-10-21)
+        for code in ("History h(-1e18);\nout1 = h;\n", "out1 = 1e+9;\n", "out1 = 2E12;\n"):
+            with self.assertRaises(GenExprError, msg=code):
+                check(code, num_inputs=0, num_outputs=1)
+
+    def test_numbers_max_compiles_are_kept(self):
+        for code in ("out1 = 1e9;\n", "out1 = -1.4528355093231122e-05;\n", "out1 = 1e-06;\n", "out1 = 0.5;\n"):
+            check(code, num_inputs=0, num_outputs=1)
+
 
 
 if __name__ == "__main__":
