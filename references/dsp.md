@@ -254,6 +254,111 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
 tape as hysteresis plus playback-head loss filters. Not modelled; the echo's tape is a saturating loop, which is why it is a technique and not a circuit
 module of a tape machine.
 
+## Bucket-brigade echo (m4l_dev/techniques/bucket_brigade_echo.py)
+
+Read 2026-10-21 for 2sl dub's bbd Echo Type (2sl dub SPEC v0.3 §3.4; the device's research is its
+references/echoes.md §2). A technique, not a circuit module: the filters are a "typical" echo circuit's, not a named
+unit's, and the Memory Man's own filters and feedback point are in no source we have.
+
+**Holters & Parker, "A combined model for a bucket brigade device and its input and output filters", DAFx-18**
+(`holters-parker-bbd-dafx18.pdf`): the model.
+- §2 [p. 1-2] (eq. 1): the input is sampled at every even clock edge; "the signal sampled at t0 is present at the
+  combined output from tN−1 to tN+1", so "for a constant clock rate, the signal is not only delayed by N/2 clock
+  periods ... It is also convolved with a rectangular pulse of one clock period width". Eq. 34 [p. 6]:
+  H_BBD = e^(−iω N / (2 f_BBD)) sinc(ω / (2π f_BBD)). (The block's ring: `stages` / 2 buckets, one in on each even
+  edge, the oldest out on each odd edge, held; the hold's delay is in the N / 2.)
+- §2 [p. 2]: two kinds of aliasing, input content over the clock's Nyquist "reflected around the BBD Nyquist
+  frequency" and "the image-spectra created by sample-and-hold"; "These types of aliasing (at least when present in
+  small quantities) can be considered to be desirable for the expected sound of a BBD and should be reproduced".
+- §3 [p. 2]: "We propose to model the BBD as a delay-line of fixed length, operating at another, potentially varying
+  sampling rate, the BBDs clock rate ... instead of using simple interpolation for the necessary sampling rate
+  conversions, we will exploit the fact that typical application circuits contain low-pass filters at the BBDs input
+  and output." Eqs. 2-11 [p. 2-3]: the input filter in partial fractions, a first-order recursion per pole at the audio
+  rate and a weighted sum at each sampling instant (t_n = (k + d_n) T_s). Eqs. 12-25 [p. 3-4]: the output filter
+  driven by the held output's steps Δ(n), g_out,m(d_n) = (r_out,m / p_out,m) p̄^(1−d_n) (eq. 21), y(k) = H0 y_BBD(kT_s) +
+  Σ x_out,m(k) (eq. 25). Algorithm 1 [p. 4]: the clock-rate inner loop runs before the k-th input sample is processed.
+- §4 [p. 7]: "a small amount of aliasing in the recorded output of the analog device ... and slightly more aliasing in
+  the digital model output at the sampling rate fs = 44.1 kHz ... produced by the assumption of the input to be an
+  impulse-train, as well as the reflection around the audio Nyquist frequency of the image-spectra"; ODG −0.39 to
+  −0.70 against a Juno-60 (Table 2). §2 [p. 2]: noise and non-linearity are left out ("this paper focuses on the
+  sampling and delay behavior").
+- The block's change (worked here): the input side takes the host samples as a straight line between them (a
+  first-order hold) instead of HP18's impulse train. For one pole, s' = p s + r u with u from u0 to u1 over a sample,
+  s(d T) = q s0 + (r / p) [u0 (q − 1) + (u1 − u0) ((q − 1) / (p T) − d)], q = e^(p d T). Why: the impulse train's gain
+  at DC is −pT / (1 − e^(pT)) for each pole, +1.8 dB for a 2 kHz pole at 44.1 kHz and +8 dB when a short Time's clock
+  puts the filter at 15 kHz; the straight line's error is sinc²(f / fs) (−0.47 dB at 4.1 kHz, 32 kHz), measured and
+  given back at the loop's peak in the feedback (exact while that peak is under fs / 4).
+
+**Raffel & Smith, "Practical modeling of bucket-brigade device circuits", DAFx-10** (`raffel-smith-bbd-dafx10.pdf`;
+read rendered, the text layer is scrambled): the circuit around it.
+- §1.2 [p. 1], fig. 2: a BBD echo: input → compression → anti-aliasing filter → BBD → reconstruction filter →
+  expansion → output, the feedback from the expander's output to the compressor's input. §1.3 [p. 2]: "the compression
+  and expansion stages occur outside of the filter in most BBD circuits requiring companders."
+- §2.1 [p. 2]: "Delay Time (s) = N / (2 f_cp)"; "One common configuration is to use a 4096-stage BBD in an echo
+  circuit to achieve a maximum of a 300 millisecond delay time. This requires a clock frequency of ... 6826 2/3 Hz."
+  (`DESIGN_CLOCK_HZ`.)
+- §2.2 [p. 2-3]: "A common implementation is to use a third-order filter for anti-aliasing and a third-order filter
+  followed by a second-order 'corner correction' filter for reconstruction." "The filter cutoff frequency is typically
+  chosen to be between 1/3 and 1/2 of the sampling frequency." "the vast majority of BBD systems use R = 10 kOhm ...
+  Typical values for the capacitors for an echo circuit are C1 = .0068 µF, C2 = .082 µF, C3 = .00033 µF for the
+  anti-aliasing filter, C1 = .039 µF, C2 = .00033 µF for the second-order reconstruction filter, and C1 = .0022 µF,
+  C2 = .033 µF, C3 = .001 µF for the third-order reconstruction filter." Its third-order transfer function as printed
+  has a2 = 2 / (R C1) + 2 / (R C2) and a1 = 1 / (R² C1 C2) + 1 / (R² C2 C3); the nodal equations of its figure 4 with
+  C2 to the follower's output (the only placing that gives that a2) give a1 = 3 / (R² C1 C2) + 1 / (R² C2 C3): the
+  block uses the circuit's. With it the anti-aliasing filter peaks +4.2 dB near 2 kHz as RS10's figure 5 draws it
+  (+5.4 dB as printed), the third-order reconstruction +5.7 dB (+11 dB as printed) and the series +11.8 dB at 2 kHz
+  (figure 6's expected curve tops out near +10 dB). The anti-aliasing filter is −3 dB at 3.23 kHz, under the 6826 Hz
+  clock's Nyquist: RS10 §4.2, "set to have a cutoff frequency below the Nyquist limit for the lowest possible clock
+  rate"; §2.2, the "worst-case" fixed design, against switched-capacitor filters that track the clock.
+- §3.1 [p. 4]: "For near-maximum-level inputs, the BBD system typically has a signal-to-noise ratio of about 60 dB";
+  "a variable insertion gain which varies between 0 and 2 dB". §3.3: "The 570 or 571 compander chip is internally
+  set so that each amplifier has a compression or expansion ratio of 2"; "τ = 10000 C_rect"; "In BBD systems, the
+  capacitor value is normally chosen to be between 0.22 uF and 1 uF." §3.4: "the feedforward expander should be
+  implemented as f(x) = avg(|x|) x while the feedback compressor should be modeled as f(x) = x / avg(|f(x)|)". §3.4
+  [p. 5]: the averager is a one-pole on the full-wave rectified signal.
+- §4.1 [p. 5]: the most accurate model is "a software delay line of fixed length matching the number of delay stages
+  ... at a rate determined by an artificial clock frequency" (HP18 is that, with the circuit's filters doing the
+  resampling).
+- §4.2 [p. 5]: "the insertion gain tends to be between 0 and 2 dB at low frequencies, but falls off slowly to between
+  −4 and −6 dB at the Nyquist limit for any given clock rate". (Whether that measurement includes the hold's sinc is
+  not said: the block has both, which may count some of it twice.)
+- §4.3 [p. 5]: "A truly accurate model would involve the insertion of low-amplitude noise immediately before or after
+  the delay line"; "analog delay circuits ... oscillate when the feedback loop gain is high enough. The presence of
+  noise in the circuit allows for oscillation without external input."; "the noise level tends to be at least 60 dB
+  below the input signal level".
+- §4.4 [p. 5]: "THD = 1.01^(N/1024) − 1 ... about 1% of harmonic distortion occurs for every 1024 stages". §4.5
+  [p. 6]: f(x) = x − a x² − b x³ + a on −1..1, 1 − a − b above, −1 − a + b below, a = 1/8, b = 1/18 fitted to a
+  measured BBD. (The block keeps the shape without the + a offset, which only centres a full-level sine, and scales
+  a and b together so a full-level sine's THD is §4.4's for its stages: 8.3 % for 8192.)
+
+**The stage count**: two 4096-stage chips in series, as the Memory Man's MN3005 pair (David Morrin's service notes,
+quoted in 2sl dub references/echoes.md §2.2: calibration notes list "MN3005 ×2"; SECONDARY). RS10 footnote 1 [p. 1]:
+the MN3005 is a 4096-stage BBD.
+
+**The clock's whine**: Morrin (2sl dub references/echoes.md §2.2): "a slow clock gives an audible high-pitched noise";
+the two clocks never fully cancel (Morrin's BBD page). Its level is UNVERIFIED (no datasheet): `CLOCK_LEAKAGE_DB`.
+
+**Decisions** (the block's, by the numbers above):
+- *The filters follow the Time.* A unit's filters are fixed and its clock moves over a range of a few times; 2sl
+  dub's Time is 1/16 to 1/2 (8x) at any tempo, wide's 1.5 on top: from tens of milliseconds to seconds. RS10's
+  worst-case filters at a fixed 3.2 kHz would alias hard at 1 s (clock 4.1 kHz) and dull a short Time. So the filters are RS10's scaled to the clock
+  of the set (glided) Time, a unit built for each Time, and only the clock's wobble moves under them, as a unit's
+  modulation does. Measured: the steady-tone response at the same fractions of the clock is the same at 250, 500 and
+  1000 ms within 0.07 dB; its −3 dB crossing past the peak is 0.392 of the clock: 6.43, 3.22 and 1.61 kHz.
+- *The compander outside the filters* (RS10 §1.3, "most"). Its cost, measured: for a steady tone the expander expands
+  the level the filters left, so a tone comes out at the chain's response squared: +16.6 dB at its peak (0.28 of
+  the clock; measured +15.2 dB at 0.25 and 0.3, as the twin). A howl is a steady tone, so the loop's howl point is set by that (`PEAK_LOOP_GAIN`, 6.79), and a sound
+  whose level is mostly in the flat part of the band comes round at about feedback / 6.79 a pass.
+- *The grid.* The chain's group delay is taken where the loop's gain is highest (3.83 clock periods; 1.15 at DC): the
+  repeats converge there. A low sound's first repeat is then 2.7 periods early, 0.33 ms at 500 ms, 0.66 ms at 1 s.
+- *Against a cheaper model.* A plain modulated delay with the same filters at the host rate (RS10's simplest) has no
+  aliasing: at 1 s a 3 kHz tone, over the 2.05 kHz Nyquist, comes out as its alias at 1.1 kHz, +22.5 dB above what
+  is left of the tone (measured, = the filters' prediction within 0.1 dB). Where the input is under the clock's
+  Nyquist the two agree to the host-rate straight line's sinc² and the hold's images (0.15 dB to the peak, 0.85 dB at
+  0.4 of the clock). The cost of the exact one (`MAXIMUM_EDGES_PER_SAMPLE` edges a sample at most): 1.1 % of a core
+  at 125 ms, 0.85 % at 1 s, stereo at 44.1 kHz, against the tape echo's 0.5 % (our renderer at -O2), so no cheaper
+  model is needed.
+
 ## Histories start at their targets (m4l_dev/techniques/histories_start_at_their_targets.py)
 
 No outside source: our construction, stated whole in the module docstring. gen~ gives a History a constant initial

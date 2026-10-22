@@ -32,6 +32,10 @@ from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: 
 from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
 from m4l_dev.techniques.tape_style_echo import (STEREO_MODES, WIDE_RIGHT_RATIO, TapeStyleEcho,  # noqa: E402
                                                TapeStyleEchoTapeWriter)
+from m4l_dev.techniques import bucket_brigade_echo  # noqa: E402
+from m4l_dev.techniques.bucket_brigade_echo import (TWO_CHIP_STAGES, BucketBrigadeEcho,  # noqa: E402
+                                                    BucketBrigadeEchoWriter)
+from m4l_dev.cpu_timing import THREAD, CpuTiming  # noqa: E402
 from m4l_dev.gen_blocks import Technique  # noqa: E402
 from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets  # noqa: E402
 from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
@@ -876,6 +880,351 @@ class TapeStyleEchoOptionTests(unittest.TestCase):
                                                   longest_time_ms=10.0, right_lag_ms=0.0, rounds_kept=0),
                                     left="0", right="0")
 
+
+
+def hann_burst(frequency, milliseconds, amplitude, samplerate, start, total):
+    """`total` samples, silent but for a Hann-windowed sine burst from `start`."""
+    signal = [0.0] * total
+    length = int(samplerate * milliseconds / 1000)
+    for i in range(length):
+        signal[start + i] = amplitude * math.sin(2 * math.pi * frequency * i / samplerate) \
+            * math.sin(math.pi * i / length) ** 2
+    return signal
+
+
+def energy_centroid(signal, low, high):
+    """The energy's centroid in signal[low:high], in samples, and the energy."""
+    energy = sum(v * v for v in signal[low:high])
+    return sum(i * signal[i] ** 2 for i in range(low, high)) / energy if energy else float("nan"), energy
+
+
+class BucketBrigadeEchoTests(unittest.TestCase):
+    """The bucket-brigade echo (references/dsp.md, "Bucket-brigade echo"): its claims, measured on short renders at the
+    lowest host rate whose band holds the clock fractions measured."""
+
+    def echo(self, samplerate, extra_blocks=(), right_input="in1", rounds_kept=3, **options):
+        block = BucketBrigadeEcho("echo", left_input="in1", right_input=right_input, time_ms="time",
+                                  feedback="feedback", loop_lowpass_hz="lowpass", loop_highpass_hz="highpass",
+                                  saturation_gain="saturation", wow_cents="wow", flutter_cents="flutter",
+                                  stop_pressed="stop > 0", stages=TWO_CHIP_STAGES, longest_time_ms=3000.0,
+                                  right_lag_ms=10.0, rounds_kept=rounds_kept, **options)
+        blocks = [block] + [factory(block) for factory in extra_blocks]
+        params = {"time": 500.0, "feedback": 0.6, "lowpass": 20000.0, "highpass": 1.0, "saturation": 1.0, "wow": 0.0,
+                  "flutter": 0.0, "stop": 0.0, "mode": 0.0}
+        return harness(blocks, params, ["echo_left", "echo_right", "echo_left_clock_hz", "echo_loop_samples",
+                                        "echo_round_peak_1", "echo_left_u", "echo_right_clock_hz"],
+                       num_inputs=2 if right_input == "in2" else 1, samplerate=samplerate)
+
+    def repeat_lateness_ms(self, signal, burst_centre, expected_seconds, samplerate, half_window):
+        centre = burst_centre + expected_seconds * samplerate
+        late, energy = energy_centroid(signal, int(centre - half_window), int(centre + half_window))
+        return (late - centre) / samplerate * 1000, energy
+
+    def test_repeats_land_on_the_grid_in_every_stereo_mode(self):
+        samplerate, period, lag = 16000.0, 0.5, 0.010
+        total = int(samplerate * 2.9)
+        # at the loop's peak (0.28 of the 8.2 kHz clock), where the repeats converge and the grid is set
+        burst = hann_burst(2260.0, 20.0, 0.1, samplerate, 100, total)
+        burst_centre, _ = energy_centroid(burst, 0, total)
+        half = 0.1 * samplerate
+        # (side, where its repeats are, where they are not), in seconds after the burst, per mode
+        expected = {
+            "stereo": [(0, [k * period for k in range(1, 6)], []), (1, [k * period + lag for k in range(1, 6)], [])],
+            "ping-pong": [(0, [k * period for k in (1, 3, 5)], [k * period for k in (2, 4)]),
+                          (1, [k * period for k in (2, 4)], [k * period for k in (1, 3, 5)])],
+            "wide": [(0, [k * period for k in range(1, 6)], []),
+                     (1, [k * period * WIDE_RIGHT_RATIO + lag for k in (1, 2, 3)], [period + lag])],
+            "mono": [(0, [k * period for k in range(1, 6)], []), (1, [k * period for k in range(1, 6)], [])],
+        }
+        # wide's right side runs at 1.5 T, its clock 5.5 kHz: its own burst at its own peak, 1.5 kHz
+        right_burst = {"wide": hann_burst(1510.0, 20.0, 0.1, samplerate, 100, total)}
+        worst = 0.0
+        for mode, sides in expected.items():
+            program = self.echo(samplerate, right_input="in2", stereo_mode="mode")
+            program.set_param("mode", float(STEREO_MODES.index(mode)))
+            program.run(int(samplerate * 0.3), [[0.0] * int(samplerate * 0.3)] * 2)   # every mode's weight settled
+            outputs = program.run(total, [burst, right_burst.get(mode, burst)])
+            for side, here, not_here in sides:
+                for seconds in here:
+                    late_ms, energy = self.repeat_lateness_ms(outputs[side], burst_centre, seconds, samplerate, half)
+                    worst = max(worst, abs(late_ms))
+                    self.assertLess(abs(late_ms), 1.0, (mode, side, seconds, late_ms))
+                    for elsewhere in not_here:
+                        _, stray = self.repeat_lateness_ms(outputs[side], burst_centre, elsewhere, samplerate, half)
+                        self.assertLess(stray, 1e-3 * energy, (mode, side, elsewhere))
+        print(f"\n[bbd grid] the worst repeat, every mode, five rounds: {worst:.3f} ms off n T")
+
+    def steady_gain_db(self, samplerate, time_ms, frequencies):
+        """The steady-tone gain, dB, of the echo's first pass at each frequency (two at a time, one a side)."""
+        gains = []
+        for pair_start in range(0, len(frequencies), 2):
+            pair = frequencies[pair_start:pair_start + 2]
+            program = self.echo(samplerate, right_input="in2")
+            program.set_param("time", time_ms)
+            program.set_param("feedback", 0.0)
+            total = int(samplerate * (time_ms / 1000 + 0.6))
+            # -40 dB: the buckets at -20 dB (the compressor's 2:1), where their distortion is under 0.01 dB
+            tones = [[0.01 * math.sin(2 * math.pi * f * i / samplerate) for i in range(total)]
+                     for f in (pair + pair[:1])[:2]]
+            outputs = program.run(total, tones)
+            window = int(samplerate * 0.25)
+            for side, frequency in enumerate(pair):
+                heard = amplitude_at(outputs[side][-window:], frequency, samplerate)
+                gains.append(20 * math.log10(heard / 0.01))
+        return gains
+
+    def test_the_band_follows_the_clock(self):
+        # At three Times the steady-tone gain at the same fractions of the clock is the same, and is the chain's
+        # response (filters, hold, insertion gain) doubled in dB by the compander (a steady tone's level is expanded
+        # as the filters left it): the band is the clock's, so a longer Time is darker in proportion.
+        # The host samples reach the anti-aliasing filter as a straight line between them: sinc^2(f / fs) more.
+        fractions = (0.05, 0.15, 0.25, 0.3, 0.35, 0.4)
+        # Each Time at a host rate 4x its clock (so the host's share is the same: the claim is the clock's).
+        measured, cutoffs = [], []
+        for samplerate, time_ms in ((64000.0, 250.0), (32000.0, 500.0), (16000.0, 1000.0)):
+            program = self.echo(samplerate)
+            program.set_param("time", time_ms)
+            clock = program.run(1, [[0.0]])[2][0]
+            gains = self.steady_gain_db(samplerate, time_ms, [x * clock for x in fractions])
+            twin = [2 * 20 * math.log10(abs(bucket_brigade_echo.chain_response(x))
+                                        * bucket_brigade_echo.hold_response(x * clock / samplerate) ** 2)
+                    for x in fractions]
+            print(f"\n[bbd band] {time_ms:g} ms (clock {clock:.0f} Hz): "
+                  + ", ".join(f"{x:g}: {g:+.2f} (twin {t:+.2f})" for x, g, t in zip(fractions, gains, twin)))
+            measured.append(gains)
+            # the twin to 0.15 dB up to the peak; above it the hold's images, which the expander's averager counts
+            # with the tone, lift it by up to 0.85 dB (0.4 of the clock)
+            for fraction, gain, expected in zip(fractions, gains, twin):
+                self.assertAlmostEqual(gain, expected, delta=0.15 if fraction <= 0.3 else 1.0,
+                                       msg=(time_ms, fraction, gains, twin))
+            # where the band ends: the -3 dB crossing past the peak, between 0.35 and 0.4 of the clock
+            crossing = 0.35 + 0.05 * (gains[4] + 3) / (gains[4] - gains[5])
+            cutoffs.append((time_ms, crossing * clock))
+        for fraction, gains in zip(fractions, zip(*measured)):
+            self.assertLess(max(gains) - min(gains), 0.1, (fraction, gains))
+        print("\n[bbd band] the -3 dB crossing: " + ", ".join(f"{t:g} ms {f:.0f} Hz" for t, f in cutoffs))
+        for time_ms, cutoff in cutoffs:
+            self.assertAlmostEqual(cutoff * time_ms, cutoffs[-1][1] * 1000.0, delta=0.01 * cutoffs[-1][1] * 1000.0)
+        self.assertTrue(1500 < cutoffs[-1][1] < 2050, cutoffs)
+        # at 1 s the clock is 4.1 kHz, its Nyquist 2.05 kHz: the band ends near 2 kHz (2sl dub SPEC §3.4)
+        program = self.echo(16000.0)
+        program.set_param("time", 1000.0)
+        self.assertAlmostEqual(program.run(1, [[0.0]])[2][0] / 2, 2050.0, delta=10.0)
+
+    def test_the_compander_is_two_to_one_then_one_to_two(self):
+        # levels re the buckets' full level (saturation 1); the heard gain from -20 dB down, where the buckets'
+        # distortion takes under 0.03 dB off the tone (at -10 dB, 0.3 dB: not the compander's law)
+        samplerate, frequency = 16000.0, 400.0
+        full_level = BucketBrigadeEcho("probe", left_input="0", right_input="0", time_ms="1", feedback="0",
+                                       loop_lowpass_hz="1", loop_highpass_hz="1", saturation_gain="1", wow_cents="0",
+                                       flutter_cents="0", stop_pressed="0", stages=TWO_CHIP_STAGES,
+                                       longest_time_ms=10.0, right_lag_ms=0.0, rounds_kept=0).full_level
+        for level_db in (-10.0, -20.0, -30.0, -40.0, -50.0):
+            amplitude = full_level * 10 ** (level_db / 20)
+            program = self.echo(samplerate)
+            program.set_param("feedback", 0.0)
+            program.set_param("time", 250.0)
+            total = int(samplerate * 0.9)
+            tone = [amplitude * math.sin(2 * math.pi * frequency * i / samplerate) for i in range(total)]
+            outputs = program.run(total, [tone])
+            window = int(samplerate * 0.25)
+            at_the_buckets = amplitude_at(outputs[5][-window:], frequency, samplerate)
+            heard = amplitude_at(outputs[0][-window:], frequency, samplerate)
+            # the compressor halves the level in dB about the full level
+            self.assertAlmostEqual(20 * math.log10(at_the_buckets / full_level), level_db / 2, delta=0.05,
+                                   msg=level_db)
+            # and the expander gives it back: the same gain at every level (the chain's and the host's straight line,
+            # doubled: module docstring)
+            if level_db <= -30:
+                twin = 2 * 20 * math.log10(abs(bucket_brigade_echo.chain_response(frequency / outputs[2][0]))
+                                           * bucket_brigade_echo.hold_response(frequency / samplerate) ** 2)
+                self.assertAlmostEqual(20 * math.log10(heard / amplitude), twin, delta=0.1, msg=level_db)
+
+    def test_the_noise_breathes_with_the_signal(self):
+        # the chip's noise is all that differs between two noise seeds: under a tone it rides at the tone's level,
+        # after the tone the expander closes on it
+        samplerate = 16000.0
+        total = int(samplerate * 2.0)
+        tone = [0.1 * math.sin(2 * math.pi * 300 * i / samplerate) if i < samplerate else 0.0 for i in range(total)]
+        renders = []
+        for seed in (1, 2):
+            program = self.echo(samplerate)
+            program.set_seed(seed)
+            program.set_param("feedback", 0.0)
+            program.set_param("time", 250.0)
+            renders.append(program.run(total, [tone])[0])
+        noise = [a - b for a, b in zip(*renders)]
+        rms = lambda values: math.sqrt(sum(v * v for v in values) / len(values))  # noqa: E731
+        under = rms(noise[int(samplerate * 0.6):int(samplerate * 1.2)])
+        after = rms(noise[int(samplerate * 1.5):int(samplerate * 2.0)])
+        print(f"\n[bbd noise] under a -20 dB tone {20 * math.log10(under):.1f} dB, after it {20 * math.log10(after):.1f} dB")
+        self.assertGreater(20 * math.log10(under / after), 30.0)
+        self.assertLess(20 * math.log10(under / 0.1), -40.0, "the noise stays well under the tone")
+
+    def test_the_time_starts_at_its_target_and_never_reads_backwards(self):
+        samplerate = 4000.0
+        program = self.echo(samplerate)
+        program.set_param("time", 375.0)
+        first = program.run(50, [[0.0] * 50])
+        self.assertEqual(set(first[3]), {375.0 * samplerate / 1000}, "no glide on load")
+        self.assertEqual(len(set(first[2])), 1, "the clock is the Time's from the first sample")
+        # what comes out was put in a pass ago: its pitch is the clock now over the clock then
+        clocks, loops = [], []
+        for time_ms in (1000.0, 125.0, 3000.0, 375.0):
+            program.set_param("time", time_ms)
+            outputs = program.run(int(samplerate * 12), [[0.0] * int(samplerate * 12)])
+            clocks += outputs[2]
+            loops += outputs[3]
+        ratios = [clocks[k] / clocks[k - int(loops[k])] for k in range(int(max(loops)), len(clocks))]
+        self.assertGreaterEqual(min(ratios), 0.5 - 0.02)
+        self.assertLessEqual(max(ratios), 1.5 + 0.02)
+
+    def test_over_unity_it_howls_held_where_the_buckets_clip(self):
+        # 250 ms at 32 kHz: the loop's peak (0.28 of the 16.4 kHz clock, 4.5 kHz) well inside the host's band
+        samplerate = 32000.0
+        burst = hann_burst(4500.0, 20.0, 0.1, samplerate, 100, int(samplerate * 6))
+        for feedback, sings in ((1.25, True), (0.7, False)):
+            program = self.echo(samplerate)
+            program.set_param("time", 250.0)
+            program.set_param("feedback", feedback)
+            program.set_param("saturation", 2.0)
+            left = program.run(len(burst), [burst])[0]
+            last_second = max(abs(v) for v in left[-int(samplerate):])
+            print(f"\n[bbd howl] feedback {feedback}: last second's peak {last_second:.3g}, "
+                  f"highest {max(abs(v) for v in left):.3g}")
+            if sings:
+                self.assertGreater(last_second, 0.1, "it still sings 6 s after the burst")
+                self.assertLess(max(abs(v) for v in left), 0.75, "held near the full level, 1 / saturation")
+            else:
+                self.assertLess(last_second, 1e-3, "under unity it dies away")
+        # with no input at all, the chip's noise starts it (RS10 §4.3)
+        program = self.echo(samplerate)
+        program.set_param("time", 250.0)
+        program.set_param("feedback", 4.0)
+        left = program.run(int(samplerate * 6), [[0.0] * int(samplerate * 6)])[0]
+        self.assertGreater(max(abs(v) for v in left[-int(samplerate):]), 0.1)
+
+    def test_stop_empties_it(self):
+        samplerate = 16000.0
+        program = self.echo(samplerate)
+        program.set_param("time", 200.0)
+        program.set_param("feedback", 1.3)
+        tone = [0.3 * math.sin(i * 0.9) for i in range(int(samplerate))]
+        program.run(len(tone), [tone])
+        program.set_param("stop", 1.0)
+        program.run(1, [[0.0]])
+        program.set_param("stop", 0.0)
+        left, right, _, _, rounds, _, _ = program.run(int(samplerate * 0.6), [[0.0] * int(samplerate * 0.6)])
+        after_the_fade = int(samplerate * 0.003)
+        self.assertLess(max(abs(v) for v in left[after_the_fade:] + right[after_the_fade:]), 1e-4)
+        self.assertEqual(rounds[-1] < 1e-4, True)
+
+    def test_wow_and_flutter_wobble_the_clock(self):
+        samplerate = 1000.0
+        program = self.echo(samplerate)
+        program.set_param("time", 3000.0)
+        steady = program.run(1, [[0.0]])[2][0]
+        for wow, flutter, seconds in ((10.0, 0.0, 60), (0.0, 5.0, 4)):
+            program = self.echo(samplerate)
+            program.set_param("wow", wow)
+            program.set_param("flutter", flutter)
+            program.set_param("time", 3000.0)
+            clocks = program.run(int(samplerate * seconds), [[0.0] * int(samplerate * seconds)])[2]
+            settled = clocks[int(samplerate * 2):]
+            cents_off = [1200 * math.log2(c / steady) for c in settled]
+            rms = math.sqrt(sum(c * c for c in cents_off) / len(cents_off))
+            self.assertAlmostEqual(rms, wow + flutter, delta=(0.25 if wow else 0.03) * (wow + flutter), msg=rms)
+
+    def test_a_device_in_the_loop_keeps_the_grid(self):
+        samplerate = 16000.0
+        total = int(samplerate * 2.4)
+        burst = hann_burst(2260.0, 20.0, 0.1, samplerate, 100, total)
+        burst_centre, _ = energy_centroid(burst, 0, total)
+        # nothing in the loop: the same sound as the echo feeding its own BBDs
+        reference = self.echo(samplerate).run(total, [burst])[:2]
+        writer = lambda echo: BucketBrigadeEchoWriter(echo, left="echo_left_into_tape", right="echo_right_into_tape")  # noqa: E731
+        candidate = self.echo(samplerate, [writer], loop_insert=True, insert_delay_samples="0").run(total, [burst])[:2]
+        assert_renders_similar(reference, candidate, samplerate)
+        # 23 samples in the loop (the 2x drive's figure), said: the repeats still land on n T
+        late = [lambda echo: WholeSampleDelay("insert_left", input="echo_left_into_tape", samples=23),
+                lambda echo: WholeSampleDelay("insert_right", input="echo_right_into_tape", samples=23),
+                lambda echo: BucketBrigadeEchoWriter(echo, left="insert_left_out", right="insert_right_out")]
+        left = self.echo(samplerate, late, loop_insert=True, insert_delay_samples="23").run(total, [burst])[0]
+        for k in range(1, 5):
+            late_ms, _ = self.repeat_lateness_ms(left, burst_centre, k * 0.5, samplerate, 0.1 * samplerate)
+            self.assertLess(abs(late_ms), 1.0, (k, late_ms))
+
+    def test_a_slow_clock_aliases_as_the_chips_do(self):
+        # at 1 s a 3 kHz tone is over the clock's Nyquist: the anti-aliasing filter lets some through, and it folds
+        # to clock - 3 kHz, at the level the filters, the hold and the insertion gain give it (the expander's doubling
+        # left out: tone and alias share one level). A model without the clock's sampling would have no alias at all.
+        samplerate, frequency = 16000.0, 3000.0
+        program = self.echo(samplerate)
+        program.set_param("time", 1000.0)
+        program.set_param("feedback", 0.0)
+        total = int(samplerate * 1.6)
+        tone = [0.1 * math.sin(2 * math.pi * frequency * i / samplerate) for i in range(total)]
+        outputs = program.run(total, [tone])
+        clock = outputs[2][0]
+        heard = outputs[0][-int(samplerate * 0.4):]
+        alias = clock - frequency
+        measured = 20 * math.log10(amplitude_at(heard, alias, samplerate) / amplitude_at(heard, frequency, samplerate))
+        scale = clock / bucket_brigade_echo.DESIGN_CLOCK_HZ
+        def path(f):  # noqa: E306
+            return abs(bucket_brigade_echo.response(bucket_brigade_echo.RECONSTRUCTION_DENOMINATOR, f, scale)
+                       * bucket_brigade_echo.hold_response(f / clock))
+        expected = 20 * math.log10(path(alias) / path(frequency))
+        print(f"\n[bbd alias] 3 kHz at 1 s (clock {clock:.0f} Hz): alias at {alias:.0f} Hz {measured:+.1f} dB re the "
+              f"tone (expected {expected:+.1f})")
+        self.assertAlmostEqual(measured, expected, delta=1.0)
+
+    def test_options_say_what_they_need(self):
+        with self.assertRaises(BuildError):
+            self.echo(16000.0, loop_insert=True)
+        for stages in (8191, 0, 2 ** 20):
+            with self.assertRaises(BuildError):
+                BucketBrigadeEcho("odd", left_input="0", right_input="0", time_ms="1", feedback="0",
+                                  loop_lowpass_hz="1", loop_highpass_hz="1", saturation_gain="1", wow_cents="0",
+                                  flutter_cents="0", stop_pressed="0", stages=stages, longest_time_ms=10.0,
+                                  right_lag_ms=0.0, rounds_kept=0)
+        with self.assertRaises(BuildError):
+            BucketBrigadeEchoWriter(BucketBrigadeEcho("plain", left_input="0", right_input="0", time_ms="1",
+                                                      feedback="0", loop_lowpass_hz="1", loop_highpass_hz="1",
+                                                      saturation_gain="1", wow_cents="0", flutter_cents="0",
+                                                      stop_pressed="0", stages=TWO_CHIP_STAGES, longest_time_ms=10.0,
+                                                      right_lag_ms=0.0, rounds_kept=0), left="0", right="0")
+
+    def test_its_cpu_beside_the_tape_echo(self):
+        # one run each, at 44.1 kHz, built as the patch matcher's renders are (-O2): ten seconds of a burst echoing
+        samplerate, seconds = 44100.0, 10
+        total = int(samplerate * seconds)
+        burst = hann_burst(1000.0, 20.0, 0.1, samplerate, 100, total)
+        costs = {}
+        for name, time_ms in (("bbd at 125 ms", 125.0), ("bbd at 1 s", 1000.0), ("tape at 125 ms", 125.0)):
+            if name.startswith("bbd"):
+                block = BucketBrigadeEcho("echo", left_input="in1", right_input="in1", time_ms=repr(time_ms),
+                                          feedback="0.6", loop_lowpass_hz="3000", loop_highpass_hz="40",
+                                          saturation_gain="2", wow_cents="6", flutter_cents="2", stop_pressed="0",
+                                          stages=TWO_CHIP_STAGES, longest_time_ms=3000.0, right_lag_ms=12.0,
+                                          rounds_kept=8, stereo_mode="0")
+            else:
+                block = TapeStyleEcho("echo", left_input="in1", right_input="in1", time_ms=repr(time_ms),
+                                      feedback="0.6", loop_lowpass_hz="3000", loop_highpass_hz="40",
+                                      saturation_gain="2", wow_cents="6", flutter_cents="2", stop_pressed="0",
+                                      diffusion="0.5", longest_time_ms=3000.0, right_lag_ms=12.0, rounds_kept=8,
+                                      stereo_mode="0")
+            code = gen_code_with_blocks("/*GEN_BLOCK_FUNCTIONS*/\n/*GEN_BLOCK_DECLARATIONS*/\n/*ECHO*/\n"
+                                        "out1 = echo_left;\nout2 = echo_right;\n", [block], "cpu")
+            program = GenProgram(code, 1, 2, samplerate=samplerate, optimised=True)
+            program.run(1, [[0.0]])
+            with CpuTiming(f"{name}, {seconds} s stereo at 44.1 kHz", THREAD) as timing:
+                program.run(total, [burst])
+            costs[name] = timing
+            print(f"\n[bbd cpu] {timing.report()}: {100 * timing.cpu_seconds / seconds:.2f} % of one core")
+        if not all(timing.judged for timing in costs.values()):
+            self.skipTest("; ".join(timing.report() for timing in costs.values()))
+        for name in ("bbd at 125 ms", "bbd at 1 s"):
+            self.assertLess(costs[name].cpu_seconds / seconds, 0.05, costs[name].report())
 
 
 class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
