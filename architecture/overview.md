@@ -188,6 +188,11 @@ The overlap rule, in `layout_rules.py`, fails the build naming both things, thei
   text it can draw (each input swept in turn, kept at the widest; again with each value of each switch held), every
   distinct paint on the way checked. A failure names what the display had been sent. A reading not declared isn't
   driven: a device declares every reading that changes a display's text.
+- **The kit draws what every device draws the same way**: the header's subtitle goes where `layout_rules.subtitle_x`
+  says (a header gap after the page tabs, or after the Preset menu); a device's layout doesn't place it. Every
+  display's heading is the views template's `viewHeading(name, reading, w, colour)`: the name top left, the reading
+  right-aligned on the same line while both fit (two spaces between), else on the next line; it returns the y the
+  display's drawing starts at, so a reading that drops a line takes that line from the drawing, never overlapping it.
 - **Exempt by kind, never by name**: a background box (Max's "Include in Background": the chrome, which everything
   sits on); a part never counts against another part of its own box. There is no per-device allowlist.
 - tools/render_pages.py runs the same two rules on what the build wrote (the displays as first painted: driving them

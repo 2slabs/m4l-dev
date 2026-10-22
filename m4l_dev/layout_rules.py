@@ -120,6 +120,20 @@ def link_chip_width(link_chip_text):
     return COZETTE_ADVANCE * len(link_chip_text) + 2 * CHIP_PADDING
 
 
+def page_tabs_x(link_chip_text):
+    """The page tabs' left edge: after the link chip, HEADER_GAP either side of it."""
+    return HEADER_GAP + link_chip_width(link_chip_text) + HEADER_GAP
+
+
+def subtitle_x(link_chip_text, page_names, preset_menu=None):
+    """Where the chrome draws the header's subtitle: HEADER_GAP after the page tabs, or after the Preset menu
+    (preset_menu=(x, w)) when a device has one. Every device's: a device doesn't place its subtitle."""
+    header_items_end = page_tabs_x(link_chip_text) + page_tabs_width(page_names)
+    if preset_menu is not None:
+        header_items_end = max(header_items_end, preset_menu[0] + preset_menu[1])
+    return header_items_end + HEADER_GAP
+
+
 # ---- what each thing draws, and the rule that no two drawn things overlap ------------------------------------------
 
 # Live's unit styles (parameter_unitstyle, the live.dial reference's "Unit Style": Int, Float, Time, Hertz, deciBel, %,

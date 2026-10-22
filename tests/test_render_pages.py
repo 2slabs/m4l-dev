@@ -80,10 +80,10 @@ class RenderPagesTests(unittest.TestCase):
         with open(views_path, encoding="utf-8") as views_file:
             views = views_file.read()
         with open(views_path, "w", encoding="utf-8") as views_file:
-            views_file.write(views.replace('viewLabel("level");', 'viewLabel("level"); text("over", 8, 12, T.ink);'))
+            views_file.write(views.replace('level: function (w, h) { ', 'level: function (w, h) { text("over", 8, 12, T.ink); '))
         with self.assertRaises(render_pages.RenderFailure) as failure:
             render_pages.render_device(self.device_folder, self.output)
-        self.assertIn("display view_level: 'level' (x 6..33, y 3..12) overlaps 'over'", str(failure.exception))
+        self.assertIn("display view_level: 'over' (x 9..32, y 6..12) overlaps 'level' (x 6..33, y 3..12)", str(failure.exception))
 
     def test_the_stand_in_font_is_the_one_the_rules_measure_by(self):
         font = render_pages.load_live_font()             # fails when the table and the font file disagree

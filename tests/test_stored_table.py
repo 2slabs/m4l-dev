@@ -55,9 +55,8 @@ def builder(preset_book=None, preset_menu=None, info_keys=EDITOR_INFO + ("Tab",)
 
 
 def plain_layout(patch):
-    """A device's chrome layout: the subtitle a header gap after the page tabs, no rules or labels."""
-    return {"subtitle": patch.page_tabs_x + layout_rules.page_tabs_width(patch.page_names) + layout_rules.HEADER_GAP,
-            "pages": [{"rules": [], "labels": []} for _ in patch.page_names]}
+    """A device's chrome layout: no rules or labels."""
+    return {"pages": [{"rules": [], "labels": []} for _ in patch.page_names]}
 
 
 def stages_of(patch, rows=3, table_fields=None):

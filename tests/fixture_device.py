@@ -57,7 +57,7 @@ function deviceMessage(m, a) {
   if (m === "kick") { S.kicks++; return true; }
   return false;
 }
-var VIEW_PAINTERS = { level: function (w, h) { viewLabel("level"); rect(4, 20, (w - 8) * S.level, 4, T.mint); },
+var VIEW_PAINTERS = { level: function (w, h) { rect(4, viewHeading("level", "", w) + 2, (w - 8) * S.level, 4, T.mint); },
                       chord: function (w, h) { chordDisplayView(w, h, "chord"); } };
 var VIEW_CLICKS = {};
 // the level display is dragged: its height sets the level, told out while held
@@ -134,8 +134,8 @@ def fixture_patch(preset_book):
     return patch
 
 
-# the subtitle a header gap after the page tabs (12 + the link chip 74 + 12 + two page tabs 96 + 12), as the devices place it
-FIXTURE_LAYOUT = {"subtitle": 206, "pages": [{"rules": [140], "labels": []}, {"rules": [], "labels": []}]}
+# the chrome's rules and labels per page (the kit places the subtitle: layout_rules.subtitle_x)
+FIXTURE_LAYOUT = {"pages": [{"rules": [140], "labels": []}, {"rules": [], "labels": []}]}
 
 
 def stored_memory_of_preset(preset_values):

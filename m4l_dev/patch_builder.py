@@ -644,7 +644,7 @@ class DevicePatchBuilder:
         link_width = layout_rules.link_chip_width(self.link_chip_text)
         self.view("link", gap, header_y, link_width, 15, None, info="Link view")
         # The page switch is Hidden: only a click turns the page, and the device always opens on the first page.
-        self.page_tabs_x = gap + link_width + gap
+        self.page_tabs_x = layout_rules.page_tabs_x(self.link_chip_text)
         made["page_tabs"] = self.tabs("Page", "Page", self.page_names, self.page_tabs_x, header_y,
                                       layout_rules.page_tabs_width(self.page_names), None, initial_outside_presets=0,
                                       visibility=identity.VISIBILITY_HIDDEN)
@@ -657,6 +657,7 @@ class DevicePatchBuilder:
             made["preset"] = self.menu("Preset", "Preset", ["-"], self.preset_menu_x, header_y, preset_menu_width, None,
                                        initial_outside_presets=0, kit_neutral=0)  # items: the preset book's, set by check()
             self.wire(made["preset"], made["ui"])
+        self.subtitle_x = layout_rules.subtitle_x(self.link_chip_text, self.page_names, preset_menu)
         # the right end of the header: out (the output level) and Stop, 12 px from the device's edge
         self.output_level_x = self.device_width - 136
         # unity (0 dB) is the output level's neutral, the kit's for every device
@@ -1125,18 +1126,25 @@ class DevicePatchBuilder:
         return values
 
     def full_layout(self, layout):
-        """The views script's LAYOUT from the device's `layout` ({"subtitle": x, "pages": [{"rules": [x], "labels":
-        [[text, x, baseline, "label" | "hint"]]}]}, one page per page name): the header's labels added to each page,
-        the subtitle's text, the version and the link chip's text."""
+        """The views script's LAYOUT from the device's `layout` ({"pages": [{"rules": [x], "labels": [[text, x,
+        baseline, "label" | "hint"]]}]}, one page per page name): the header's labels added to each page, the
+        subtitle's place (layout_rules.subtitle_x: the kit's, never the device's), its text, the version and the link
+        chip's text."""
         if len(layout.get("pages", [])) != len(self.page_names):
             self.fail(f"the layout has {len(layout.get('pages', []))} pages, the device {len(self.page_names)}")
-        return dict(layout, subtitle_text=self.subtitle, version=self.version, link_chip_text=self.link_chip_text,
+        if "subtitle" in layout:
+            self.fail("the layout places the subtitle: the kit does (layout_rules.subtitle_x), drop the layout's "
+                      "\"subtitle\"")
+        if self.header_boxes is None:
+            self.fail("the layout is asked for before the header is built (the subtitle goes after its tabs)")
+        return dict(layout, subtitle=self.subtitle_x, subtitle_text=self.subtitle, version=self.version,
+                    link_chip_text=self.link_chip_text,
                     pages=[dict(page, labels=self.header_labels() + list(page["labels"])) for page in layout["pages"]])
 
     def views_script(self, layout, device_views_code):
         """The views script (templates/views.template.js): the chrome and link chip, the drawing helpers, and the
-        device's own displays (`device_views_code`, ES5). layout: {"subtitle": x, "pages": [{"rules": [x], "labels":
-        [[text, x, baseline, "label" | "hint"]]}]}, one page per page name; the header's labels are added to each."""
+        device's own displays (`device_views_code`, ES5). layout: {"pages": [{"rules": [x], "labels": [[text, x,
+        baseline, "label" | "hint"]]}]}, one page per page name; the header's labels and the subtitle are added."""
         layout = self.full_layout(layout)
         return fill_template(kit_template_text("views.template.js"), {
             "DEVICE_NAME": json.dumps(self.device_name), "SCRIPT_NAME": self.script_name,

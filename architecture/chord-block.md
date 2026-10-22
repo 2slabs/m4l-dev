@@ -25,8 +25,8 @@ i think is shared code and should be treated as such". It will grow; it grows he
 - **Drift**: `chordDrifted(pitches, drift)`: with chance `drift` (a draw of the seeded random), another voicing
   (invert, drop the top, spread the middle, add the octave, chosen by another draw). So the block needs the
   device's `SeededRandom`.
-- **The display** (`templates/chord-display.template.js`): the device's label top left (it gives way when the notes
-  don't fit beside it) or the In key notice, the notes top right, the name large, two octaves of keys lit.
+- **The display** (`templates/chord-display.template.js`): the kit's heading (`viewHeading`: the device's label,
+  the notes as its reading) or the In key notice, the name large, two octaves of keys lit.
 - **The device's part**: make a view for the display and the `ChordBlock`; place `chord_menu` and `in_key_toggle`
   (named as Live already knows them); `/*CHORD_BLOCK*/` in the brain (after the seeded random's code), every
   control message through `chordBlockMessage`; `/*CHORD_DISPLAY*/` in the views, `chordDisplayMessage` first in

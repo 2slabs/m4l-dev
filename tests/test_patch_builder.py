@@ -57,10 +57,8 @@ def saved_values(patch, box_id):
 
 
 def plain_layout(patch, labels_by_page=None):
-    """A device's chrome layout: the subtitle a header gap after the page tabs (as the devices place it), no rules,
-    `labels_by_page` ({page: [[text, x, baseline, kind]]}) or none."""
-    return {"subtitle": patch.page_tabs_x + layout_rules.page_tabs_width(patch.page_names) + layout_rules.HEADER_GAP,
-            "pages": [{"rules": [], "labels": (labels_by_page or {}).get(page, [])} for page in patch.page_names]}
+    """A device's chrome layout: no rules, `labels_by_page` ({page: [[text, x, baseline, kind]]}) or none."""
+    return {"pages": [{"rules": [], "labels": (labels_by_page or {}).get(page, [])} for page in patch.page_names]}
 
 
 def layout_problems(patch, labels_by_page=None):
@@ -151,13 +149,22 @@ class LayoutTests(unittest.TestCase):
         self.assertFalse(any(p.startswith("page 'two'") for p in problems), "the menu is on page one only")
 
     def test_the_header_labels_and_the_subtitle_count(self):
-        # the Preset menu's "preset" label, 40 px before the menu, runs into the page tabs; the subtitle into it
+        # the Preset menu's "preset" label, 40 px before the menu, runs into the page tabs; the subtitle, which the
+        # kit places a header gap after the menu, into "out"
         patch = builder(preset_menu=(150, 60), info_keys=("Preset",))
         problems = layout_problems(patch)
+        self.assertEqual(patch.full_layout(plain_layout(patch))["subtitle"], 150 + 60 + layout_rules.HEADER_GAP)
         self.assertIn("page 'one': page's box (x 38..134, y 3..18) overlaps label 'preset''s text (x 110..146, "
                       "y 5..18) by 24 x 13 px", problems)
-        self.assertIn("page 'one': preset's box (x 150..210, y 3..18) overlaps subtitle '  v0''s text (x 146..170, "
-                      "y 5..18) by 20 x 13 px", problems)
+        self.assertIn("page 'one': label 'out''s text (x 240..258, y 5..18) overlaps subtitle '  v0''s text "
+                      "(x 222..246, y 5..18) by 6 x 13 px", problems)
+
+    def test_the_kit_places_the_subtitle_not_the_device(self):
+        patch = builder()
+        self.assertEqual(patch.full_layout(plain_layout(patch))["subtitle"],
+                         patch.page_tabs_x + layout_rules.page_tabs_width(patch.page_names) + layout_rules.HEADER_GAP)
+        with self.assertRaisesRegex(BuildError, "the layout places the subtitle: the kit does"):
+            patch.full_layout(dict(plain_layout(patch), subtitle=200))
 
     def test_the_background_is_what_everything_sits_on(self):
         patch = builder()
