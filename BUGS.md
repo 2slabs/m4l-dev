@@ -16,6 +16,7 @@ The stab and filter VST3s are generated from the same cores, so they very likely
 source). Not to confuse with the saturation that is the sound and has its own control (stab's Drive, filter's tube
 drive, the echoes' tape loops, gate's spring loop).
 
-To decide: take it out of the kit's output stage (a clean output), or keep it only as a switch that is off by default
-or a guard far above the music. Either way every preset's render changes, so the lock and the preset renders move
-with it. Not changed yet: noted only.
+Decided (Graham, 2026-10-21): no output soft clip, in any device or plugin. "It should 100 not be on everything; if
+people want to add a saturate they're welcome to after the plugin." The output is clean; saturation stays only where it
+is the sound and has its own control. Every preset's render changes, so the lock and the preset renders move with it.
+Not changed yet.
