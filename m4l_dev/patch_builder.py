@@ -498,8 +498,10 @@ class DevicePatchBuilder:
         varname = self.find(selector_box)["varname"]
         if varname in self.groups:
             self.fail(f"{varname!r} selects groups twice")
-        if self.neutral_values.get(self.control_by_box[selector_box][0]) != 0:
-            self.fail(f"group selector {varname!r} must load on its first group (neutral value 0)")
+        control_name, transform = self.control_by_box[selector_box]
+        if control_name not in self.neutral_values or transform(self.neutral_values[control_name]) != 0:
+            self.fail(f"group selector {varname!r} must load on its first group (neutral value 0, after a derived "
+                      f"box's transform of {control_name!r}'s neutral)")
         self.groups[varname] = {"page": page, "members": [[] for _ in range(choice_count)]}
         self.tell(selector_box, f"group {varname}", self.built_header()["ui"])
 

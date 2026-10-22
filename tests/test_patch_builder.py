@@ -380,6 +380,18 @@ class GroupTests(unittest.TestCase):
         with self.assertRaisesRegex(BuildError, "load on its first group"):
             patch.groups_selected_by(late, 4, "one")
 
+    def test_a_derived_selector_loads_on_its_first_group_by_its_transform_of_the_neutral(self):
+        patch = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Pick": "y"}))
+        picker = patch.dial("Pick", "Pick", patch.target, "pick", 0, 0, 0, 12, 119, "one", items=["x", "y"],
+                            initial_outside_presets=0)
+        is_x = patch.derived(patch.box("== 0", rect=(1100, 2000, 40, 22), ins=2, outtype=["int"], varname="is_x"),
+                             "Pick", lambda pick: int(pick == 0))
+        patch.groups_selected_by(is_x, 2, "one")       # Pick's neutral y: == 0 gives 0, the first group
+        is_y = patch.derived(patch.box("== 1", rect=(1100, 2030, 40, 22), ins=2, outtype=["int"], varname="is_y"),
+                             "Pick", lambda pick: int(pick == 1))
+        with self.assertRaisesRegex(BuildError, "load on its first group"):
+            patch.groups_selected_by(is_y, 2, "one")   # the untransformed neutral (1) was read before
+
     def test_dials_are_floats_ints_or_enums(self):
         patch = builder(book=preset_book(init={"A": 0, "B": 0, "Volume": 0}, neutral={"A": 0, "B": 0, "Tool": "p"}))
         self.assertEqual(saved_values(patch, patch.dial("A", "A", patch.target, "a", 0, 10, 0, 12, 119, "one"))[
