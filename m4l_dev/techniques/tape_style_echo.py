@@ -24,6 +24,22 @@ What it promises (tests/test_techniques.py checks each):
   2 ms and nothing written before then is read again (a position, not a time, so a gliding read can't find it).
 - **Rounds** (for a display): the peak of each of its last `rounds_kept` time rounds and of the round it is in.
 
+Options (each left out, the echo is exactly as before them):
+- **`stereo_mode`** (an input: 0 stereo, 1 ping-pong, 2 wide, 3 mono; `STEREO_MODES`): stereo is the two loops side
+  by side, the right `right_lag_ms` late. Ping-pong crosses the loops over: the input (both sides) goes into the left
+  tape, each repeat into the other side's, so the repeats alternate, the first on the left, every one on n T (no lag).
+  Wide gives the right loop WIDE_RIGHT_RATIO x the time, so the sides drift apart and meet again. Mono feeds both loops
+  the same input and gives both outputs their mean (no lag). A change moves each mode's weight over
+  STEREO_MODE_GLIDE_MS, the right side's time gliding as a tape's does.
+- **`saturating=False`**: the loop without its saturator (a clean, linear loop: its feedback alone sets how long it
+  rings, and over 1 it grows without bound unless what the device puts in the loop holds it). `saturation_gain` is
+  then left out.
+- **`loop_insert=True`**: the device puts its own processing in the loop (a drive, a spring). The echo leaves what
+  goes onto each tape in `<name>_left_into_tape`, `<name>_right_into_tape` and doesn't write it; a
+  `TapeStyleEchoTapeWriter` (its own marker, after the device's processing) writes what the device made of it.
+  `insert_delay_samples` (an input) is how late the device's processing is, in host samples, taken out of the loop
+  with the echo's own, so the repeats stay on n T.
+
 Outputs: `<name>_left`, `<name>_right` (the repeats), `<name>_level` (a falling peak meter of both),
 `<name>_round_peak_so_far`, `<name>_round_peak_1` .. `_<rounds_kept>` (newest first), `<name>_loop_samples` (T).
 """
@@ -50,6 +66,9 @@ WOBBLE_LIMIT_MS = 25.0                   # the delay's wow + flutter offset is c
 DIFFUSION_ALLPASS_MS = {"left": (8.458, 13.311), "right": (9.093, 13.9)}   # 2sl stab's
 LEVEL_METER_FALL_MS = 75.6
 STOP_FADE_MS = 2.0
+STEREO_MODES = ("stereo", "ping-pong", "wide", "mono")   # stereo_mode's values, in order
+WIDE_RIGHT_RATIO = 1.5                   # wide: a 1/8d on the left is a 1/4d on the right (2sl dub SPEC §3.4)
+STEREO_MODE_GLIDE_MS = 50.0
 NATURAL_LOG_OF_2 = math.log(2.0)
 
 
@@ -58,17 +77,26 @@ class TapeStyleEcho(Technique):
     echo without the allpasses. `longest_time_ms`, `right_lag_ms` and `rounds_kept` are numbers."""
 
     def __init__(self, instance_name, *, left_input, right_input, time_ms, feedback, loop_lowpass_hz,
-                 loop_highpass_hz, saturation_gain, wow_cents, flutter_cents, stop_pressed, diffusion=None,
-                 longest_time_ms, right_lag_ms, rounds_kept):
+                 loop_highpass_hz, saturation_gain=None, wow_cents, flutter_cents, stop_pressed, diffusion=None,
+                 longest_time_ms, right_lag_ms, rounds_kept, stereo_mode=None, saturating=True, loop_insert=False,
+                 insert_delay_samples=None):
         inputs = dict(left_input=left_input, right_input=right_input, time_ms=time_ms, feedback=feedback,
                       loop_lowpass_hz=loop_lowpass_hz, loop_highpass_hz=loop_highpass_hz,
-                      saturation_gain=saturation_gain, wow_cents=wow_cents, flutter_cents=flutter_cents,
-                      stop_pressed=stop_pressed)
-        if diffusion is not None:
-            inputs["diffusion"] = diffusion
+                      wow_cents=wow_cents, flutter_cents=flutter_cents, stop_pressed=stop_pressed)
+        if saturating != (saturation_gain is not None):
+            raise BuildError(f"TapeStyleEcho {instance_name}: saturation_gain is given exactly when the loop saturates")
+        if loop_insert != (insert_delay_samples is not None):
+            raise BuildError(f"TapeStyleEcho {instance_name}: insert_delay_samples is given exactly with loop_insert")
+        for name, expression in (("saturation_gain", saturation_gain), ("diffusion", diffusion),
+                                 ("stereo_mode", stereo_mode), ("insert_delay_samples", insert_delay_samples)):
+            if expression is not None:
+                inputs[name] = expression
         super().__init__(instance_name, **inputs)
         self.latency_samples = 0       # its repeats land at n T: the loop's own delays are taken out of the time
         self.has_diffusion = diffusion is not None
+        self.has_stereo_mode = stereo_mode is not None
+        self.saturating = bool(saturating)
+        self.loop_insert = bool(loop_insert)
         if not longest_time_ms > 0:
             raise BuildError(f"TapeStyleEcho {instance_name}: longest time {longest_time_ms} ms must be > 0")
         if right_lag_ms < 0 or rounds_kept < 0 or int(rounds_kept) != rounds_kept:
@@ -77,7 +105,8 @@ class TapeStyleEcho(Technique):
         self.right_lag_ms = generated_number(float(right_lag_ms))
         self.rounds_kept = int(rounds_kept)
         # the longest read: the longest time, the wobble's limit, the right side's lag, the spline's reach (3)
-        self.tape_samples = int(math.ceil(HIGHEST_SAMPLE_RATE * (self.longest_time_ms + WOBBLE_LIMIT_MS
+        longest_loop_ms = self.longest_time_ms * (WIDE_RIGHT_RATIO if self.has_stereo_mode else 1)
+        self.tape_samples = int(math.ceil(HIGHEST_SAMPLE_RATE * (longest_loop_ms + WOBBLE_LIMIT_MS
                                                                  + self.right_lag_ms) / 1000.0)) + 8
         self.diffusion_samples = int(math.ceil(HIGHEST_SAMPLE_RATE * max(max(v) for v in DIFFUSION_ALLPASS_MS.values())
                                                / 1000.0)) + 4
@@ -85,7 +114,7 @@ class TapeStyleEcho(Technique):
             f"{instance_name}_{side}_saturator",
             input=f"{instance_name}_{side}_filtered * {instance_name}_feedback * {instance_name}_saturation_gain",
             oversampling=1)
-            for side in ("left", "right")}
+            for side in ("left", "right")} if self.saturating else {}
         self.time_starts_at_its_target = HistoriesStartAtTheirTargets(f"{instance_name}_time_start",
                                                                       targets={f"{instance_name}_time_ms": time_ms})
 
@@ -108,6 +137,8 @@ class TapeStyleEcho(Technique):
                      "${p}_right_lowpass_1(0)", "${p}_right_lowpass_2(0)", "${p}_right_highpass(0)",
                      "${p}_since_stop(1e9)", "${p}_stop_fade(0)", "${p}_level(0)",
                      "${p}_round_elapsed(0)", "${p}_round_peak_so_far(0)"]
+        if self.has_stereo_mode:
+            histories += ["${p}_cross(0)", "${p}_wide(0)", "${p}_mono(0)"]
         histories += [f"${{p}}_round_peak_{n}(0)" for n in range(1, self.rounds_kept + 1)]
         lines.append(self.substituted("History " + ", ".join(histories) + ";"))
         lines.append(self.time_starts_at_its_target.declarations())
@@ -147,6 +178,28 @@ class TapeStyleEcho(Technique):
         diffusion_amount = "clamp(${diffusion}, 0, 0.7)" if self.has_diffusion else "0"
         loop_upper_bound = self.tape_samples - 8 - math.ceil(HIGHEST_SAMPLE_RATE * self.right_lag_ms / 1000)
         reset_saturators = "\n\t".join(s.reset_statements().replace("\n", "\n\t") for s in self.saturators.values())
+        # the options (module docstring); left out, every line below is as it was before them
+        plain = self.saturating and not self.has_stereo_mode and not self.loop_insert
+        saturation_gain_line = f"{p}_saturation_gain = max(${{saturation_gain}}, 1);\n" if self.saturating else ""
+        saturator_latency = (repr(generated_number(self.saturators["left"].latency_samples)) if self.saturating
+                             else "0")
+        insert_delay = " + max(${insert_delay_samples}, 0)" if self.loop_insert else ""
+        # what the device puts in the loop delays the first pass too: the repeats are read that much early
+        heard_early = " - max(${insert_delay_samples}, 0)" if self.loop_insert else ""
+        right_loop = f"{p}_right_loop_samples" if self.has_stereo_mode else f"{p}_loop_samples"
+        longest_read = f"max({p}_loop_samples, {p}_right_loop_samples)" if self.has_stereo_mode else f"{p}_loop_samples"
+        loop_lines = f"""{p}_loop_samples = clamp({p}_steady_samples + {p}_wobble_samples, max({p}_left_loop_delay, {p}_right_loop_delay) + 2, {loop_upper_bound});
+{p}_right_lag_samples = mstosamps({self.right_lag_ms!r});"""
+        if self.has_stereo_mode:
+            loop_lines = f"""// the stereo mode: each mode's weight glides there; wide stretches the right loop (a tape's glide), ping-pong
+// and mono take the right side's lag out
+{p}_mode_glide = smoothing_coefficient({STEREO_MODE_GLIDE_MS!r}, samplerate);
+{p}_cross = {p}_cross + {p}_mode_glide * ((${{stereo_mode}} == 1) - {p}_cross);
+{p}_wide = {p}_wide + {p}_mode_glide * ((${{stereo_mode}} == 2) - {p}_wide);
+{p}_mono = {p}_mono + {p}_mode_glide * ((${{stereo_mode}} == 3) - {p}_mono);
+{p}_loop_samples = clamp({p}_steady_samples + {p}_wobble_samples, max({p}_left_loop_delay, {p}_right_loop_delay) + 2, {loop_upper_bound});
+{p}_right_loop_samples = clamp({p}_steady_samples * (1 + {generated_number(WIDE_RIGHT_RATIO - 1)!r} * {p}_wide) + {p}_wobble_samples, max({p}_left_loop_delay, {p}_right_loop_delay) + 2, {loop_upper_bound});
+{p}_right_lag_samples = mstosamps({self.right_lag_ms!r}) * max(1 - {p}_cross - {p}_mono, 0);"""
         code = f"""// {p}: tape-style echo (kit technique: tape-style echo)
 // Stop: everything on the tape is from before it
 if (${{stop_pressed}}) {{
@@ -178,8 +231,7 @@ if (${{stop_pressed}}) {{
 
 // the loop's own delay D: re-reading the tape D early puts every repeat on n T
 {p}_feedback = ${{feedback}};
-{p}_saturation_gain = max(${{saturation_gain}}, 1);
-{p}_steady_samples = mstosamps({p}_time_ms);
+{saturation_gain_line}{p}_steady_samples = mstosamps({p}_time_ms);
 {p}_diffuser_scale = {diffuser_scale};
 {p}_diffusion = {diffusion_amount};
 {diffuser_lengths}
@@ -188,23 +240,22 @@ if (${{stop_pressed}}) {{
 {p}_lowpass_hz = clamp(${{loop_lowpass_hz}}, 20, samplerate * 0.45);
 {p}_highpass_hz = clamp(${{loop_highpass_hz}}, 1, samplerate * 0.45);
 {p}_filters_delay = 2 * samplerate / (twopi * {p}_lowpass_hz * (1 + {p}_highpass_hz / {p}_lowpass_hz))
-	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {generated_number(self.saturators['left'].latency_samples)!r};
+	+ samplerate / (twopi * {p}_highpass_hz * (1 + {p}_lowpass_hz / {p}_highpass_hz)) + {saturator_latency};
 {p}_lowpass_pole = 1 - exp(-twopi * {p}_lowpass_hz / samplerate);
 {p}_highpass_pole = 1 - exp(-twopi * {p}_highpass_hz / samplerate);
-{p}_left_loop_delay = {diffusion_delay["left"]} + {p}_filters_delay;
-{p}_right_loop_delay = {diffusion_delay["right"]} + {p}_filters_delay;
-{p}_loop_samples = clamp({p}_steady_samples + {p}_wobble_samples, max({p}_left_loop_delay, {p}_right_loop_delay) + 2, {loop_upper_bound});
-{p}_right_lag_samples = mstosamps({self.right_lag_ms!r});
+{p}_left_loop_delay = {diffusion_delay["left"]} + {p}_filters_delay{insert_delay};
+{p}_right_loop_delay = {diffusion_delay["right"]} + {p}_filters_delay{insert_delay};
+{loop_lines}
 
 // Stop: `{p}_clean` is 0 where the longest read lands on audio from before Stop, rising to 1 over the 2 ms after
 {p}_since_stop = min({p}_since_stop + 1, 1e9);
-{p}_clean = clamp(({p}_since_stop - {p}_loop_samples - {p}_right_lag_samples - 3) / mstosamps({STOP_FADE_MS!r}), 0, 1);
+{p}_clean = clamp(({p}_since_stop - {longest_read} - {p}_right_lag_samples - 3) / mstosamps({STOP_FADE_MS!r}), 0, 1);
 {p}_stop_fade = max({p}_stop_fade - 1 / mstosamps({STOP_FADE_MS!r}), 0);
 {p}_keep = max({p}_clean, {p}_stop_fade);
-{p}_left = {p}_left_tape.read({p}_loop_samples, interp="spline") * {p}_keep;
-{p}_right = {p}_right_tape.read({p}_loop_samples + {p}_right_lag_samples, interp="spline") * {p}_keep;
+{p}_left = {p}_left_tape.read({p}_loop_samples{heard_early}, interp="spline") * {p}_keep;
+{p}_right = {p}_right_tape.read({right_loop} + {p}_right_lag_samples{heard_early}, interp="spline") * {p}_keep;
 {p}_left_return = {p}_left_tape.read({p}_loop_samples - {p}_left_loop_delay, interp="spline") * {p}_keep;
-{p}_right_return = {p}_right_tape.read({p}_loop_samples - {p}_right_loop_delay, interp="spline") * {p}_keep;
+{p}_right_return = {p}_right_tape.read({right_loop} - {p}_right_loop_delay, interp="spline") * {p}_keep;
 if ({p}_clean <= 0) {{
 	{p}_left_lowpass_1 = 0;
 	{p}_left_lowpass_2 = 0;
@@ -215,7 +266,7 @@ if ({p}_clean <= 0) {{
 	{reset_saturators}
 }}
 """
-        for side in ("left", "right"):
+        for side in ("left", "right") if plain else ():
             code += f"""
 // {side}: low-pass (12 dB), high-pass (6 dB), diffusion (if any), saturation, back onto the tape
 {p}_{side}_lowpass_1 = {p}_{side}_lowpass_1 + {p}_lowpass_pole * ({p}_{side}_return - {p}_{side}_lowpass_1);
@@ -226,6 +277,8 @@ if ({p}_clean <= 0) {{
 {self.saturators[side].statements()}
 {p}_{side}_tape.write({self.input_expressions[side + "_input"]} + {p}_clean * {p}_{side}_saturator_out / {p}_saturation_gain);
 """
+        if not plain:
+            code += self.loop_code(diffusion_code)
         code += f"""
 // the meter and the rounds: what the loop really did, round by round (the 2 ms fade at Stop isn't counted)
 {p}_level = max(abs({p}_left) + abs({p}_right), {p}_level * (1 - smoothing_coefficient({LEVEL_METER_FALL_MS!r}, samplerate)));
@@ -238,3 +291,65 @@ if ({p}_round_elapsed >= {p}_loop_samples) {{{shift_rounds}
 	{p}_round_elapsed = 0;
 }}"""
         return self.substituted(code)
+
+    def loop_code(self, diffusion_code):
+        """With an option (module docstring): each side's filters, diffusion and saturation, then what goes onto each
+        tape (the stereo mode's routing), written here or left for the device's processing (`loop_insert`)."""
+        p = self.instance_name
+        code = ""
+        for side in ("left", "right"):
+            fed = (f"{self.saturators[side].statements()}\n{p}_{side}_fed = {p}_{side}_saturator_out / {p}_saturation_gain;"
+                   if self.saturating else f"{p}_{side}_fed = {p}_{side}_filtered * {p}_feedback;")
+            code += f"""
+// {side}: low-pass (12 dB), high-pass (6 dB), diffusion (if any), {"saturation" if self.saturating else "no saturation"}
+{p}_{side}_lowpass_1 = {p}_{side}_lowpass_1 + {p}_lowpass_pole * ({p}_{side}_return - {p}_{side}_lowpass_1);
+{p}_{side}_lowpass_2 = {p}_{side}_lowpass_2 + {p}_lowpass_pole * ({p}_{side}_lowpass_1 - {p}_{side}_lowpass_2);
+{p}_{side}_highpass = {p}_{side}_highpass + {p}_highpass_pole * ({p}_{side}_lowpass_2 - {p}_{side}_highpass);
+{p}_{side}_filtered = {p}_{side}_lowpass_2 - {p}_{side}_highpass;
+{diffusion_code[side]}
+{fed}
+"""
+        code += f"""
+// what goes onto each tape
+{p}_left_sent = ${{left_input}};
+{p}_right_sent = ${{right_input}};"""
+        if self.has_stereo_mode:
+            code += f"""
+// ping-pong: both inputs into the left tape, each side's repeat onto the other's; mono: both tapes the inputs' mean
+{p}_both_sent = 0.5 * ({p}_left_sent + {p}_right_sent);
+{p}_left_into_tape = (1 - {p}_mono) * ({p}_left_sent + {p}_cross * {p}_right_sent) + {p}_mono * {p}_both_sent
+\t+ {p}_clean * ((1 - {p}_cross) * {p}_left_fed + {p}_cross * {p}_right_fed);
+{p}_right_into_tape = (1 - {p}_mono) * (1 - {p}_cross) * {p}_right_sent + {p}_mono * {p}_both_sent
+\t+ {p}_clean * ((1 - {p}_cross) * {p}_right_fed + {p}_cross * {p}_left_fed);
+// mono: both outputs their mean
+{p}_left_heard = {p}_left;
+{p}_left = {p}_left + 0.5 * {p}_mono * ({p}_right - {p}_left);
+{p}_right = {p}_right + 0.5 * {p}_mono * ({p}_left_heard - {p}_right);"""
+        else:
+            code += f"""
+{p}_left_into_tape = {p}_left_sent + {p}_clean * {p}_left_fed;
+{p}_right_into_tape = {p}_right_sent + {p}_clean * {p}_right_fed;"""
+        if not self.loop_insert:
+            code += f"""
+{p}_left_tape.write({p}_left_into_tape);
+{p}_right_tape.write({p}_right_into_tape);"""
+        return code + "\n"
+
+
+class TapeStyleEchoTapeWriter(Technique):
+    """Writes a `TapeStyleEcho`'s tapes when the device has its own processing in the loop (`loop_insert=True`):
+    `left` and `right` are what the device made of `<echo>_left_into_tape` and `<echo>_right_into_tape`. Its marker
+    (`<ECHO>_TAPE_WRITER`) goes after that processing. What the device puts in the loop must hold its own Stop (empty
+    itself when the echo's stop_pressed is), or it brings the old echo back. No outputs."""
+
+    def __init__(self, echo, *, left, right):
+        if not isinstance(echo, TapeStyleEcho) or not echo.loop_insert:
+            raise BuildError("TapeStyleEchoTapeWriter: it writes the tapes of a TapeStyleEcho made with loop_insert=True")
+        super().__init__(f"{echo.instance_name}_tape_writer", left=left, right=right)
+        self.echo_name = echo.instance_name
+        self.latency_samples = 0
+
+    def statements(self):
+        return self.substituted(f"""// {self.echo_name}'s tapes: what the device made of what goes onto them
+{self.echo_name}_left_tape.write(${{left}});
+{self.echo_name}_right_tape.write(${{right}});""")

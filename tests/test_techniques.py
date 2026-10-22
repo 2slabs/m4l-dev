@@ -29,7 +29,9 @@ from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: 
 
 
 from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
-from m4l_dev.techniques.tape_style_echo import TapeStyleEcho  # noqa: E402
+from m4l_dev.techniques.tape_style_echo import (STEREO_MODES, WIDE_RIGHT_RATIO, TapeStyleEcho,  # noqa: E402
+                                               TapeStyleEchoTapeWriter)
+from m4l_dev.gen_blocks import Technique  # noqa: E402
 from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets  # noqa: E402
 from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
                                                            SecondOrderAllpassStage, ZeroDelayAllpassCascade)
@@ -705,6 +707,123 @@ class TapeStyleEchoTests(unittest.TestCase):
         left, right, _, _, rounds = program.run(4000, [[0.0] * 4000])
         self.assertLess(max(abs(v) for v in left[40:] + right[40:]), 1e-12)
         self.assertEqual(rounds[-1], 0.0)
+
+
+class WholeSampleDelay(Technique):
+    """A test's stand-in for what a device puts in an echo's loop: `input` late by a whole number of samples."""
+
+    def __init__(self, instance_name, *, input, samples):
+        super().__init__(instance_name, input=input)
+        self.samples = int(samples)
+        self.latency_samples = self.samples
+
+    def declarations(self):
+        return self.substituted(f"Delay ${{p}}_line({self.samples + 1});")
+
+    def statements(self):
+        return self.substituted(f"${{p}}_line.write(${{input}});\n${{p}}_out = ${{p}}_line.read({self.samples});")
+
+
+class TapeStyleEchoOptionTests(unittest.TestCase):
+    """The options (stereo modes, the clean loop, a device's processing in the loop): each repeat where its mode puts
+    it, by the energy around n T on each side."""
+    SAMPLERATE = 8000.0
+    TIME_MS = 250.0
+
+    def echo(self, extra_blocks=(), **options):
+        if "saturation_gain" not in options and options.get("saturating", True):
+            options["saturation_gain"] = "saturation"
+        block = TapeStyleEcho("echo", left_input="in1", right_input="in1", time_ms="time", feedback="feedback",
+                              loop_lowpass_hz="lowpass", loop_highpass_hz="highpass", wow_cents="0",
+                              flutter_cents="0", stop_pressed="0", longest_time_ms=1000.0, right_lag_ms=10.0,
+                              rounds_kept=0, **options)
+        blocks = [block] + [factory(block) for factory in extra_blocks]
+        params = {"time": self.TIME_MS, "feedback": 0.6, "lowpass": 3000.0, "highpass": 40.0, "saturation": 1.0,
+                  "mode": 0.0}
+        return harness(blocks, params, ["echo_left", "echo_right"], samplerate=self.SAMPLERATE)
+
+    def energy_at(self, signal, seconds):
+        center, half = int(10 + seconds * self.SAMPLERATE), int(0.03 * self.SAMPLERATE)
+        return sum(v * v for v in signal[max(center - half, 0):center + half])
+
+    def impulse_response(self, program, seconds=2.2):
+        impulse = [0.0] * int(self.SAMPLERATE * seconds)
+        impulse[10] = 0.1
+        program.run(int(self.SAMPLERATE * 0.5), [[0.0] * int(self.SAMPLERATE * 0.5)])   # every mode's weight settled
+        return program.run(len(impulse), [impulse])
+
+    def test_the_modes_are_numbered_as_the_device_menu(self):
+        self.assertEqual(STEREO_MODES, ("stereo", "ping-pong", "wide", "mono"))
+
+    def test_ping_pong_alternates_the_first_on_the_left(self):
+        program = self.echo(stereo_mode="mode")
+        program.set_param("mode", 1.0)
+        left, right = self.impulse_response(program)
+        period = self.TIME_MS / 1000
+        for k in range(1, 7):
+            here, there = (left, right) if k % 2 else (right, left)
+            self.assertGreater(self.energy_at(here, k * period), 1e3 * self.energy_at(there, k * period), k)
+
+    def test_wide_puts_the_right_loop_at_its_ratio(self):
+        program = self.echo(stereo_mode="mode")
+        program.set_param("mode", 2.0)
+        left, right = self.impulse_response(program)
+        period, lag = self.TIME_MS / 1000, 0.010
+        for k in (1, 2):                                # (3 T is the right's second repeat)
+            self.assertGreater(self.energy_at(left, k * period), 1e-6, k)
+            self.assertGreater(self.energy_at(right, k * period * WIDE_RIGHT_RATIO + lag),
+                               1e3 * self.energy_at(right, k * period + lag) + 1e-12, k)
+
+    def test_mono_gives_both_sides_the_same(self):
+        program = self.echo(stereo_mode="mode")
+        program.set_param("mode", 3.0)
+        left, right = self.impulse_response(program)
+        assert_matches_model(right, left, 1e-12, "mono's right against its left",
+                             "the outputs' mean is computed once and given to both")
+
+    def test_stereo_mode_left_at_stereo_is_the_echo_without_it(self):
+        reference = self.impulse_response(self.echo())
+        assert_renders_similar(reference, self.impulse_response(self.echo(stereo_mode="mode")), self.SAMPLERATE)
+
+    def test_the_clean_loop_is_linear(self):
+        quiet = self.impulse_response(self.echo(saturating=False))
+        program = self.echo(saturating=False)
+        impulse = [0.0] * int(self.SAMPLERATE * 2.2)
+        impulse[10] = 0.8
+        program.run(int(self.SAMPLERATE * 0.5), [[0.0] * int(self.SAMPLERATE * 0.5)])
+        loud = program.run(len(impulse), [impulse])
+        for side in (0, 1):
+            assert_matches_model(loud[side], [8 * v for v in quiet[side]], 1e-12,
+                                 "eight times the impulse against eight times the response",
+                                 "no saturator: the loop is a linear filter, exact to the last bits")
+
+    def test_a_device_in_the_loop_keeps_the_repeats_on_the_grid(self):
+        # nothing in the loop: the same sound as the echo writing its own tapes
+        reference = self.impulse_response(self.echo())
+        writer = lambda echo: TapeStyleEchoTapeWriter(echo, left="echo_left_into_tape", right="echo_right_into_tape")
+        candidate = self.impulse_response(self.echo([writer], loop_insert=True, insert_delay_samples="0"))
+        assert_renders_similar(reference, candidate, self.SAMPLERATE)
+        # 23 samples in the loop (the 2x drive's figure), said: the repeats still land on n T
+        late = [lambda echo: WholeSampleDelay("insert_left", input="echo_left_into_tape", samples=23),
+                lambda echo: WholeSampleDelay("insert_right", input="echo_right_into_tape", samples=23),
+                lambda echo: TapeStyleEchoTapeWriter(echo, left="insert_left_out", right="insert_right_out")]
+        left, _ = self.impulse_response(self.echo(late, loop_insert=True, insert_delay_samples="23"))
+        period, loop = self.TIME_MS / 1000, self.TIME_MS / 1000 * self.SAMPLERATE
+        for k in range(1, 6):
+            late_ms = TapeStyleEchoTests.centroid_ms(left, int(10 + k * loop), int(loop / 2), self.SAMPLERATE)
+            self.assertLess(abs(late_ms), 1.0, (k, late_ms))
+
+    def test_options_say_what_they_need(self):
+        with self.assertRaises(BuildError):
+            self.echo(saturating=False, saturation_gain="saturation")
+        with self.assertRaises(BuildError):
+            self.echo(loop_insert=True)
+        with self.assertRaises(BuildError):
+            TapeStyleEchoTapeWriter(TapeStyleEcho("plain", left_input="0", right_input="0", time_ms="1", feedback="0",
+                                                  loop_lowpass_hz="1", loop_highpass_hz="1", saturation_gain="1",
+                                                  wow_cents="0", flutter_cents="0", stop_pressed="0",
+                                                  longest_time_ms=10.0, right_lag_ms=0.0, rounds_kept=0),
+                                    left="0", right="0")
 
 
 
