@@ -3,7 +3,7 @@
 A device's presets are levelled to its Init sound: each preset's output level (its own control) set so the preset's
 loudest moment on the phrase below is as loud as Init's: the maximum momentary loudness (EBU Tech 3341's 400 ms
 sliding window over ITU-R BS.1770-5's K-weighted loudness, m4l_dev/bs1770.py), not the phrase's average, so a ping
-is not paid back for being short; its peaks under the device's clip. The kit holds the phrase, the meter, the
+is not paid back for being short; its peaks under the device's output ceiling (full scale, or its own limiter's). The kit holds the phrase, the meter, the
 comparison, where a voice's oscillators are when a note reaches it, and how a preset's controls reach the device's
 DSP: through the device's own patch (DevicePatchBuilder.messages_for, the routes its build wired), never a copy of
 them. The device's tests hold what only the device knows: how a note reaches its DSP (they stand in for its brain)
@@ -23,7 +23,7 @@ each input (the loudest moment out minus the loudest moment in), their median (w
 to 0 dB) and the worst miss from that median (information: an effect whose gain depends on its input, a
 self-oscillating filter, triggers, can't match bypass on everything). An effect's peaks are judged against bypass's
 on the same input, not a fixed ceiling (effect_presets_clipping_beyond_dry): it may raise the crest factor, as its
-circuit does; it fails when its level drives the output stage into the clip.
+circuit does; it fails when its level drives the output over its ceiling.
 """
 import concurrent.futures
 import functools
@@ -52,7 +52,7 @@ SAMPLE_RATE = 44100                 # the rate presets are levelled at
 FAST_SAMPLE_RATE = 11025
 LOUDNESS_TOLERANCE_LU = 1.0         # a preset this far from Init, at FAST_SAMPLE_RATE, fails a device's suite
 # A sample peak at FAST_SAMPLE_RATE reads up to ~0.3 dB off SAMPLE_RATE's (2sl stab, 2026-10-19): a preset set under
-# its device's clip at SAMPLE_RATE may read this far over it in a suite.
+# its device's ceiling at SAMPLE_RATE may read this far over it in a suite.
 FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB = 0.3
 # Where a voice's oscillators are when a note reaches it. In Live a device's voices run on between notes at their last
 # note's pitch, so a chord's notes land on unrelated phases; a voice the harness creates at its first note would start
@@ -108,7 +108,7 @@ def messages_by_preset(patch, destinations, beats_per_minute=BEATS_PER_MINUTE):
 def phrase_measures(channels, rate):
     """(loudness LUFS, sample peak dBFS) of a preset's render (`channels`: L and R lists at `rate`): its loudest
     moment (bs1770.max_momentary_loudness), what presets are levelled by, and its peak, what must stay under the
-    device's clip."""
+    device's output ceiling."""
     return bs1770.max_momentary_loudness(channels, rate), bs1770.sample_peak_db(channels)
 
 
@@ -120,11 +120,11 @@ def oscillator_start_phases():
         yield draws.random()
 
 
-def presets_over_the_clip(peak_by_preset, clip_knee_db, rate):
+def presets_over_the_clip(peak_by_preset, ceiling_db, rate):
     """{preset: sample peak dBFS (2 decimals)} of every preset whose peak, rendered at `rate`, is over the device's
-    clip knee (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB over it at FAST_SAMPLE_RATE): empty when every preset is clean."""
+    output ceiling `ceiling_db` (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB over it at FAST_SAMPLE_RATE): empty when every preset is clean."""
     allowance = FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB if rate == FAST_SAMPLE_RATE else 0.0
-    return {name: round(peak, 2) for name, peak in peak_by_preset.items() if peak > clip_knee_db + allowance}
+    return {name: round(peak, 2) for name, peak in peak_by_preset.items() if peak > ceiling_db + allowance}
 
 
 def presets_off_init(loudness_by_preset, init_name, tolerance_lu=LOUDNESS_TOLERANCE_LU):
@@ -377,14 +377,14 @@ def presets_off_bypass(measures_by_preset, tolerance_lu=EFFECT_LOUDNESS_TOLERANC
             if abs(measures.median_gain_db) > tolerance_lu}
 
 
-def effect_presets_clipping_beyond_dry(measures_by_preset, clip_knee_db, rate=EFFECT_SAMPLE_RATE):
+def effect_presets_clipping_beyond_dry(measures_by_preset, ceiling_db, rate=EFFECT_SAMPLE_RATE):
     """{preset: {input: (its peak, the dry's peak at its level), dBFS, 2 decimals}} of every effect preset whose level
-    drives the device's output stage into its clip (architecture/presets.md, "Peaks against bypass's"): on an input,
-    the preset's peak is over `clip_knee_db` and so is the dry input's own peak moved by the preset's level (its
+    drives the device's output over its ceiling (architecture/presets.md, "Peaks against bypass's"): on an input,
+    the preset's peak is over `ceiling_db` and so is the dry input's own peak moved by the preset's level (its
     median gain). A preset over the knee only by what it does to that input (the crest factor it adds, its gain there
     away from its median: the effect) passes. FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB is allowed on both at
     FAST_SAMPLE_RATE. Empty when every preset passes."""
-    ceiling = clip_knee_db + (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB if rate == FAST_SAMPLE_RATE else 0.0)
+    ceiling = ceiling_db + (FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB if rate == FAST_SAMPLE_RATE else 0.0)
     failing = {}
     for name, measures in measures_by_preset.items():
         dry_at_level = {input_name: dry_peak + measures.median_gain_db

@@ -19,4 +19,10 @@ drive, the echoes' tape loops, gate's spring loop).
 Decided (Graham, 2026-10-21): no output soft clip, in any device or plugin. "It should 100 not be on everything; if
 people want to add a saturate they're welcome to after the plugin." The output is clean; saturation stays only where it
 is the sound and has its own control. Every preset's render changes, so the lock and the preset renders move with it.
-Not changed yet.
+
+Done (2026-10-22): no output soft clip in 2sl gate 0.5.3, stab 2.8.0, drums 0.4.0, filter 0.3.0, phaser 0.2.0, and the
+stab and filter VST3s (generated from the same cores; neither plugin's own source clipped). Filter keeps its limiter
+(its SPEC §1.4, §3.5: a screaming resonance can't blow up a mix; ceiling -0.3 dBFS). The presets' peak checks are now
+against full scale (filter: its limiter's ceiling; architecture/presets.md). `knee_soft_clip.py` stays: it is the
+Mu-Tron Bi-Phase's op-amp rails inside its feedback loop (zero_delay_allpass_cascade.py's `loop_limit`), the
+phaser's sound, not an output stage.

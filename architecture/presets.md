@@ -109,9 +109,10 @@ A device's presets are levelled to its Init sound: each preset's output level (t
 value like any other) is set so the preset's loudest moment on one phrase is as loud as Init's: the maximum momentary
 loudness, EBU Tech 3341's 400 ms sliding window over ITU-R BS.1770-5's K-weighted loudness (`m4l_dev/preset_loudness.py`
 `phrase_measures`, `m4l_dev/bs1770.py`, references/itu-r-bs1770.md, references/ebu-tech-3341.md), its peaks under the
-device's clip (`presets_over_the_clip`). The loudest moment, not the phrase's average: a ping and a pad at the same
+device's output ceiling (`presets_over_the_clip`): full scale, 0 dBFS (a device's output is clean: no soft clip,
+BUGS.md 2026-10-21), or the device's own limiter's ceiling where it has one. The loudest moment, not the phrase's average: a ping and a pad at the same
 level hit as hard, where the integrated loudness would pay the pad for lasting. A device's suite holds every preset
-within `LOUDNESS_TOLERANCE_LU` of Init and every peak under its clip.
+within `LOUDNESS_TOLERANCE_LU` of Init and every peak under its ceiling.
 
 The pattern: the kit holds the phrase, the meter, the comparison, where a voice's oscillators start
 (`oscillator_start_phases`: unrelated phases, seeded, as Live's voices are after running on between notes; a player
@@ -150,16 +151,16 @@ level, and the cut is reported.
 An effect's peaks are judged against the dry input's, not against a fixed ceiling (`effect_presets_clipping_beyond_dry`,
 `EffectMeasures.peak_db_by_input` and `dry_peak_db_by_input`). An effect may raise the crest factor, as its circuit does
 (a phaser's resonant peaks, a square sweep throwing the notches across a drum hit): that is the sound, and the kit's
-inputs already sit near the clip (the drums peak at −1.4 dBFS at −18 LUFS), so a fixed ceiling punished the input's
-crest as much as the effect's. What the rule catches is a preset whose **level** drives the device's output stage into
-its clip: on some input, the preset's sample peak is over the clip's knee **and** the dry input's own peak, moved by the
-preset's level (its median gain against bypass), is over it as well: the dry at the preset's level would clip there
-too. What the preset does to one input (its crest factor, its gain there away from its median: a resonance on the
+inputs already sit near full scale (the drums peak at −1.4 dBFS at −18 LUFS), so a fixed ceiling punished the input's
+crest as much as the effect's. What the rule catches is a preset whose **level** drives the device's output over its
+ceiling (full scale, or its own limiter's): on some input, the preset's sample peak is over the ceiling **and** the dry
+input's own peak, moved by the preset's level (its median gain against bypass), is over it as well: the dry at the
+preset's level would go over there too. What the preset does to one input (its crest factor, its gain there away from its median: a resonance on the
 kick) is the effect, and passes. Precisely, a preset fails on input i when
 
-    peak_i > knee_db  and  dry_peak_i + median_gain > knee_db
+    peak_i > ceiling_db  and  dry_peak_i + median_gain > ceiling_db
 
-(`FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB` added to the knee at FAST_SAMPLE_RATE). A preset under the knee always passes, so
+(`FAST_SAMPLE_RATE_PEAK_ALLOWANCE_DB` added to the ceiling at FAST_SAMPLE_RATE). A preset under the ceiling always passes, so
 every preset the old ceiling passed passes this. Each preset's peak against bypass's (peak_i − dry_peak_i) is reported
 by the device's player, not tested. No limiter is added to make a preset pass: a preset that fails is too loud.
 
