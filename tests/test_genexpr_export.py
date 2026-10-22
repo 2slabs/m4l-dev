@@ -17,8 +17,8 @@ from m4l_dev.build_error import BuildError  # noqa: E402
 from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
 from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
 
-# a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, histories,
-# bounded loops (in a function and stepping a History, with break and continue)
+# a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, a data (after
+# the delay in the memory), histories, bounded loops (in a function and stepping a History, with break and continue)
 CODE = """
 smooth(x, ms) {
 	return 1 - exp(-1000 / (ms * samplerate));
@@ -37,10 +37,12 @@ Param cutoff(500, min=20, max=20000);
 Param time(3, min=0, max=10);
 History lp(0), ph(0.25);
 Delay echo(4410);
+Data held(16);
 lp = lp + (in1 - lp) * smooth(1000 / cutoff, 1);
 ph = fract(ph + cutoff / samplerate);
 echo.write(lp + noise() * 0.01);
-out1 = echo.read(mstosamps(time) + 0.5);
+poke(held, lp, floor(ph * 16));
+out1 = echo.read(mstosamps(time) + 0.5) + peek(held, floor(ph * 16 + 8) % 16);
 out2 = sin(twopi * ph) + noise() * noise();
 for (i = 0; i < 8; i += 1) {
 	if (i == 3) {
@@ -81,7 +83,7 @@ class ExportTests(unittest.TestCase):
         for index, value in (params or {}).items():
             param_values[index] = value
         histories = array.array("d", [0.0, 0.25])
-        delay_memory = array.array("d", bytes(8 * 4410))
+        delay_memory = array.array("d", bytes(8 * (4410 + 16)))
         positions = (ctypes.c_long * 1)()
         noise = NoiseState()
         library.core_noise_seed(ctypes.byref(noise), ctypes.c_uint32(seed))
@@ -128,7 +130,7 @@ class ExportTests(unittest.TestCase):
 
     def test_the_header_describes_the_program(self):
         for line in ("CORE_INPUTS = 2", "CORE_OUTPUTS = 3", "CORE_PARAMS = 2", "CORE_HISTORIES = 2",
-                     "CORE_DELAYS = 1", "CORE_DELAY_MEMORY = 4410", '{"cutoff", "time"}', '{"lp", "ph"}'):
+                     "CORE_DELAYS = 1", "CORE_DELAY_MEMORY = 4426", '{"cutoff", "time"}', '{"lp", "ph"}'):
             self.assertIn(line, self.header)
 
     def test_code_without_its_param_defaults_is_not_exported(self):

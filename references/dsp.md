@@ -602,6 +602,25 @@ whole idle core 1.83.
   (`zeroDel2.read(pDelA, interp="fastcubic")`, `zeroDel2.read(pDelB, interp="fastcubic")`). So the echo's tapes,
   read at T and at T − D, are `Delay ...(size, 2)`, and the kit's renderer refuses a Delay read at more places than
   it has taps.
+- **gen~ data, peek and poke** (Cycling '74, Gen reference, read 2026-10-21): data
+  (https://docs.cycling74.com/reference/gen_dsp_data/): "Stores an array of sample data (64-bit floats) usable for
+  sampling, wavetable synthesis and other purposes. The first argument specifies a name by which to refer to this data
+  in other objects in the gen patcher (such as peek and poke), the second optional argument specifies the length of
+  the array (default 512 samples) and the third optional argument specifies the number of channels (default 1)."
+  peek (https://docs.cycling74.com/reference/gen_dsp_peek): "Read values from a data/buffer object. The first argument
+  should be a name of a data or buffer object in the gen patcher." "The first inlet specifes a sample index to read (no
+  interpolation); indices out of range return zero." Attributes: boundmode, default "ignore"; index, default
+  "samples"; interp, default "none". poke (https://docs.cycling74.com/reference/gen_dsp_poke): "Write values into a
+  data/buffer object." "The first inlet specifies a value to write, while the second inlet specifies the sample index
+  within the data/buffer." "If the index is out of range, no value is written."
+- **data, peek and poke in GenExpr**: Philip Meyer's signal-polyphony voice allocator
+  (`pdmeyer-voice_allocator.genexpr`, commit d1f5413), GenExpr run in Max, declares `Data internal(4, 4);` and reads
+  and writes it as `peek(internal, i, 2)` and `poke(internal, 0, i, 0);`; Cycling '74's gen-workshop granulator
+  (`cycling74-gen-workshop-grranulator.genexpr`, commit f114ce9) writes `poke(playing, 1, i);` and reads
+  `peek(playing, i)`. So the kit's renderer takes `Data name(size);` (one channel), `peek(name, index)` and
+  `poke(name, value, index);`, the index floored (the reference's "no interpolation"; how gen~ rounds a fractional
+  index is not stated: the blocks use whole indices) and an index out of range, or NaN, read as 0 and not written, as
+  the default boundmode "ignore" has it. The bucket-brigade echo's chips are a Data each.
 - **GenExpr** (https://docs.cycling74.com/userguide/gen/gen_genexpr/): "functions must be declared before all
   statements"; functions take arguments and "can return multiple values". The gen blocks keep to the kit renderer's
   subset (one return value, bounded loops only), which is narrower.

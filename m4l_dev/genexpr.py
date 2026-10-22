@@ -19,8 +19,12 @@ Subset
   A Delay is read at most `taps` times in the code (default 1): Max's delay operator has one read tap per
   "tap inlet/outlet pair" (its second argument), and code that reads one Delay at two places declares 2
   (references/dsp.md, "gen~ delay taps").
+  Data name(size);  one channel of `size` doubles, zeroed at the start and kept between samples: peek(name, index)
+  reads sample `index` (floored; out of range or NaN reads 0), poke(name, value, index); writes it (out of range or
+  NaN: nothing written), as gen~'s data, peek and poke with their default boundmode "ignore" (references/dsp.md, "gen~
+  data, peek and poke"). Not inside a function, as a Delay.
 * Then statements: x = expr; if (...) {...} else if (...) {...} else {...};
-  d.write(expr); outN = expr; (braces required, plain `=` only).
+  d.write(expr); poke(name, value, index); outN = expr; (braces required, plain `=` only).
 * Bounded loops only: for (i = START; i < LIMIT; i += STEP) { ... } (or i <= LIMIT), START, LIMIT and STEP number
   literals, STEP > 0, the counter a new name that the body reads but never assigns, so the loop runs at most
   `bounded_loop_iterations` times whatever its body does; break; and continue; inside it. That is gen~'s own `for`
@@ -108,7 +112,7 @@ BUILTIN_ARITY = {
     "noise": 0, "mstosamps": 1, "sampstoms": 1, "dbtoa": 1, "atodb": 1,
 }
 
-DECLARATION_KEYWORDS = frozenset({"Param", "History", "Delay"})
+DECLARATION_KEYWORDS = frozenset({"Param", "History", "Delay", "Data"})
 STATEMENT_KEYWORDS = frozenset({"if", "else", "return", "for", "while", "break", "continue"})
 RESERVED_WORDS = DECLARATION_KEYWORDS | STATEMENT_KEYWORDS
 
@@ -116,6 +120,10 @@ INPUT_NAME_PATTERN = re.compile(r"^in(\d+)$")
 OUTPUT_NAME_PATTERN = re.compile(r"^out(\d+)$")
 
 DELAY_INTERPOLATION_MODES = ("none", "linear", "cubic", "spline")
+
+# gen~'s operators on a Data, which take its name as their first argument (their argument counts): peek(name, index)
+# reads, poke(name, value, index); writes. Not in BUILTIN_ARITY: their first argument is a Data, not a value.
+DATA_OPERATORS = {"peek": 2, "poke": 3}
 
 # The most iterations a for loop's header may allow: ours (gen~ states no limit, only a run-time guard against
 # infinite loops), far above any loop a block runs a sample (the LTC1060 section's ticks: 138), so a header that
@@ -371,6 +379,19 @@ class DelayDecl(Node):
 
 
 @dataclass
+class DataDecl(Node):
+    name: str
+    size: int
+
+
+@dataclass
+class PokeStatement(Node):
+    data_name: str
+    value: "Node"
+    index: "Node"
+
+
+@dataclass
 class Program:
     functions: list = field(default_factory=list)
     declarations: list = field(default_factory=list)
@@ -519,6 +540,8 @@ class Parser:
             return [self.parse_param_declaration(keyword)]
         if keyword.text == "History":
             return self.parse_history_declaration()
+        if keyword.text == "Data":
+            return [self.parse_data_declaration()]
         return [self.parse_delay_declaration(keyword)]
 
     def parse_param_declaration(self, keyword):
@@ -594,6 +617,22 @@ class Parser:
         self.expect_semicolon("after the Delay declaration")
         return DelayDecl(name.line, name.col, name.text, int(size), int(taps))
 
+    def parse_data_declaration(self):
+        """Data name(size); one channel (gen~'s data takes a channel count third; the kit's subset has one)."""
+        name = self.expect_identifier("after Data")
+        self.expect_op("(", "after the Data name")
+        size_token = self.peek()
+        size = self.parse_signed_number("as the Data size")
+        if size < 1 or size != int(size):
+            self.fail_at(size_token, f"Data {name.text}: size must be a positive integer literal, got {size}")
+        if self.at_op(","):
+            self.fail_at(self.peek(), f"Data {name.text}: one channel only in this subset (Data name(size);)")
+        self.expect_op(")", "to close the Data")
+        if self.at_op(","):
+            self.fail_at(self.peek(), "declare one Data per statement")
+        self.expect_semicolon("after the Data declaration")
+        return DataDecl(name.line, name.col, name.text, int(size))
+
     # -- statements --
     def parse_block(self):
         opening = self.expect_op("{", "to open a block (braces are required)")
@@ -642,6 +681,8 @@ class Parser:
                     call = self.parse_postfix()
                     self.expect_semicolon("after the method call")
                     return MethodStatement(token.line, token.col, call)
+                if following.text == "(" and token.text == "poke":
+                    return self.parse_poke_statement()
                 if following.text == "(":
                     self.fail_at(token, f"a call to '{token.text}' cannot be used as a statement; assign its result to a variable")
             self.fail_at(following if following.kind != "eof" else token,
@@ -649,6 +690,19 @@ class Parser:
         if token.kind == "op" and token.text == "{":
             self.fail_at(token, "free-standing blocks are not supported")
         self.fail_at(token, f"unexpected {self.describe(token)} at the start of a statement")
+
+    def parse_poke_statement(self):
+        """poke(name, value, index);"""
+        keyword = self.advance()
+        arguments, keywords = self.parse_call_arguments()
+        if keywords:
+            self.fail_at(next(iter(keywords.values())), "poke takes no keyword arguments in this subset")
+        if len(arguments) != DATA_OPERATORS["poke"]:
+            self.fail_at(keyword, f"poke takes 3 arguments (the Data, the value, the index), got {len(arguments)}")
+        if not isinstance(arguments[0], Name):
+            self.fail_at(keyword, "poke's first argument must be a Data's name")
+        self.expect_semicolon("after poke(...)")
+        return PokeStatement(keyword.line, keyword.col, arguments[0].name, arguments[1], arguments[2])
 
     def parse_if(self):
         keyword = self.advance()
@@ -901,6 +955,12 @@ class ProgramInfo:
     functions: dict       # name -> FunctionDef
     used_inputs: set
     used_outputs: set
+    data: dict = field(default_factory=dict)   # name -> DataDecl
+
+    @property
+    def memory_size(self):
+        """The doubles the program's Delays and Datas hold, in that order: one block of memory (`delay_memory`)."""
+        return sum(delay.size for delay in self.delays.values()) + sum(data.size for data in self.data.values())
 
 
 class Analyzer:
@@ -911,6 +971,7 @@ class Analyzer:
         self.params = {}
         self.histories = {}
         self.delays = {}
+        self.data = {}
         self.delay_read_sites = {}      # Delay name -> how many places the code reads it (each needs a tap)
         self.functions = {}
         self.used_inputs = set()
@@ -927,7 +988,7 @@ class Analyzer:
     def classify_reserved(self, name):
         if name in CONSTANT_NAMES:
             return "a constant"
-        if name in BUILTIN_ARITY:
+        if name in BUILTIN_ARITY or name in DATA_OPERATORS:
             return "a builtin function"
         if name in self.functions:
             return "a function"
@@ -937,6 +998,8 @@ class Analyzer:
             return "a History"
         if name in self.delays:
             return "a Delay"
+        if name in self.data:
+            return "a Data"
         if INPUT_NAME_PATTERN.match(name):
             return "an input"
         if OUTPUT_NAME_PATTERN.match(name):
@@ -957,6 +1020,9 @@ class Analyzer:
             elif isinstance(declaration, HistoryDecl):
                 self.declare_global_name(declaration, declaration.name, "History")
                 self.histories[declaration.name] = declaration
+            elif isinstance(declaration, DataDecl):
+                self.declare_global_name(declaration, declaration.name, "Data")
+                self.data[declaration.name] = declaration
             else:
                 self.declare_global_name(declaration, declaration.name, "Delay")
                 self.delays[declaration.name] = declaration
@@ -965,7 +1031,7 @@ class Analyzer:
         scope = Scope(None, 0)
         self.check_statements(self.program.statements, scope)
         return ProgramInfo(self.params, self.histories, self.delays, self.functions,
-                           self.used_inputs, self.used_outputs)
+                           self.used_inputs, self.used_outputs, self.data)
 
     def analyze_function(self, function):
         existing = self.classify_reserved(function.name)
@@ -975,7 +1041,8 @@ class Analyzer:
             self.error(function, f"function name '{function.name}' clashes with a declaration")
         scope = Scope(None, function.body.line)
         for parameter_name, line, col in function.parameters:
-            if parameter_name in CONSTANT_NAMES or parameter_name in BUILTIN_ARITY or parameter_name in self.functions \
+            if parameter_name in CONSTANT_NAMES or parameter_name in BUILTIN_ARITY or parameter_name in DATA_OPERATORS \
+                    or parameter_name in self.functions \
                     or INPUT_NAME_PATTERN.match(parameter_name) or OUTPUT_NAME_PATTERN.match(parameter_name):
                 self.error((line, col), f"function argument '{parameter_name}' clashes with {self.classify_reserved(parameter_name)}")
             if parameter_name in scope.variables:
@@ -1017,6 +1084,10 @@ class Analyzer:
             self.check_expression(statement.expression, scope)
         elif isinstance(statement, MethodStatement):
             self.check_method_statement(statement.call, scope)
+        elif isinstance(statement, PokeStatement):
+            self.require_data(statement, statement.data_name, "poke")
+            self.check_expression(statement.value, scope)
+            self.check_expression(statement.index, scope)
         elif isinstance(statement, For):
             self.check_for(statement, scope)
         elif isinstance(statement, (Break, Continue)):
@@ -1077,6 +1148,10 @@ class Analyzer:
             self.error(statement, f"cannot assign to the Param '{name}' (set Params from outside)")
         if name in self.delays:
             self.error(statement, f"cannot assign to the Delay '{name}'; use {name}.write(x);")
+        if name in self.data:
+            self.error(statement, f"cannot assign to the Data '{name}'; use poke({name}, value, index);")
+        if name in DATA_OPERATORS:
+            self.error(statement, f"cannot assign to '{name}': it is a builtin function")
         if name in self.histories:
             if inside_function:
                 self.error(statement, f"History '{name}' cannot be used inside a function")
@@ -1102,6 +1177,12 @@ class Analyzer:
     def require_delay(self, call):
         if call.object_name not in self.delays:
             self.error(call, f"'{call.object_name}' is not a Delay, so '.{call.method}' is not available")
+
+    def require_data(self, node, data_name, operator):
+        if self.function_being_checked is not None:
+            self.error(node, f"{operator} cannot be used inside a function (a Data is not passed to one)")
+        if data_name not in self.data:
+            self.error(node, f"{operator}'s first argument '{data_name}' is not a Data (declare Data {data_name}(size);)")
 
     # -- expressions --
     def check_expression(self, node, scope):
@@ -1137,6 +1218,8 @@ class Analyzer:
             kind = "History"
         elif name in self.delays:
             kind = "Delay"
+        elif name in self.data:
+            self.error(node, f"Data '{name}' is not a value; use peek({name}, index)")
         input_match = INPUT_NAME_PATTERN.match(name)
         if input_match:
             kind = "input"
@@ -1154,7 +1237,7 @@ class Analyzer:
             return
         if kind:
             return
-        if name in BUILTIN_ARITY or name in self.functions:
+        if name in BUILTIN_ARITY or name in DATA_OPERATORS or name in self.functions:
             self.error(node, f"'{name}' is a function; call it as {name}(...)")
         if name in self.closed_block_locals:
             self.error(node, f"{name} is assigned only inside the block at line {self.closed_block_locals[name]}; assign it before the if")
@@ -1162,6 +1245,14 @@ class Analyzer:
 
     def check_call(self, node, scope):
         name = node.name
+        if name == "poke":
+            self.error(node, "poke(name, value, index); is a statement, not an expression")
+        if name == "peek":
+            if len(node.arguments) != DATA_OPERATORS["peek"] or not isinstance(node.arguments[0], Name):
+                self.error(node, "peek takes 2 arguments: a Data's name and the index (peek(name, index))")
+            self.require_data(node, node.arguments[0].name, "peek")
+            self.check_expression(node.arguments[1], scope)
+            return
         if name in BUILTIN_ARITY:
             expected = BUILTIN_ARITY[name]
         elif name in self.functions:
@@ -1411,6 +1502,16 @@ static double genexpr_delay_read_spline(const double *buffer, long position, lon
     double c3 = 0.5 * (y_after - y_before) + 1.5 * (y_start - y_end);
     return ((c3 * fraction + c2) * fraction + c1) * fraction + y_start;
 }
+/* a Data's sample at the floored index; out of range or NaN reads 0 (gen~'s boundmode "ignore") */
+static double genexpr_peek(const double *data, long size, double index) {
+    if (!(index >= 0.0 && index < (double)size)) return 0.0;
+    return data[(long)floor(index)];
+}
+/* writes a Data's sample at the floored index; out of range or NaN writes nothing */
+static void genexpr_poke(double *data, long size, double value, double index) {
+    if (!(index >= 0.0 && index < (double)size)) return;
+    data[(long)floor(index)] = value;
+}
 """
 
 # builtin name -> C function (every builtin but noise, mstosamps and sampstoms, which CTranslator writes inline)
@@ -1513,6 +1614,9 @@ class CTranslator:
             self.emit(f"double *const d_{name} = delay_memory + {delay_offset};")
             self.emit(f"long p_{name} = delay_positions[{index}];")
             delay_offset += delay.size
+        for name, data in info.data.items():
+            self.emit(f"double *const data_{name} = delay_memory + {delay_offset};")
+            delay_offset += data.size
         for number in sorted(info.used_inputs):
             self.emit(f"const double *const in_{number} = inputs[{number - 1}];")
         for number in sorted(info.used_outputs):
@@ -1569,6 +1673,9 @@ class CTranslator:
                 return True
             if isinstance(statement, MethodStatement) and self.draws_noise(statement.call.arguments[0]):
                 return True
+            if isinstance(statement, PokeStatement) and (self.draws_noise(statement.value)
+                                                         or self.draws_noise(statement.index)):
+                return True
             if isinstance(statement, If):
                 for condition, block in statement.branches:
                     if self.draws_noise(condition) or self.statements_draw_noise(block.statements):
@@ -1623,6 +1730,13 @@ class CTranslator:
         elif isinstance(statement, MethodStatement):
             call = statement.call
             self.emit(f"d_{call.object_name}[p_{call.object_name}] = {self.value(call.arguments[0])};")
+        elif isinstance(statement, PokeStatement):
+            # the value, then the index: Python's order
+            prefix, (value, index) = self.operands_in_python_order([statement.value, statement.index], self.value)
+            size = self.info.data[statement.data_name].size
+            if prefix:
+                self.emit(f"{prefix.rstrip(', ')};")
+            self.emit(f"genexpr_poke(data_{statement.data_name}, {size}, {value}, {index});")
         elif isinstance(statement, If):
             for branch_index, (condition, block) in enumerate(statement.branches):
                 keyword = "if" if branch_index == 0 else "} else if"
@@ -1709,6 +1823,10 @@ class CTranslator:
         name = node.name
         if name == "noise":
             return "genexpr_noise()"
+        if name == "peek":
+            data_name = node.arguments[0].name
+            return (f"genexpr_peek(data_{data_name}, {self.info.data[data_name].size}, "
+                    f"{self.value(node.arguments[1])})")
         prefix, arguments = self.operands_in_python_order(node.arguments, self.value)
         if name == "mstosamps":
             return f"({prefix}{arguments[0]} * {c_double_literal(self.samplerate)} / 1000.0)"
@@ -1780,7 +1898,7 @@ class GenProgram:
         self._param_values = array.array("d", (math.nan if decl.default is None else decl.default
                                                for decl in info.params.values()))
         self._history_values = array.array("d", (decl.initial for decl in info.histories.values()))
-        self._delay_memory = array.array("d", bytes(8 * sum(decl.size for decl in info.delays.values())))
+        self._delay_memory = array.array("d", bytes(8 * info.memory_size))   # the Delays', then the Datas'
         self._delay_positions = (ctypes.c_long * max(1, len(info.delays)))()
         self._noise_state = NoiseState()
         self.c_source = c_source

@@ -29,6 +29,10 @@ sources=(
   "gamper-parker-valimaki-dafx11.pdf|https://www.dafx.de/paper-archive/2011/Papers/39_e.pdf|1a5f630165a7ab302998abb5c66dcc05fffbb4acd6c9305344feabe5bec92fbb"
   "lapastina-dangelo-gabrielli-dafx21.pdf|https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf|2673492050d120d39962d65805764fa2368dc0bc614930e15c8bb93cc971b7bc"
   "hiir-1.40.zip|https://ldesoras.fr/src/hiir-1.40.zip|ed1d630f85b4ed1eeda8de16acb1f785b18fc93d1430c1956192c6cc1df4221e"
+  "raffel-smith-bbd-dafx10.pdf|https://dafx.de/paper-archive/2010/DAFx10/RaffelSmith_DAFx10_P42.pdf|0187a788d0ac89dc42302c4785c1c6ae682e1ac325c6d42d6241766018142538"
+  "holters-parker-bbd-dafx18.pdf|https://dafx.de/paper-archive/2018/papers/DAFx2018_paper_12.pdf|29e6b14b25b29bdde1c0368d5a856c77118454c53adb63436613129c371e6e73"
+  "cycling74-gen-workshop-grranulator.genexpr|https://raw.githubusercontent.com/Cycling74/gen-workshop/f114ce93744687fc9724543e8c20c0baeed58221/patchers/grranulator.genexpr|c894ca0f904781d9a129a0874cb4c0bffc1d72e3fde7eea77e6723d92d496c54"
+  "pdmeyer-voice_allocator.genexpr|https://raw.githubusercontent.com/pdmeyer/philip-meyer-max-tutorials/d1f54136829804f16587ddefed0567459bfbaa49/patchers/signal-polyphony/signal-polyphony/other/voice_allocator.genexpr|936ccb9f878df1ff16a31d5eeb20419ea42aa6ffddd4122bc8b3c61d7951d14c"
 )
 failed=0
 for entry in "${sources[@]}"; do

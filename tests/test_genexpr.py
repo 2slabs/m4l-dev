@@ -219,6 +219,35 @@ class SemanticsTests(unittest.TestCase):
         output = render_single_output(code_after_write, count, [[float(i + 1) for i in range(count)]])
         self.assertEqual(output[10], 6.0 + 11.0)
 
+    def test_data_peek_and_poke(self):
+        # a ring of 4 written at a History's index: each sample reads what was written 4 samples before
+        code = """History w(0);
+Data ring(4);
+out1 = peek(ring, w);
+poke(ring, in1, w);
+w = (w + 1) % 4;"""
+        output = render_single_output(code, 12, [[float(i + 1) for i in range(12)]])
+        self.assertEqual(output, [0.0] * 4 + [float(i + 1) for i in range(8)])
+        # floored index; out of range or NaN reads 0 and writes nothing (gen~'s boundmode "ignore")
+        code = """Data d(3);
+poke(d, 7, 1.9);
+poke(d, 9, 3);
+poke(d, 9, -1);
+poke(d, 9, sqrt(-1) * 0 + in1);
+out1 = peek(d, 1.2) * 100 + peek(d, 0) + peek(d, 2) + peek(d, 3) + peek(d, -0.5) + peek(d, in1);"""
+        self.assertEqual(render_single_output(code, 1, [[math.nan]]), [700.0])
+
+    def test_data_is_declared_and_used_as_gen_has_it(self):
+        rejected = RejectionTests()
+        rejected.assert_rejected("Data d(4, 2);\nout1 = 0;", "one channel only")
+        rejected.assert_rejected("Data d(0);\nout1 = 0;", "size must be a positive integer")
+        rejected.assert_rejected("History d(0);\nout1 = peek(d, 0);", "is not a Data")
+        rejected.assert_rejected("Data d(4);\nout1 = d;", "use peek(d, index)")
+        rejected.assert_rejected("Data d(4);\nd = 1;", "use poke(d, value, index)")
+        rejected.assert_rejected("Data d(4);\nout1 = poke(d, 1, 0);", "is a statement")
+        rejected.assert_rejected("f(x) { poke(d, x, 0); return 0; }\nData d(4);\nout1 = f(1);", "inside a function")
+        rejected.assert_rejected("Data d(4);\npoke(d, 1);", "poke takes 3 arguments")
+
     def test_delay_fractional_and_cubic_on_a_ramp(self):
         count = 40
         ramp = [[float(i) for i in range(count)]]

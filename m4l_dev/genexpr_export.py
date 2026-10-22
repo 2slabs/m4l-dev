@@ -141,7 +141,7 @@ enum {{
     {upper}_PARAMS = {len(params)},
     {upper}_HISTORIES = {len(histories)},
     {upper}_DELAYS = {len(info.delays)},
-    {upper}_DELAY_MEMORY = {sum(delay.size for delay in info.delays.values())}
+    {upper}_DELAY_MEMORY = {info.memory_size}
 }};
 
 /* the Params in the order params[] holds them: name, default, lowest, highest (unbounded: +-1e308) */
@@ -154,7 +154,8 @@ static const char *const {prefix}_history_names[] = {{{history_names}}};
 static const double {prefix}_history_initials[] = {c_doubles([history.initial for history in histories])};
 
 /* Renders sample_count samples. params: {upper}_PARAMS values (clamp them to their range, as gen~ does).
-   histories, delay_memory (zeroed at the start) and delay_positions (zeroed): the program's state, kept by the
+   histories, delay_memory ({upper}_DELAY_MEMORY doubles: the Delays', then the Datas'; zeroed at the start) and
+   delay_positions (zeroed): the program's state, kept by the
    caller between calls. inputs / outputs: one array of sample_count per inlet / outlet. noise: seeded once. */
 void {prefix}_render(long sample_count, double samplerate, const double *params, double *histories,
                      double *delay_memory, long *delay_positions, const double *const *inputs,
