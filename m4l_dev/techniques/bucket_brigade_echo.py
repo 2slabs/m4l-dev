@@ -688,7 +688,7 @@ if ({p}_stop_fade <= 0 && {p}_reset_done < 1) {{
 {s}_lowpass_2 = {s}_lowpass_2 + {p}_lowpass_pole * ({s}_lowpass_1 - {s}_lowpass_2);
 {s}_highpass = {s}_highpass + {p}_highpass_pole * ({s}_lowpass_2 - {s}_highpass);
 // the host samples reach the anti-aliasing filter as a straight line between them, sinc^2(f / fs) at the loop's
-// peak, doubled by the compander for a steady tone: given back, so feedback 1 is unity there at any host rate while
+// peak, {'once (the compander inside the filters does not double it)' if self.compander_inside else 'doubled by the compander for a steady tone'}: given back, so feedback 1 is unity there at any host rate while
 // the peak is under a quarter of it (a shorter time's peak is past what the host carries well: no more is given)
 {s}_peak_angle = min({generated_number(math.pi * self.peak_clock_fraction)!r} * {s}_filter_clock / samplerate, {generated_number(math.pi / 4)!r});
 {s}_line_loss = sin({s}_peak_angle) / {s}_peak_angle;
