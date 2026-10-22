@@ -189,8 +189,9 @@ Note: the DAFx coefficients (Vs = 6 V) describe the **CA3160 original**, not The
   limiter as a hard ±5.1 V on the sum before the 1.33 kHz filter (where §3.2 derives its 10.5 V onset; on the
   original it sits after the filter, so it bites somewhat later there); the drive stage's 10.3 kHz roll-off as its
   gain at the note's frequency (its phase lag only shifts a static folder's output in time). The 1.33 kHz one-pole
-  stays on the voices' sum (linear, so where it sits does not change the sound of one voice through the folder, but
-  it also darkens the blend waves and the AM, which on the original come after it [DESIGN, unchanged]).
+  is the instrument's to run on each unit's folder output, before what it mixes in (the original's Order crossfade
+  and AM come after it, sheet 4A). Until 2sl gate 0.6.1 it ran on the voices' sum, darkening the blend waves, the
+  AM and the square with the fold (Graham, 2026-10-21: "too round").
 - Symmetry: an offset into the folder of up to 1.5 V, times Fold (§2.3: Q10 opens with Timbre; Graham 2026-10-19:
   no fold, no offset). Linear in Fold [DESIGN]: no source gives the 2N3958's Rds against the Timbre voltage.
 - Not modelled: slew (§3.2.7, above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft

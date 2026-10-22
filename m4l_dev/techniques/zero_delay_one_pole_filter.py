@@ -15,7 +15,8 @@ feedback, §3.9). Not the kit's all-pass section: its LP - HP all-pass gains ene
 zero-delay all-pass cascade's sections are lossless (zero_delay_allpass_cascade.py).
 
 Prewarping as the state-variable filter's (eq. 3.18): exact at `prewarp_hz` (default the cutoff), held to
-[10 Hz, 0.45 sr]; g = tan(pi fp / sr) fc / fp.
+[10 Hz, 0.45 sr]; g = tan(pi fp / sr) fc / fp. `oversampling` (default 1): the ticks the instrument runs a host
+sample (a 2x section ticks it twice), so sr above is the host rate times it; no latency at any (zero-delay).
 """
 import math
 
@@ -41,9 +42,13 @@ def _check_a_number_input(instance_name, input_name, expression):
 class ZeroDelayOnePoleFilter(Technique):
     """`<name>_lowpass`, `<name>_highpass`: `input` through the TPT one-pole at `cutoff_hz` (at least 10 Hz, no upper
     limit), the bilinear transform exact at `prewarp_hz` (default: the cutoff; held to [10 Hz, 0.45 sr]). State: the
-    integrator."""
+    integrator. `oversampling`: the ticks a host sample (whole, >= 1)."""
 
-    def __init__(self, instance_name, input, cutoff_hz, prewarp_hz=None):
+    def __init__(self, instance_name, input, cutoff_hz, prewarp_hz=None, oversampling=1):
+        if isinstance(oversampling, bool) or not isinstance(oversampling, int) or oversampling < 1:
+            raise BuildError(f"ZeroDelayOnePoleFilter {instance_name}: oversampling (the ticks the instrument runs it a "
+                             f"host sample) is a whole number >= 1, got {oversampling!r}")
+        self.oversampling = oversampling
         for input_name, expression in (("cutoff_hz", cutoff_hz), ("prewarp_hz", prewarp_hz)):
             if isinstance(expression, str):
                 _check_a_number_input(instance_name, input_name, expression)
@@ -59,11 +64,12 @@ class ZeroDelayOnePoleFilter(Technique):
 
     def coefficient_statements(self):
         """Statements leaving `<name>_big_g` = g / (1 + g) for this sample."""
+        rate = "samplerate" if self.oversampling == 1 else f"(samplerate * {self.oversampling})"
         return self.substituted("""// ${p}: 1-pole filter, zero-delay feedback (kit technique: zero-delay one-pole filter)
 ${p}_cutoff = max(${cutoff_hz}, ${lowest});
-${p}_prewarp = clamp(${prewarp_hz}, ${lowest}, samplerate * ${highest});
-${p}_g = tan(pi * ${p}_prewarp / samplerate) * (${p}_cutoff / ${p}_prewarp);
-${p}_big_g = ${p}_g / (1 + ${p}_g);""", lowest=LOWEST_CUTOFF_HZ, highest=HIGHEST_PREWARP_OF_SAMPLE_RATE)
+${p}_prewarp = clamp(${prewarp_hz}, ${lowest}, ${rate} * ${highest});
+${p}_g = tan(pi * ${p}_prewarp / ${rate}) * (${p}_cutoff / ${p}_prewarp);
+${p}_big_g = ${p}_g / (1 + ${p}_g);""", lowest=LOWEST_CUTOFF_HZ, highest=HIGHEST_PREWARP_OF_SAMPLE_RATE, rate=rate)
 
     def response_statements(self, output):
         """After `coefficient_statements`, before the tick: `<name>_<output>_gain` x input + `<name>_<output>_offset`

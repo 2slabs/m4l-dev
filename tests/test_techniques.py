@@ -1997,10 +1997,22 @@ class ZeroDelayOnePoleFilterTests(unittest.TestCase):
         assert_matches_model(program.run(2000, [signal])[0], signal, 1e-12, "low-pass + high-pass",
                              "the outputs sum to the input by the filter's algebra: a double's rounding on a signal near 1")
 
+    def test_oversampled_it_is_the_filter_at_the_steps_rate(self):
+        # oversampling 2 at a host rate is the same filter, tick for tick, as oversampling 1 at twice that rate
+        signal = [math.sin(0.37 * n) + 0.5 * math.sin(2.9 * n) for n in range(2000)]
+        rendered = [harness([ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="1330", oversampling=oversampling)],
+                            {}, ["pole_lowpass"], samplerate=rate).run(2000, [signal])[0]
+                    for oversampling, rate in ((2, self.SAMPLERATE), (1, 2 * self.SAMPLERATE))]
+        assert_matches_model(rendered[0], rendered[1], 1e-12, "oversampled one-pole",
+                             "the same coefficient written two ways: a double's rounding")
+
     def test_it_says_what_it_is_given_wrong(self):
         for bad in ("0", "-5", "inf", "nan"):
             with self.subTest(value=bad), self.assertRaises(BuildError):
                 ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz=bad)
+        for bad in (0, 1.5, True):
+            with self.subTest(oversampling=bad), self.assertRaises(BuildError):
+                ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="100", oversampling=bad)
         with self.assertRaises(BuildError):
             ZeroDelayOnePoleFilter("pole", input="in1", cutoff_hz="100").response_statements("allpass")
 

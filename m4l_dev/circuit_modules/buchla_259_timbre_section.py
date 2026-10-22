@@ -58,8 +58,10 @@ does; a jump in the rail is a jump in the transfer, as in the drive. `first_fold
 the character's (an instrument's fixed scaling).
 
 Not modelled (§4.3): slew (above several kHz at high Timbre), the JFET VCA's own nonlinearity, the limiter's soft knee
-at low zener current, the 1.45 Hz DC block inside IC31a's summer. The tone filter is linear and fixed: an instrument
-that sums several units may run it once on their sum (TONE_FILTER_HZ).
+at low zener current, the 1.45 Hz DC block inside IC31a's summer. The tone filter (TONE_FILTER_HZ) is the folder
+output's own: IC31a's feedback, before the Order crossfade and the AM (sheet 4A, references/circuits/buchla-259.md
+§2.2). An instrument runs it on each unit's folder output, before anything it mixes in or multiplies by: on a sum of
+units it would also darken whatever else is in that sum (2sl gate until 0.6.1: its blend waves and AM).
 """
 import dataclasses
 import functools
