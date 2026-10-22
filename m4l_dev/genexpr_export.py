@@ -115,6 +115,9 @@ def c_doubles(values):
 
 def header(info, num_inputs, num_outputs, prefix):
     upper = prefix.upper()
+    # a program with a Data says where its memory is in delay_memory; every other program's header is as before Data
+    memory_note = (f"({upper}_DELAY_MEMORY doubles: the Delays', then the Datas'; zeroed at the start) " if info.data
+                   else "(zeroed at the start) ")
     params = list(info.params.values())
     histories = list(info.histories.values())
     lowest = [param.minimum if param.minimum is not None else -1e308 for param in params]
@@ -154,8 +157,7 @@ static const char *const {prefix}_history_names[] = {{{history_names}}};
 static const double {prefix}_history_initials[] = {c_doubles([history.initial for history in histories])};
 
 /* Renders sample_count samples. params: {upper}_PARAMS values (clamp them to their range, as gen~ does).
-   histories, delay_memory ({upper}_DELAY_MEMORY doubles: the Delays', then the Datas'; zeroed at the start) and
-   delay_positions (zeroed): the program's state, kept by the
+   histories, delay_memory {memory_note}and delay_positions (zeroed): the program's state, kept by the
    caller between calls. inputs / outputs: one array of sample_count per inlet / outlet. noise: seeded once. */
 void {prefix}_render(long sample_count, double samplerate, const double *params, double *histories,
                      double *delay_memory, long *delay_positions, const double *const *inputs,

@@ -1502,7 +1502,11 @@ static double genexpr_delay_read_spline(const double *buffer, long position, lon
     double c3 = 0.5 * (y_after - y_before) + 1.5 * (y_start - y_end);
     return ((c3 * fraction + c2) * fraction + c1) * fraction + y_start;
 }
-/* a Data's sample at the floored index; out of range or NaN reads 0 (gen~'s boundmode "ignore") */
+"""
+
+# gen~ data's peek and poke: written only into a program that has a Data, so every other program's C (a plugin's
+# exported core) is as it was before Data
+C_DATA_HELPERS = r"""/* a Data's sample at the floored index; out of range or NaN reads 0 (gen~'s boundmode "ignore") */
 static double genexpr_peek(const double *data, long size, double index) {
     if (!(index >= 0.0 && index < (double)size)) return 0.0;
     return data[(long)floor(index)];
@@ -1574,6 +1578,8 @@ class CTranslator:
     # -- program --
     def translate(self):
         self.lines.append(C_PRELUDE)
+        if self.info.data:
+            self.lines.append(C_DATA_HELPERS)
         for function in self.program.functions:
             self.emit_function(function)
         self.emit_render()
