@@ -7,6 +7,10 @@ is `m4l_dev/plugin/` (Python: parameters, the generated header, `.vstpreset` fil
 
 ## The process
 
+Every 2sl instrument or effect starts as a Max for Live device. We prototype and develop it as a device, release it,
+and only then port it to a plugin. The device is where the sound and the brain get decided; the plugin carries them
+over unchanged.
+
 1. **Spec first.** `plugin/SPEC.md` in the device's repository, approved by Cody before any code (2sl's spec-first
    rule). It names the release being ported: **the latest GitHub release** (`gh release view`), never the local
    checkout, which may be ahead.
