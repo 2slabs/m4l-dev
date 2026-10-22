@@ -3,8 +3,8 @@
 Moved here 2026-10-21 from 2sl gate's `references/buchla-208-reverb.md` (gate commit 68bfd110; gate kept its own copy
 and its own code until 0.6.0 took the spring out), with the tank's numbers from gate's `src/gate_dsp.py` and the kick from 2sl dub's
 `references/springs.md` §5. Tags: **[VERIFIED]** read in the source, **[SECONDARY]**, **[INFERRED]** our reading,
-**[UNVERIFIED]**, **[DESIGN]** a choice, **[MEASURED]**. Gate's `fetch-buchla-208-reverb-sources.sh` fetches the three
-sources (2026-10-21, sha256 in that script); each source has one page, so a place in it is named by its label.
+**[UNVERIFIED]**, **[DESIGN]** a choice, **[MEASURED]**. `fetch-buchla-208-spring-reverb-sources.sh` (here; moved from
+gate) fetches the three sources (2026-10-21, sha256 in that script); each source has one page, so a place in it is named by its label.
 
 ## Buchla 208 spring reverb (m4l_dev/circuit_modules/buchla_208_spring_reverb.py)
 
