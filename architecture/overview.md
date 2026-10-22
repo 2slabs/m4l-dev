@@ -24,7 +24,7 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `max_time_values.py` | Max's note values (`MAX_NOTE_VALUE_TICKS`, references/README.md "Time value syntax") and the check every [metro] / [delay] / [pipe] / ... box's text passes as it is made (`box`): a token shaped like a note value (`64nt`) must be one |
 | `script_outlet_calls.py` | an ES5 script's `outlet(index, message, ...)` calls read from its text (tokenized, not run): each call's outlet and its message name as a pattern; what `check_script_messages_into_gen` holds to a gen~'s Params |
 | `layout_rules.py` | the 2sl layout contract (169 px, the bands, the header), the overlap rule (what every box and chrome text draws, and no two drawn at once overlapping; no display's texts overlapping), and how wide a control must be for its text (live.dial / live.menu / live.text / live.tab text in Live's font, measured per character by a stand-in, with padding) |
-| `display_text.py` | the text each display draws when first painted: the views script run in Duktape (es5.py) with Max's jsui globals stubbed, every `text()` recorded with its glyphs' box |
+| `display_text.py` | the text each display draws, first painted and driven through its inputs to its widest: the views script run in Duktape (es5.py) with Max's jsui globals stubbed, every `text()` recorded with its glyphs' box |
 | `seeded_random.py` | `SeededRandom`: the device's one random generator, its Seed and Loop controls (seeded-random.md) |
 | `chord_block.py` | `ChordBlock`: chord shapes, In key, held keys, names, Drift, the chord display (chord-block.md) |
 | `stored_table.py` | `StoredTable`: a table of values saved with the set and in presets as packed Stored Only parameters, not automated; its fields, its preset book form, its brain code and its Hidden editors (stored-table.md) |
@@ -181,8 +181,14 @@ The overlap rule, in `layout_rules.py`, fails the build naming both things, thei
   character, 10 px above the baseline and 3 below). No two overlap and none reaches off the device. A value's text
   is `live_value_text`'s: a stand-in for Live's formatting (SHORTCUTS.md), the widest over the control's travel.
 - **Displays** (`display_text_problems`, run by `DevicePatchBuilder.check_display_texts` on the views script): each
-  display's texts as it is first painted (`display_text.py`) don't overlap each other or leave the display. What a
-  display draws later, after messages, is its device's script tests' to paint.
+  display's texts don't overlap each other or leave the display, as first painted and as driven through what it can
+  be sent (`display_text.py`): every value each control told it can send (`display_inputs`: an enum's items, an
+  Int's values, a float at `DISPLAY_SWEEP_STEPS` steps of its travel) and every value of each reading the device
+  declares (`view_reading(view_box, message, values)`: what the DSP or the brain sends it), searched for the widest
+  text it can draw (each input swept in turn, kept at the widest; again with each value of each switch held), every
+  distinct paint on the way checked. A failure names what the display had been sent. A reading not declared isn't
+  driven: a device declares every reading that changes a display's text.
 - **Exempt by kind, never by name**: a background box (Max's "Include in Background": the chrome, which everything
   sits on); a part never counts against another part of its own box. There is no per-device allowlist.
-- tools/render_pages.py runs the same two rules on what the build wrote, and draws the displays' first-paint text.
+- tools/render_pages.py runs the same two rules on what the build wrote (the displays as first painted: driving them
+  needs the build's routes), and draws the displays' first-paint text.

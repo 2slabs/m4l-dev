@@ -181,6 +181,12 @@ class LayoutTests(unittest.TestCase):
                                                         "parameter_mmin": 0.0, "parameter_mmax": 2.0,
                                                         "parameter_unitstyle": layout_rules.UNIT_PERCENT}),
                          ["0 %", "1 %", "2 %"])
+        held = layout_rules.live_held_values
+        self.assertEqual(held({"parameter_enum": ["a", "bb", "c"]}, 4), [0, 1, 2])
+        self.assertEqual(held({"parameter_type": layout_rules.PARAMETER_TYPE_INT, "parameter_mmin": -1.0,
+                               "parameter_mmax": 1.0}, 4), [-1, 0, 1])
+        self.assertEqual(held({"parameter_mmin": 0.0, "parameter_mmax": 100.0, "parameter_exponent": 2.0}, 4),
+                         [0.0, 6.25, 25.0, 56.25, 100.0], "a float: its travel in steps, Live's exponent applied")
 
     def test_the_header_moves_with_the_width_and_must_be_on_the_grid(self):
         patch = builder(width=640)

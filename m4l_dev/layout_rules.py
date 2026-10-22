@@ -129,6 +129,7 @@ UNIT_INT, UNIT_FLOAT, UNIT_TIME, UNIT_HERTZ, UNIT_DECIBEL, UNIT_PERCENT, UNIT_PA
 PARAMETER_TYPE_INT = 1
 LIVE_TEXT_LINE_PIXELS = 11            # a line of Live's text: a dial's name on its top line, its value on its bottom
 DIAL_VALUE_SWEEP_STEPS = 1000         # a float dial's values looked at for its widest text: this many steps of its travel
+DISPLAY_SWEEP_STEPS = 32              # a float control's values a display is driven through (its widest text): steps
 COZETTE_ASCENT, COZETTE_DESCENT = 10, 3  # a chrome text's line above and below its baseline (the views script's text())
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -168,18 +169,28 @@ def live_value_text(value, unit_style, integer=False):
                      "isn't read yet): add it to layout_rules.live_value_text")
 
 
+def live_held_values(values, sweep_steps):
+    """The values a control with these saved values (`saved_attribute_attributes.valueof`) can hold, as Live holds
+    them: an enum's every index; an Int's every value; a float's at `sweep_steps` steps of its travel (Live's
+    exponent), its ends included."""
+    if values.get("parameter_enum"):
+        return list(range(len(values["parameter_enum"])))
+    low, high = float(values["parameter_mmin"]), float(values["parameter_mmax"])
+    if values.get("parameter_type") == PARAMETER_TYPE_INT:
+        return list(range(int(round(low)), int(round(high)) + 1))
+    exponent = float(values.get("parameter_exponent", 1.0))
+    return [low + (high - low) * (step / sweep_steps) ** exponent for step in range(sweep_steps + 1)]
+
+
 def live_value_texts(values):
     """Every text a control with these saved values (`saved_attribute_attributes.valueof`) shows as its value: an
-    enum's items; an Int's every value; a float's at DIAL_VALUE_SWEEP_STEPS steps of its travel (Live's exponent)."""
+    enum's items; an Int's every value; a float's at DIAL_VALUE_SWEEP_STEPS steps of its travel (live_held_values)."""
     if values.get("parameter_enum"):
         return list(values["parameter_enum"])
-    low, high = float(values["parameter_mmin"]), float(values["parameter_mmax"])
     unit_style = values["parameter_unitstyle"]
     if values.get("parameter_type") == PARAMETER_TYPE_INT:
-        return [live_value_text(v, unit_style, integer=True) for v in range(int(round(low)), int(round(high)) + 1)]
-    exponent = float(values.get("parameter_exponent", 1.0))
-    return sorted({live_value_text(low + (high - low) * (step / DIAL_VALUE_SWEEP_STEPS) ** exponent, unit_style)
-                   for step in range(DIAL_VALUE_SWEEP_STEPS + 1)})
+        return [live_value_text(v, unit_style, integer=True) for v in live_held_values(values, DIAL_VALUE_SWEEP_STEPS)]
+    return sorted({live_value_text(v, unit_style) for v in live_held_values(values, DIAL_VALUE_SWEEP_STEPS)})
 
 
 def widest_live_text(texts):

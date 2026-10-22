@@ -42,7 +42,7 @@ from m4l_dev import genexpr
 from m4l_dev import layout_rules
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
-from m4l_dev.display_text import display_texts
+from m4l_dev.display_text import display_paints
 from m4l_dev.generated_numbers import generated_number
 from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.max_time_values import check_note_values_in_box_text
@@ -75,6 +75,11 @@ def varname_for(long_name):
 
 def identity_transform(value):
     return value
+
+
+def sent_text(value):
+    """A value sent a display, as a problem names it: a number, or a message's several numbers."""
+    return " ".join(f"{v:g}" for v in value) if isinstance(value, list) else f"{value:g}"
 
 
 class DevicePatchBuilder:
@@ -117,6 +122,7 @@ class DevicePatchBuilder:
         self.control_by_box = {}                    # box id -> (control long name, the value's transform on the way)
         self.view_mode_by_box = {}
         self.view_defaults = {}                     # view mode -> {message: value it gets from the Init values}
+        self.view_readings = {}                     # view box id -> [(message, [values])]: what else it shows
         self.gen_param_from_init = []               # (gen box id, Param name, value the initial values send, control)
         self.gen_params_by_box = {}                 # gen~ box id -> {Param name: ParamDecl} of the code as given
         self.gen_code_by_box = {}                   # gen~ box id -> its code as given (defaults left out)
@@ -885,18 +891,84 @@ class DevicePatchBuilder:
         if problems:
             self.fail("script messages into a gen~:\n  " + "\n  ".join(problems))
 
+    def view_reading(self, view_box, message, values):
+        """Display `view_box` shows `message`, a reading sent by something other than a control (the DSP, the
+        brain), as `message value` with each of `values` (a number, or a list of numbers for a message of several;
+        the first is where the display check starts): the display check drives the display through them as through
+        its controls' values (check_display_texts)."""
+        if view_box not in self.view_mode_by_box:
+            self.fail(f"view_reading {message!r}: box {view_box} is no display")
+        if not values:
+            self.fail(f"view_reading {message!r} of the {self.view_mode_by_box[view_box]!r} display: no values")
+        self.view_readings.setdefault(view_box, []).append(
+            (message, [[generated_number(float(n)) for n in v] if isinstance(v, (list, tuple)) else
+                       generated_number(float(v)) for v in values]))
+
+    def saved_values_of(self, control_name):
+        """The saved values (`saved_attribute_attributes.valueof`) of the control called `control_name`."""
+        found = [entry["box"]["saved_attribute_attributes"]["valueof"] for entry in self.boxes
+                 if entry["box"].get("saved_attribute_attributes", {}).get("valueof", {})
+                 .get("parameter_longname") == control_name]
+        if len(found) != 1:
+            self.fail(f"control {control_name!r}: {len(found)} boxes are called that, not one")
+        return found[0]
+
+    def display_inputs(self, view_box):
+        """[(message, [values], start index)]: what display `view_box` can be sent, for the display check. A
+        control's message: every value it can send (its held values, layout_rules.live_held_values, a float at
+        DISPLAY_SWEEP_STEPS steps; through its route's transform and scale), starting at its start value; a
+        reading's (view_reading): its values, starting at the first."""
+        values_by_message, start_by_message = {}, {}
+        for control_name, transform, destination, message, scale in self.control_routes:
+            if destination != view_box or message is None:
+                continue
+            factor = scale if scale is not None else 1
+            sent = lambda held: generated_number(transform(held) * factor)  # noqa: E731
+            held_values = layout_rules.live_held_values(self.saved_values_of(control_name),
+                                                        layout_rules.DISPLAY_SWEEP_STEPS)
+            values = values_by_message.setdefault(message, [])
+            for value in [sent(self.initial_values[control_name])] + [sent(held) for held in held_values]:
+                if value not in values:
+                    values.append(value)
+            start_by_message.setdefault(message, sent(self.initial_values[control_name]))
+        for control_name, _, destination, message in self.tempo_routes:
+            if destination == view_box:
+                self.fail(f"the {self.view_mode_by_box[view_box]!r} display gets {control_name} as a time at Live's "
+                          f"tempo ({message!r}): the display check can't drive it through Live's tempos yet")
+        for message, values in self.view_readings.get(view_box, []):
+            if message in values_by_message:
+                self.fail(f"the {self.view_mode_by_box[view_box]!r} display's reading {message!r} is also a "
+                          "control's message")
+            values_by_message[message] = [v for i, v in enumerate(values) if v not in values[:i]]
+            start_by_message[message] = values[0]
+        return [(message, values, values.index(start_by_message[message]))
+                for message, values in values_by_message.items()]
+
     def check_display_texts(self, views_script_text):
-        """No display draws two texts over each other or a text off itself, as each is first painted
-        (display_text.display_texts, layout_rules.display_text_problems): every shown display but the background."""
+        """No display draws two texts over each other or a text off itself, as first painted and driven through what
+        it can be sent (display_text.display_paints, display_inputs, layout_rules.display_text_problems): every shown
+        display but the background. Each display with a problem: every problem of its first paint that has one, with
+        what the display had been sent, and how many of its other paints have one too."""
         problems = []
         for box_id, mode in sorted(self.view_mode_by_box.items()):
             box = self.find(box_id)
             if box.get("background"):
                 continue
             _, _, width, height = box["presentation_rect"]
-            drawn = display_texts(views_script_text, mode, width, height)
-            problems += layout_rules.display_text_problems(box["varname"], [(d.text, d.extent) for d in drawn],
+            failing = []
+            for painted in display_paints(views_script_text, mode, width, height, self.display_inputs(box_id)):
+                found = layout_rules.display_text_problems(box["varname"], [(d.text, d.extent) for d in painted.drawn],
                                                            width, height)
+                if found:
+                    failing.append((painted.sent, found))
+            if failing:
+                sent, found = failing[0]
+                when = ("sent " + ", ".join(f"{m} {sent_text(v)}" for m, v in sent.items())) if sent else \
+                    "as first painted"
+                problems += [f"{problem} ({when})" for problem in found]
+                if len(failing) > 1:
+                    problems.append(f"display {box['varname']}: and {len(failing) - 1} more of its paints, sent other "
+                                    "values, have text over text or off the display")
         if problems:
             self.fail("text drawn over text in a display (layout_rules.display_text_problems):\n  "
                       + "\n  ".join(problems))

@@ -134,6 +134,54 @@ class FixtureBuildTests(unittest.TestCase):
                       "the display", message)
         self.assertEqual(fingerprints(self.root), before)
 
+    def test_a_display_is_checked_at_every_value_its_controls_send_naming_what_it_was_sent(self):
+        # fine as first painted (Level's Init), crowded only near the top of Level's travel
+        crowded_near_full = fixture_device.FIXTURE_VIEWS_CODE.replace(
+            'viewLabel("level");', 'viewLabel("level"); if (S.level > 0.9) viewInfo("a reading too long to fit", w);')
+        with self.assertRaises(BuildError) as failure:
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(),
+                    views_code=crowded_near_full)
+        message = str(failure.exception)
+        self.assertIn("display view_level: 'level' (x 6..33, y 3..12) overlaps 'a reading too long to fit' "
+                      "(x -33..116, y 3..15) by 27 x 9 px (sent level 0.90625)", message)
+        self.assertNotIn("as first painted", message)
+
+    def test_a_declared_reading_drives_a_display(self):
+        # `busy` comes from no control: only declared (view_reading) is it driven, and then its 1 is caught
+        busy_code = fixture_device.FIXTURE_VIEWS_CODE.replace("{ kicks: 0 }", "{ kicks: 0, busy: 0 }").replace(
+            'viewLabel("level");', 'viewLabel("level"); if (S.busy) viewInfo("a reading too long to fit", w);')
+        quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=busy_code)
+
+        def declare_busy(patch):
+            level_view = next(box for box, mode in patch.view_mode_by_box.items() if mode == "level")
+            patch.view_reading(level_view, "busy", [0, 1])
+        with self.assertRaisesRegex(BuildError, r"overlaps 'a reading too long to fit' .* \(sent level 0\.5, busy 1\)"):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=busy_code,
+                    patch_edit=declare_busy)
+
+    def test_each_value_of_a_switch_gets_its_own_search(self):
+        # mode 0 draws the wider text in total, so the widest search stays there; mode 1's reading only crowds the
+        # label once Level is near full, which a search with mode 1 held finds
+        modes_code = fixture_device.FIXTURE_VIEWS_CODE.replace("{ kicks: 0 }", "{ kicks: 0, mode: 0 }").replace(
+            'viewLabel("level");',
+            'if (S.mode === 0) text("seventeen letters", 4, 40, T.label); '
+            'else { viewLabel("level"); viewInfo(S.level > 0.9 ? "a reading too long" : "fine", w); }')
+
+        def declare_mode(patch):
+            level_view = next(box for box, mode in patch.view_mode_by_box.items() if mode == "level")
+            patch.view_reading(level_view, "mode", [0, 1])
+        with self.assertRaisesRegex(BuildError, r"'level' .* overlaps 'a reading too long' .* \(sent level 0\.90625, "
+                                                r"mode 1\)"):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=modes_code,
+                    patch_edit=declare_mode)
+
+    def test_a_display_saying_error_at_a_value_sent_fails_the_build(self):
+        complaining = fixture_device.FIXTURE_VIEWS_CODE.replace(
+            'viewLabel("level");', 'viewLabel("level"); if (S.level === 1) error("full\\n");')
+        with self.assertRaisesRegex(BuildError, r"the 'level' display \(120 x 64\): said error\(\) sent "
+                                                r'\{"level":1\}: full'):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=complaining)
+
     def test_a_display_that_fails_to_paint_fails_the_build_saying_which(self):
         broken = fixture_device.FIXTURE_VIEWS_CODE.replace('viewLabel("level");', 'viewLabel(missingName);')
         with self.assertRaisesRegex(BuildError, "the 'level' display .* couldn't be painted.*missingName"):

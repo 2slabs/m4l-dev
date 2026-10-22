@@ -9,7 +9,7 @@ In order, and nothing is written until every check has passed:
   2. the scripts: the UI and views scripts from the kit's templates, and the device's own (`device_scripts`,
      {file name: text}, already filled in), every one checked as ES5; every message a script sends straight into a
      gen~ names a Param of it (DevicePatchBuilder.check_script_messages_into_gen); no display draws text over text or
-     off itself as first painted (DevicePatchBuilder.check_display_texts); the patch and every script hold only numbers
+     off itself, first painted or driven through its inputs (DevicePatchBuilder.check_display_texts); the patch and every script hold only numbers
      that went through generated_number (m4l_dev/generated_numbers.py)
   3. the Live parameter lock (src/live-parameters.lock.json): fails with a diff on any change, unless
      --accept-live-parameter-changes is among `command_line_arguments`
