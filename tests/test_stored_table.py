@@ -45,13 +45,19 @@ def builder(preset_book=None, preset_menu=None, info_keys=EDITOR_INFO + ("Tab",)
     (check() fails on a text nothing uses, so a test that checks names the ones it uses)."""
     keys = HEADER_INFO + tuple(info_keys) + (("Preset",) if preset_menu else ())
     patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",
-                               device_type="instrument", device_width=400, page_names=["one", "two"],
+                               device_type="instrument", device_width=480, page_names=["one", "two"],
                                info={key: (key, "text") for key in keys},
                                preset_book=preset_book or book(), latency_samples=0)
     patch.target = patch.gen_box("Param volume;\nout1 = in1;\n", 1, 1, rect=(0, 0, 80, 22))
     patch.header(output_level_target=patch.target, output_level_name="Volume", preset_menu=preset_menu)
     patch.brain = patch.box("js t.js", rect=(0, 100, 80, 22), ins=2, outs=3)
     return patch
+
+
+def plain_layout(patch):
+    """A device's chrome layout: the subtitle a header gap after the page tabs, no rules or labels."""
+    return {"subtitle": patch.page_tabs_x + layout_rules.page_tabs_width(patch.page_names) + layout_rules.HEADER_GAP,
+            "pages": [{"rules": [], "labels": []} for _ in patch.page_names]}
 
 
 def stages_of(patch, rows=3, table_fields=None):
@@ -109,7 +115,7 @@ class PresetBookTests(unittest.TestCase):
                               {"name": "up", "group": "g", "idea": "i", "values": {"Stages": {"Pitch": [12, 12, 12]}}}]),
                         info_keys=())
         stages_of(patch)
-        presets = patch.check()
+        presets = patch.check(plain_layout(patch))
         self.assertEqual(presets[1].values["Stages"].columns["Pitch"], (12, 12, 12))
         self.assertEqual(presets[1].values["Stages"].columns["Wait"], (0, 3, 1), "Init's")
         self.assertEqual(presets[0].values["Stages"], patch.initial_values["Stages"])
@@ -124,7 +130,7 @@ class PresetBookTests(unittest.TestCase):
             patch = builder(book([{"name": "bad", "group": "g", "idea": "i", "values": {"Stages": value}}]))
             stages_of(patch)
             with self.assertRaisesRegex(BuildError, message):
-                patch.check()
+                patch.check(plain_layout(patch))
 
     def test_init_must_give_every_field(self):
         patch = builder(book(init_stages={"Pitch": [0, 0, 0]}))
@@ -186,9 +192,9 @@ class StoredParameterTests(unittest.TestCase):
     def test_the_preset_menu_sets_the_stored_parameters(self):
         patch = builder(book([{"name": "init", "group": "init", "idea": "i", "values": {}},
                               {"name": "up", "group": "g", "idea": "i", "values": {"Stages": {"Pitch": [12, 0, 0]}}}]),
-                        preset_menu=(200, 64), info_keys=())
+                        preset_menu=(216, 48), info_keys=())
         stages_of(patch)
-        presets = patch.check()
+        presets = patch.check(plain_layout(patch))
         script = patch.ui_script(presets)
         menu_presets = json.loads(script.split("var PRESETS = ")[1].split(";\n")[0])
         self.assertEqual(menu_presets[1]["stages_pitch_1"], 36 * 1365)
@@ -206,12 +212,12 @@ class OutsidePresetsTests(unittest.TestCase):
             {"name": "loud", "group": "g", "idea": "i", "values": {"Volume": 3}}]}, "the test's book")
 
     def test_its_initial_value_is_the_devices_and_the_preset_menu_leaves_it_alone(self):
-        patch = builder(self.outside_book(), preset_menu=(200, 64), info_keys=())
+        patch = builder(self.outside_book(), preset_menu=(216, 48), info_keys=())
         StoredTable(patch, "Stages", fields(), 3, patch.brain, 1, 2, initial_outside_presets=INIT_STAGES)
         self.assertEqual(patch.initial_values["Stages"].columns["Pitch"], (0, 7, -24))
         box = find_by_varname(patch, "stages_switches_2")
         self.assertEqual(box["saved_attribute_attributes"]["valueof"]["parameter_initial"], [1.0 + (3 << 1)])
-        presets = patch.check()
+        presets = patch.check(plain_layout(patch))
         self.assertTrue(all("Stages" not in preset.values for preset in presets))
         script = patch.ui_script(presets)
         menu_presets = json.loads(script.split("var PRESETS = ")[1].split(";\n")[0])
@@ -224,7 +230,7 @@ class OutsidePresetsTests(unittest.TestCase):
                                             "values": {"Stages": {"Pitch": [12, 0, 0]}}}]))
         StoredTable(patch, "Stages", fields(), 3, patch.brain, 1, 2, initial_outside_presets=INIT_STAGES)
         with self.assertRaisesRegex(BuildError, "sets controls the device doesn't have"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_an_init_value_too_fails_and_every_field_is_needed(self):
         with self.assertRaisesRegex(BuildError, "can't have its own initial value too"):
@@ -255,7 +261,7 @@ class EditorTests(unittest.TestCase):
         self.assertIn('"pitch_editor_1": {"field": "Pitch", "row": 0}', code)
         route = next(x["box"] for x in patch.boxes if x["box"].get("text", "").startswith("route stages_pitch_1"))
         self.assertEqual(route["text"].split()[1:], stages.parameter_varnames() + list(stages.editors))
-        patch.check()
+        patch.check(plain_layout(patch))
 
     def test_a_stepped_editor_dial_names_an_index_field(self):
         patch = builder(book(init_stages=dict(INIT_STAGES, Time=[0, 1, 2]), neutral_stages=dict(NEUTRAL_STAGES, Time=1)),
@@ -283,7 +289,7 @@ class EditorTests(unittest.TestCase):
         unused = builder(book(neutral_stages=NEUTRAL_STAGES))
         stages_of(unused)
         with self.assertRaisesRegex(BuildError, "names no control that takes one.*Stages"):
-            unused.check()
+            unused.check(plain_layout(unused))
         patch = builder(book(neutral_stages=NEUTRAL_STAGES))
         stages = stages_of(patch)
         with self.assertRaisesRegex(BuildError, "no field"):

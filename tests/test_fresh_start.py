@@ -24,7 +24,7 @@ class FreshStartTests(unittest.TestCase):
         cls.folder = os.path.join(cls.root, "devices", fixture_device.FIXTURE_SCRIPT_NAME)
         cls.patch = fixture_device.fixture_patch(PresetBook.from_file(repository.source_path("presets.json"),
                                                                       "src/presets.json"))
-        cls.presets = cls.patch.check()
+        cls.presets = cls.patch.check(fixture_device.FIXTURE_LAYOUT)
 
     @classmethod
     def tearDownClass(cls):

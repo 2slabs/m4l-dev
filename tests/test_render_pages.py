@@ -74,6 +74,17 @@ class RenderPagesTests(unittest.TestCase):
             render_pages.render_device(self.device_folder, self.output)
         self.assertIn(f"{narrowed['varname']} (live.dial): its text doesn't fit", str(failure.exception))
 
+    def test_a_display_drawing_text_over_text_fails_saying_which(self):
+        # the build's own rule on what the build wrote: the level display's script given a second text on its label
+        views_path = os.path.join(self.device_folder, f"{fixture_device.FIXTURE_SCRIPT_NAME}-view.js")
+        with open(views_path, encoding="utf-8") as views_file:
+            views = views_file.read()
+        with open(views_path, "w", encoding="utf-8") as views_file:
+            views_file.write(views.replace('viewLabel("level");', 'viewLabel("level"); text("over", 8, 12, T.ink);'))
+        with self.assertRaises(render_pages.RenderFailure) as failure:
+            render_pages.render_device(self.device_folder, self.output)
+        self.assertIn("display view_level: 'level' (x 6..33, y 3..12) overlaps 'over'", str(failure.exception))
+
     def test_the_stand_in_font_is_the_one_the_rules_measure_by(self):
         font = render_pages.load_live_font()             # fails when the table and the font file disagree
         self.assertAlmostEqual(font.getlength("FM amount"), layout_rules.live_text_width("FM amount"), places=6)
@@ -90,7 +101,7 @@ class RenderPagesTests(unittest.TestCase):
         with self.assertRaises(render_pages.RenderFailure) as failure:
             render_pages.render_device(self.device_folder, self.output)
         self.assertIn(moved["varname"], str(failure.exception))
-        self.assertIn("leaves the", str(failure.exception))
+        self.assertIn("level's box (x 470..514, y 119..167) reaches off the 480 x 169 device", str(failure.exception))
 
 
 if __name__ == "__main__":

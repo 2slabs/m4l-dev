@@ -120,6 +120,25 @@ class FixtureBuildTests(unittest.TestCase):
             quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(),
                     views_code=fixture_device.FIXTURE_VIEWS_CODE + "\nlet modern = () => 1;\n")
 
+    def test_a_display_drawing_text_over_text_fails_naming_both_and_writes_nothing(self):
+        # the level display (120 px) with a reading too long for its top line beside its label
+        before = fingerprints(self.root)
+        crowded = fixture_device.FIXTURE_VIEWS_CODE.replace(
+            'viewLabel("level");', 'viewLabel("level"); viewInfo("a reading too long to fit", w);')
+        with self.assertRaises(BuildError) as failure:
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=crowded)
+        message = str(failure.exception)
+        self.assertIn("display view_level: 'level' (x 6..33, y 3..12) overlaps 'a reading too long to fit' "
+                      "(x -33..116, y 3..15) by 27 x 9 px", message)
+        self.assertIn("display view_level (120 x 64): 'a reading too long to fit' (x -33..116, y 3..15) reaches off "
+                      "the display", message)
+        self.assertEqual(fingerprints(self.root), before)
+
+    def test_a_display_that_fails_to_paint_fails_the_build_saying_which(self):
+        broken = fixture_device.FIXTURE_VIEWS_CODE.replace('viewLabel("level");', 'viewLabel(missingName);')
+        with self.assertRaisesRegex(BuildError, "the 'level' display .* couldn't be painted.*missingName"):
+            quietly(fixture_device.build_fixture_device, self.root, command_line_arguments=(), views_code=broken)
+
     def test_an_audio_effect_gets_audio_effect_presets(self):
         audio_root = tempfile.mkdtemp(prefix="kit-fixture-audio-")
         try:

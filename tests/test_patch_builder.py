@@ -56,9 +56,17 @@ def saved_values(patch, box_id):
     return patch.find(box_id)["saved_attribute_attributes"]["valueof"]
 
 
-def layout_problems(patch):
-    shown = [x["box"] for x in patch.boxes if x["box"].get("presentation") == 1 and not x["box"].get("background")]
-    return layout_rules.overlap_problems(shown, patch.page_names, patch.pages, patch.groups, patch.device_width)
+def plain_layout(patch, labels_by_page=None):
+    """A device's chrome layout: the subtitle a header gap after the page tabs (as the devices place it), no rules,
+    `labels_by_page` ({page: [[text, x, baseline, kind]]}) or none."""
+    return {"subtitle": patch.page_tabs_x + layout_rules.page_tabs_width(patch.page_names) + layout_rules.HEADER_GAP,
+            "pages": [{"rules": [], "labels": (labels_by_page or {}).get(page, [])} for page in patch.page_names]}
+
+
+def layout_problems(patch, labels_by_page=None):
+    return layout_rules.drawn_overlap_problems([x["box"] for x in patch.boxes],
+                                               patch.full_layout(plain_layout(patch, labels_by_page)),
+                                               patch.page_names, patch.pages, patch.groups, patch.device_width)
 
 
 def builder_with_latency(latency_samples):
@@ -98,7 +106,7 @@ class LayoutTests(unittest.TestCase):
         patch.dial("B", "B", patch.target, "a", 0, 1, 0, 40, 119, "one")
         self.assertTrue(any("overlaps" in p for p in layout_problems(patch)))
         with self.assertRaisesRegex(BuildError, "overlaps"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_same_place_on_other_pages_is_fine(self):
         patch = builder()
@@ -119,7 +127,60 @@ class LayoutTests(unittest.TestCase):
     def test_a_box_off_the_device_fails(self):
         patch = builder(width=200)
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 180, 119, "one")
-        self.assertTrue(any("leaves" in p for p in layout_problems(patch)))
+        self.assertTrue(any("reaches off" in p for p in layout_problems(patch)))
+
+    def test_a_dials_value_text_reaching_into_its_neighbour_fails_naming_both(self):
+        # A's widest value, "-100000.00" (55.7 px), centred on its 44 px box, reaches 5.9 px past each side: 1.9 px
+        # into B's box 4 px away. Its name fits; its value is what reaches.
+        patch = builder()
+        patch.dial("A", "A", patch.target, "a", -100000, 100000, layout_rules.UNIT_FLOAT, 12, 119, "one")
+        patch.dial("B", "B", patch.target, "b", 0, 1, layout_rules.UNIT_FLOAT, 60, 119, "one")
+        self.assertEqual(layout_problems(patch), [
+            "page 'one': a's value (x 6.14062..61.8594, y 156..167) overlaps b's box (x 60..104, y 119..167) by "
+            "1.85938 x 11 px"])
+
+    def test_a_chrome_label_over_a_control_or_another_label_fails_naming_both(self):
+        patch = builder(book=preset_book(init={"A": "x", "Volume": 0}))
+        patch.menu("A", "A", ["x", "y"], 12, layout_rules.ROW_Y, 40, "one")
+        problems = layout_problems(patch, {"one": [["section", 12, 110, "label"], ["sect", 48, 110, "hint"]],
+                                           "two": [["section", 12, 110, "label"]]})
+        self.assertIn("page 'one': a's box (x 12..52, y 98..113) overlaps label 'section''s text (x 12..54, y 100..113) "
+                      "by 40 x 13 px", problems)
+        self.assertIn("page 'one': label 'section''s text (x 12..54, y 100..113) overlaps hint 'sect''s text "
+                      "(x 48..72, y 100..113) by 6 x 13 px", problems)
+        self.assertFalse(any(p.startswith("page 'two'") for p in problems), "the menu is on page one only")
+
+    def test_the_header_labels_and_the_subtitle_count(self):
+        # the Preset menu's "preset" label, 40 px before the menu, runs into the page tabs; the subtitle into it
+        patch = builder(preset_menu=(150, 60), info_keys=("Preset",))
+        problems = layout_problems(patch)
+        self.assertIn("page 'one': page's box (x 38..134, y 3..18) overlaps label 'preset''s text (x 110..146, "
+                      "y 5..18) by 24 x 13 px", problems)
+        self.assertIn("page 'one': preset's box (x 150..210, y 3..18) overlaps subtitle '  v0''s text (x 146..170, "
+                      "y 5..18) by 20 x 13 px", problems)
+
+    def test_the_background_is_what_everything_sits_on(self):
+        patch = builder()
+        patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
+        chrome = patch.find(patch.header_boxes["chrome"])
+        self.assertEqual((chrome["background"], chrome["presentation_rect"]), (1, [0.0, 0.0, 400.0, 169.0]))
+        self.assertEqual(layout_problems(patch), [])
+
+    def test_value_texts_are_measured_as_the_kit_formats_them(self):
+        text = layout_rules.live_value_text
+        self.assertEqual([text(1500, layout_rules.UNIT_HERTZ), text(12.5, layout_rules.UNIT_HERTZ),
+                          text(185, layout_rules.UNIT_TIME), text(2500, layout_rules.UNIT_TIME),
+                          text(5, layout_rules.UNIT_TIME, integer=True), text(-6, layout_rules.UNIT_DECIBEL),
+                          text(35, layout_rules.UNIT_PERCENT), text(3, layout_rules.UNIT_SEMITONES),
+                          text(-50, layout_rules.UNIT_PAN), text(0, layout_rules.UNIT_PAN), text(60, layout_rules.UNIT_MIDI),
+                          text(0.5, layout_rules.UNIT_FLOAT), text(7, layout_rules.UNIT_INT)],
+                         ["1.50 kHz", "12.5 Hz", "185 ms", "2.50 s", "5 ms", "-6.0 dB", "35.0 %", "+3.00 st", "50L", "C",
+                          "C3", "0.50", "7"])
+        self.assertEqual(layout_rules.live_value_texts({"parameter_enum": ["a", "bb"]}), ["a", "bb"])
+        self.assertEqual(layout_rules.live_value_texts({"parameter_type": layout_rules.PARAMETER_TYPE_INT,
+                                                        "parameter_mmin": 0.0, "parameter_mmax": 2.0,
+                                                        "parameter_unitstyle": layout_rules.UNIT_PERCENT}),
+                         ["0 %", "1 %", "2 %"])
 
     def test_the_header_moves_with_the_width_and_must_be_on_the_grid(self):
         patch = builder(width=640)
@@ -173,14 +234,14 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual((values["parameter_longname"], values["parameter_shortname"]), ("Output", "Output"))
         self.assertEqual(patch.find(made["output_level"])["varname"], "output")
         self.assertEqual(patch.messages_for({"Output": -3}, target), {"volume": -3})
-        patch.check()
+        patch.check(plain_layout(patch))
 
     def test_controls_must_hold_their_text(self):
         patch = builder(book=preset_book(init={"A": 0, "B": "x", "Volume": 0}), info_keys=("A", "B"))
         patch.dial("A", "Velocity Amount", patch.target, "a", 0, 1, 0, 12, 119, "one")
         patch.menu("B", "B", ["x", "a long item"], 12, 98, 40, "one")
         with self.assertRaises(BuildError) as failure:
-            patch.check()
+            patch.check(plain_layout(patch))
         self.assertIn("A (live.dial) is 44 px wide, its text needs 84", str(failure.exception))
         self.assertIn("B (live.menu) is 40 px wide, its text needs 68", str(failure.exception))
         self.assertEqual(layout_rules.live_toggle_width("in key"), 40)
@@ -191,7 +252,7 @@ class LayoutTests(unittest.TestCase):
         width = layout_rules.live_dial_width("Velocity Amount")
         made = patch.dial("A", "Velocity Amount", patch.target, "a", 0, 1, 0, 12, 119, "one", width=width)
         self.assertEqual(patch.find(made)["presentation_rect"][2], width)
-        patch.check()
+        patch.check(plain_layout(patch))
         for bad_width in (40, 46):
             with self.assertRaisesRegex(BuildError, "at least 44, on the 4 px grid"):
                 patch.dial("B", "B", patch.target, "b", 0, 1, 0, 120, 119, "one", width=bad_width)
@@ -287,21 +348,21 @@ class InitialValueAndPresetTests(unittest.TestCase):
         patch.dial("B", "B", patch.target, "b", 0, 1, 0, 60, 119, "one")
         patch.dial("C", "C", patch.target, "c", 0, 1, 0, 108, 119, "one")
         with self.assertRaisesRegex(BuildError, "Nope"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_an_init_value_for_no_control_fails(self):
         patch = builder()
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
         with self.assertRaisesRegex(BuildError, r"names no saved control: \['B', 'C'\]"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_the_preset_menu_lists_the_presets_and_the_ui_gets_them(self):
         presets = [{"name": "init", "group": "init", "idea": "i", "values": {}},
                    {"name": "high", "group": "g", "idea": "i", "values": {"A": 1}}]
-        patch = builder(book=preset_book(init={"A": 0, "Volume": 0}, presets=presets), preset_menu=(150, 60),
+        patch = builder(width=480, book=preset_book(init={"A": 0, "Volume": 0}, presets=presets), preset_menu=(216, 48),
                         info_keys=("A", "Preset"))
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
-        held = patch.check()
+        held = patch.check(plain_layout(patch))
         self.assertEqual(saved_values(patch, patch.header_boxes["preset"])["parameter_enum"], ["init", "high"])
         self.assertEqual([p.values["A"] for p in held], [0, 1])
         self.assertIn('"a": 1', patch.ui_script(held))
@@ -339,7 +400,7 @@ class NeutralValueTests(unittest.TestCase):
         stray = builder(book=preset_book(init={"A": 0, "Volume": 0}, neutral={"A": 0, "Gone": 0}))
         stray.dial("A", "A", stray.target, "a", 0, 1, 0, 12, 119, "one")
         with self.assertRaisesRegex(BuildError, "names no control that takes one.*Gone"):
-            stray.check()
+            stray.check(plain_layout(stray))
 
     def test_hidden_and_kit_controls_take_no_neutral_from_the_book(self):
         hidden = builder(book=preset_book(neutral={"A": 0, "B": 0, "C": 0, "Tool": "a"}))
@@ -415,11 +476,11 @@ class GenTests(unittest.TestCase):
     def test_the_build_writes_each_param_default_from_the_init_values(self):
         patch = builder(book=preset_book(init={"A": 0.75, "Volume": -3}), info_keys=("A",))
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
-        patch.check()
+        patch.check(plain_layout(patch))
         self.assertEqual(self.codebox_code(patch, patch.target), "Param a(0.75, min=0, max=1);\nParam b(0.25, min=0, "
                          "max=1);\nParam volume(-3);\nout1 = in1 * a;\n")
         self.assertEqual(patch.gen_code_as_built(patch.target), self.codebox_code(patch, patch.target))
-        patch.check()                                  # checking twice writes the same (from the code as given)
+        patch.check(plain_layout(patch))                                  # checking twice writes the same (from the code as given)
         self.assertIn("Param a(0.75, min=0, max=1);", self.codebox_code(patch, patch.target))
 
     def test_a_scaled_or_derived_value_is_written_as_sent(self):
@@ -436,25 +497,25 @@ class GenTests(unittest.TestCase):
         patch.dial("B", "B", patch.target, "b", 0, 100, 0, 60, 119, "one", scale=0.01)
         with self.assertRaisesRegex(BuildError, r"B -> Param b\(0.25, ...\): the initial values give it \(0.5\): "
                                                 r"leave the default out"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_a_param_with_no_default_and_no_control_fails(self):
         patch = builder(book=preset_book(init={"Volume": 0}))
         with self.assertRaisesRegex(BuildError, "Param a .* has no default in its code and no control sets it"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_two_controls_sending_one_param_different_initial_values_fail(self):
         patch = builder(book=preset_book(init={"A": 0, "B": 1, "Volume": 0}))
         patch.dial("A", "A", patch.target, "a", 0, 1, 0, 12, 119, "one")
         patch.dial("B", "B", patch.target, "a", 0, 1, 0, 60, 119, "one")
         with self.assertRaisesRegex(BuildError, "Param a: A sends 0, B sends 1 at the start"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_an_initial_value_outside_the_params_range_fails(self):
         patch = builder(book=preset_book(init={"A": 5, "Volume": 0}))
         patch.dial("A", "A", patch.target, "a", 0, 10, 0, 12, 119, "one")
         with self.assertRaisesRegex(BuildError, r"the initial values send 5, outside its \[0.0, 1.0\]"):
-            patch.check()
+            patch.check(plain_layout(patch))
 
     def test_a_tempo_synced_time_writes_its_default_at_the_starting_tempo(self):
         patch = builder(book=preset_book(init={"A": "1/8", "Volume": 0}), info_keys=("A",),
@@ -468,7 +529,7 @@ class GenTests(unittest.TestCase):
         patch = builder(book=preset_book(init={"A": 0, "Volume": 0}))
         patch.dial("A", "A", patch.target, "nothing", 0, 1, 0, 12, 119, "one")
         with self.assertRaisesRegex(BuildError, "\\[prepend nothing\\] .* sends 'nothing' into \\[gen~\\] .* no such Param"):
-            patch.check()
+            patch.check(plain_layout(patch))
         with self.assertRaisesRegex(BuildError, "nothing: no such Param"):
             patch.gen_code_as_built(patch.target)
 
@@ -485,7 +546,7 @@ class GenTests(unittest.TestCase):
         lookup = patch.derived(patch.box("expr $i1 * 0.25"), "A", lambda v: v * 0.25)
         patch.wire(menu, lookup)
         patch.tell(lookup, "a", patch.target)
-        patch.check()
+        patch.check(plain_layout(patch))
         self.assertIn("Param a(0.25, min=0, max=1);", self.codebox_code(patch, patch.target))
 
 

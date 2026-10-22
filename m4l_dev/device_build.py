@@ -4,10 +4,12 @@
                  command_line_arguments=())
 
 In order, and nothing is written until every check has passed:
-  1. the patch's checks (DevicePatchBuilder.check: Init values, presets, gen~ Params, layout, Info text, names, wires)
+  1. the patch's checks (DevicePatchBuilder.check: Init values, presets, gen~ Params, layout with the chrome's
+     labels, Info text, names, wires)
   2. the scripts: the UI and views scripts from the kit's templates, and the device's own (`device_scripts`,
      {file name: text}, already filled in), every one checked as ES5; every message a script sends straight into a
-     gen~ names a Param of it (DevicePatchBuilder.check_script_messages_into_gen); the patch and every script hold only numbers
+     gen~ names a Param of it (DevicePatchBuilder.check_script_messages_into_gen); no display draws text over text or
+     off itself as first painted (DevicePatchBuilder.check_display_texts); the patch and every script hold only numbers
      that went through generated_number (m4l_dev/generated_numbers.py)
   3. the Live parameter lock (src/live-parameters.lock.json): fails with a diff on any change, unless
      --accept-live-parameter-changes is among `command_line_arguments`
@@ -63,7 +65,7 @@ def build_device(repository, patch, layout, views_code, device_scripts, live_pre
     generated scripts (its brain), written next to the device and embedded in the release; live_preset_files: a
     LivePresetFiles when the device ships its presets as Live preset files, else None."""
     arguments = parse_build_arguments(command_line_arguments)
-    presets = patch.check()
+    presets = patch.check(layout)
     patch_json = patch.patch()
     scripts = dict(device_scripts)
     for kit_script_name, kit_script_text in ((patch.ui_script_name(), patch.ui_script(presets)),
@@ -73,6 +75,7 @@ def build_device(repository, patch, layout, views_code, device_scripts, live_pre
         scripts[kit_script_name] = kit_script_text
     check_es5(scripts)
     patch.check_script_messages_into_gen(scripts)
+    patch.check_display_texts(scripts[patch.views_script_name()])
     identity = live_parameter_identity.device_identity(patch_json, patch.device_type)
     held_by_the_lock = literals_held_by_the_lock(live_parameter_identity.lock_text(identity))
     maxpat_text = json.dumps(patch_json, indent="\t")

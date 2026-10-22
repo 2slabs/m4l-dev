@@ -4,7 +4,7 @@ A device's build makes one builder and calls its helpers: boxes and wires, gen~ 
 m4l_dev/genexpr.py), Live parameters (dials, menus, tabs, toggles, number boxes, Stored Only values) with their Info
 View text, displays (jsui running the views script), the shared header (2sl link chip, page tabs, optional Preset
 menu, output level, Stop), Live's transport and Live Set properties, and the Stop action. m4l_dev/device_build.py
-then checks it (`check()`), generates its scripts and writes the device.
+then checks it (`check(layout)`), generates its scripts and writes the device.
 
 Two values per control, both from the preset book (m4l_dev/preset_book.py) (architecture/presets.md, "Neutral, Init,
 and a fresh device"):
@@ -42,6 +42,7 @@ from m4l_dev import genexpr
 from m4l_dev import layout_rules
 from m4l_dev import live_parameter_identity as identity
 from m4l_dev.build_error import BuildError
+from m4l_dev.display_text import display_texts
 from m4l_dev.generated_numbers import generated_number
 from m4l_dev.generated_scripts import fill_template, kit_template_text
 from m4l_dev.max_time_values import check_note_values_in_box_text
@@ -764,9 +765,10 @@ class DevicePatchBuilder:
 
     # ---- checks -------------------------------------------------------------------------------------------
 
-    def check(self):
-        """Every check of the patch as built; returns the presets ([Preset], every saved control set). Fills in the
-        Preset menu's items. Fails on the first broken rule, saying what to fix."""
+    def check(self, layout):
+        """Every check of the patch as built, with the chrome's `layout` (see views_script); returns the presets
+        ([Preset], every saved control set). Fills in the Preset menu's items. Fails on the first broken rule, saying
+        what to fix."""
         self.built_header()
         presets = self.preset_book.presets_as_held(self.saved_controls)
         unknown_neutral = set(self.preset_book.neutral_values_in_own_units) - self.neutral_names_asked
@@ -778,12 +780,11 @@ class DevicePatchBuilder:
             preset_values.update(parameter_enum=[preset.name for preset in presets], parameter_mmax=len(presets) - 1)
         self.check_messages_into_gen_name_params()
         self.write_gen_param_defaults()
-        problems = layout_rules.overlap_problems(
-            [x["box"] for x in self.boxes if x["box"].get("presentation") == 1 and not x["box"].get("background")],
-            self.page_names, self.pages, self.groups, self.device_width)
-        if problems:
-            self.fail("the layout overlaps:\n  " + "\n  ".join(problems))
         self.check_controls_hold_their_text()
+        problems = layout_rules.drawn_overlap_problems([x["box"] for x in self.boxes], self.full_layout(layout),
+                                                       self.page_names, self.pages, self.groups, self.device_width)
+        if problems:
+            self.fail("the layout overlaps (layout_rules.drawn_overlap_problems):\n  " + "\n  ".join(problems))
         if set(self.info) - self.info_used:
             self.fail(f"the info has text for no parameter or view: {sorted(set(self.info) - self.info_used)}")
         self.check_script_lookups()
@@ -883,6 +884,22 @@ class DevicePatchBuilder:
                                            f"name matching {call.message_text} (as /{call.message.pattern}/)"))
         if problems:
             self.fail("script messages into a gen~:\n  " + "\n  ".join(problems))
+
+    def check_display_texts(self, views_script_text):
+        """No display draws two texts over each other or a text off itself, as each is first painted
+        (display_text.display_texts, layout_rules.display_text_problems): every shown display but the background."""
+        problems = []
+        for box_id, mode in sorted(self.view_mode_by_box.items()):
+            box = self.find(box_id)
+            if box.get("background"):
+                continue
+            _, _, width, height = box["presentation_rect"]
+            drawn = display_texts(views_script_text, mode, width, height)
+            problems += layout_rules.display_text_problems(box["varname"], [(d.text, d.extent) for d in drawn],
+                                                           width, height)
+        if problems:
+            self.fail("text drawn over text in a display (layout_rules.display_text_problems):\n  "
+                      + "\n  ".join(problems))
 
     def check_controls_hold_their_text(self):
         """Every shown live.dial holds its short name, live.menu its longest item, live.text its text
@@ -1035,14 +1052,20 @@ class DevicePatchBuilder:
             values[varname_for(long_name)] = number
         return values
 
+    def full_layout(self, layout):
+        """The views script's LAYOUT from the device's `layout` ({"subtitle": x, "pages": [{"rules": [x], "labels":
+        [[text, x, baseline, "label" | "hint"]]}]}, one page per page name): the header's labels added to each page,
+        the subtitle's text, the version and the link chip's text."""
+        if len(layout.get("pages", [])) != len(self.page_names):
+            self.fail(f"the layout has {len(layout.get('pages', []))} pages, the device {len(self.page_names)}")
+        return dict(layout, subtitle_text=self.subtitle, version=self.version, link_chip_text=self.link_chip_text,
+                    pages=[dict(page, labels=self.header_labels() + list(page["labels"])) for page in layout["pages"]])
+
     def views_script(self, layout, device_views_code):
         """The views script (templates/views.template.js): the chrome and link chip, the drawing helpers, and the
         device's own displays (`device_views_code`, ES5). layout: {"subtitle": x, "pages": [{"rules": [x], "labels":
         [[text, x, baseline, "label" | "hint"]]}]}, one page per page name; the header's labels are added to each."""
-        if len(layout.get("pages", [])) != len(self.page_names):
-            self.fail(f"the layout has {len(layout.get('pages', []))} pages, the device {len(self.page_names)}")
-        layout = dict(layout, subtitle_text=self.subtitle, version=self.version, link_chip_text=self.link_chip_text,
-                      pages=[dict(page, labels=self.header_labels() + list(page["labels"])) for page in layout["pages"]])
+        layout = self.full_layout(layout)
         return fill_template(kit_template_text("views.template.js"), {
             "DEVICE_NAME": json.dumps(self.device_name), "SCRIPT_NAME": self.script_name,
             "COZETTE": kit_template_text("cozette-glyphs.js").strip(), "THEME_FROM_LIVE": theme_from_live_js(),

@@ -9,15 +9,17 @@ first choice), `<page>--<selector>-<item>.png` each other choice. Plus `layout.t
 band (x, width, the gap before it) and where a box leaves the layout contract (m4l_dev/layout_rules.py).
 
 Positions, sizes, labels and colours (m4l_dev/themes.py) are exact; the controls' insides are drawn the plain way
-(Live's own drawing isn't), and a display (jsui) is its frame and its name, not its drawing. Cozette text is drawn
+(Live's own drawing isn't), and a display (jsui) is its frame and the text it draws when first painted (the views
+script run in Duktape, m4l_dev/display_text.py), not its other drawing. Cozette text is drawn
 from the glyphs the views use (templates/cozette-glyphs.js); Live's own font, which no source gives, is the kit's
 stand-in (layout_rules.LIVE_FONT_FILE_NAME at LIVE_FONT_PIXELS, found among LIVE_FONT_CANDIDATES), whose advances
 layout_rules.LIVE_FONT_ADVANCES holds: checked against the font file here.
 
-Fails, saying why, when a shown box leaves the device or overlaps another shown with it (layout_rules), a control
-has no text to show or its text doesn't fit it with its padding (a dial's name, a menu's item, a live.text's text, a
-tab's names: layout_rules.live_text_problem / live_tab_button_problem, the build's own rules), or a chrome label runs
-into a box or off the device.
+Fails, saying why, when two things drawn at the same time overlap or one reaches off the device (a box, the text
+Live draws on it, a chrome label: layout_rules.drawn_overlap_problems), a display draws text over text or off itself
+(layout_rules.display_text_problems; both the build's own rules), or a control has no text
+to show or its text doesn't fit it with its padding (a dial's name, a menu's item, a live.text's text, a tab's names:
+layout_rules.live_text_problem / live_tab_button_problem, the build's own rules).
 """
 import argparse
 import itertools
@@ -31,6 +33,7 @@ from PIL import Image, ImageDraw, ImageFont
 KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, KIT_DIRECTORY)
 from m4l_dev import layout_rules  # noqa: E402
+from m4l_dev.display_text import display_texts  # noqa: E402
 from m4l_dev.themes import THEMES  # noqa: E402
 
 COZETTE_GLYPHS_PATH = os.path.join(KIT_DIRECTORY, "templates", "cozette-glyphs.js")
@@ -90,7 +93,6 @@ class Device:
         self.width = int(patcher["devicewidth"])
         boxes = [entry["box"] for entry in patcher["boxes"]]
         self.shown_boxes = [b for b in boxes if b.get("presentation") == 1]
-        self.foreground_boxes = [b for b in self.shown_boxes if not b.get("background")]
         views_scripts = {b["filename"] for b in self.shown_boxes if b["maxclass"] == "jsui"}
         if len(views_scripts) != 1:
             raise RenderFailure(f"{patcher_path}: expected one views script behind every display, found {views_scripts}")
@@ -99,7 +101,12 @@ class Device:
         with open(ui_path, encoding="utf-8") as ui_file:
             ui_text = ui_file.read()
         with open(views_path, encoding="utf-8") as views_file:
-            self.layout = read_js_assignment(views_file.read(), "LAYOUT", views_path)
+            self.views_script_text = views_file.read()
+        self.layout = read_js_assignment(self.views_script_text, "LAYOUT", views_path)
+        # what each display (not the background) draws as text when first painted: varname -> [DrawnText]
+        self.display_texts = {b["varname"]: display_texts(self.views_script_text, b["jsarguments"][0],
+                                                          b["presentation_rect"][2], b["presentation_rect"][3])
+                              for b in self.shown_boxes if b["maxclass"] == "jsui" and not b.get("background")}
         self.page_names = read_js_assignment(ui_text, "PAGE_NAMES", ui_path)
         self.pages = read_js_assignment(ui_text, "PAGES", ui_path)
         self.groups = read_js_assignment(ui_text, "GROUPS", ui_path)
@@ -123,7 +130,7 @@ class Device:
         return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
     def visible(self, page, choice):
-        """The boxes shown on `page` with `choice`, as layout_rules.overlap_problems decides it."""
+        """The boxes shown on `page` with `choice`, as layout_rules.drawn_overlap_problems decides it."""
         on_some_page = {n for names in self.pages.values() for n in names}
         hidden = {n for selector, picked in choice.items()
                   for i, members in enumerate(self.groups[selector]["members"]) if i != picked for n in members}
@@ -137,14 +144,16 @@ def values_of(box):
 
 
 def shown_value(box, fresh_start):
-    """What a fresh device shows: its start value (`fresh_start`, the UI script's FRESH_START), else Live's initial."""
+    """What a fresh device shows: its start value (`fresh_start`, the UI script's FRESH_START), else Live's initial,
+    as the kit formats it (layout_rules.live_value_text)."""
     values = values_of(box)
     initial = fresh_start.get(box.get("varname"),
                               (values.get("parameter_initial") or [values.get("parameter_mmin", 0)])[0])
     items = values.get("parameter_enum")
     if items:
         return items[max(0, min(len(items) - 1, int(initial)))]
-    return f"{initial:g}"
+    return layout_rules.live_value_text(initial, values["parameter_unitstyle"],
+                                        integer=values.get("parameter_type") == layout_rules.PARAMETER_TYPE_INT)
 
 
 class Painter:
@@ -173,18 +182,18 @@ class Painter:
                                 f"(templates/cozette-glyphs.js): the device would draw '?'")
         return self.cozette[codepoint]
 
-    def cozette_text(self, text, x, baseline, colour):
-        """As the views script's text(): `baseline` is the glyphs' baseline."""
+    def cozette_text(self, text, x, baseline, colour, scale=1):
+        """As the views script's text(): `baseline` is the glyphs' baseline; scale 2 doubles every pixel."""
         pen = round(x)
         for character in text:
             advance, w, h, x_offset, y_offset, *rows = self.glyph(ord(character))
-            top = round(baseline) - (y_offset + h)
+            top = round(baseline) - (y_offset + h) * scale
             for r, bits in enumerate(rows):
                 padded = -(-w // 8) * 8
                 for c in range(w):
                     if bits >> (padded - 1 - c) & 1:
-                        self.draw.point((pen + x_offset + c, top + r), fill=colour)
-            pen += advance
+                        self.rect(pen + (x_offset + c) * scale, top + r * scale, scale, scale, colour)
+            pen += advance * scale
 
     def live_text(self, text, x, y, w, h, colour, align="centre"):
         """Text in the stand-in for Live's font, in the box (x, y, w, h)."""
@@ -217,8 +226,8 @@ class Painter:
             else:
                 self.rect(x, y, w, h, t["well"])
                 self.frame(x, y, w, h, self.mix(t["unlit"], 0.5))
-                name = box.get("annotation_name", mode).lower()
-                self.cozette_text(name[:max(0, int(w - 8) // layout_rules.COZETTE_ADVANCE)], x + 4, y + 12, t["label"])
+                for drawn in self.device.display_texts[box["varname"]]:
+                    self.cozette_text(drawn.text, x + drawn.x, y + drawn.baseline, t["label"], drawn.scale)
         elif kind == "live.dial":
             self.frame(x, y, w, h, self.mix(t["unlit"], 0.3))          # the box itself, so its width shows
             self.live_text(values["parameter_shortname"], x, y, w, 11, t["ink"])
@@ -261,8 +270,8 @@ class Painter:
             self.live_text(kind, x, y, w, min(h, 15), t["warm"])
 
 
-def text_problems(device, page, visible):
-    """A control with nothing to show, or a chrome label that runs off the device or into a box shown with it."""
+def text_problems(page, visible):
+    """A control with nothing to show, or whose text doesn't fit it."""
     problems = []
     for box in visible:
         values = values_of(box)
@@ -281,18 +290,6 @@ def text_problems(device, page, visible):
         if problem:
             problems.append(f"page {page!r}: {box.get('varname', box['id'])} ({box['maxclass']}): its text doesn't "
                             f"fit: {problem}")
-    page_layout = device.layout["pages"][device.page_names.index(page)]
-    for text, x, baseline, _ in page_layout["labels"]:
-        left, top, right, bottom = x, baseline - 9, x + layout_rules.COZETTE_ADVANCE * len(text), baseline + 2
-        if left < 0 or top < 0 or right > device.width or bottom > layout_rules.DEVICE_HEIGHT:
-            problems.append(f"page {page!r}: label {text!r} at ({x}, {baseline}) leaves the device")
-        for box in visible:
-            if box.get("background"):
-                continue
-            bx, by, bw, bh = box["presentation_rect"]
-            if left < bx + bw and bx < right and top < by + bh and by < bottom:
-                problems.append(f"page {page!r}: label {text!r} at ({x}, {baseline}) runs into "
-                                f"{box.get('varname', box['id'])} {box['presentation_rect']}")
     return problems
 
 
@@ -337,14 +334,17 @@ def layout_facts(visible):
 def render_device(device_folder, output_folder, scale=2, theme_name="dark"):
     """Render every page and group choice; returns the image paths. Raises RenderFailure on a layout problem."""
     device = Device(device_folder)
-    problems = layout_rules.overlap_problems(device.foreground_boxes, device.page_names, device.pages, device.groups,
-                                             device.width)
+    problems = layout_rules.drawn_overlap_problems(device.shown_boxes, device.layout, device.page_names, device.pages,
+                                                   device.groups, device.width)
     cozette, live_font = load_cozette(), load_live_font()
     os.makedirs(output_folder, exist_ok=True)
     written, facts = [], [f"{device.name}: {device.width} x {layout_rules.DEVICE_HEIGHT} px, drawn x{scale}"]
+    for varname, drawn in sorted(device.display_texts.items()):
+        _, _, width, height = device.boxes_by_varname[varname]["presentation_rect"]
+        problems += layout_rules.display_text_problems(varname, [(d.text, d.extent) for d in drawn], width, height)
     for page_index, page, choice, stem in device.views():
         visible = device.visible(page, choice)
-        problems += text_problems(device, page, visible)
+        problems += text_problems(page, visible)
         painter = Painter(device, theme_name, cozette, live_font)
         if any(b.get("background") for b in visible):
             painter.chrome(page_index)

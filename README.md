@@ -39,8 +39,8 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
   (Cozette, MIT: `templates/LICENSE-Cozette.txt`).
 - `tools/`: `amxd.py` (pack / freeze / unpack / list .amxd files), `es5check.py`, `compare_device_builds.py` (compare
   two builds of a device; exit 0 when what Live sees is the same), `bdf2js.py` (Cozette's BDF to glyphs),
-  `max_sandbox.js` (Max's [js] globals for node tests), `render_pages.py` (a built device's pages as PNGs + layout facts;
-  needs Pillow).
+  `max_sandbox.js` (Max's [js] globals for node tests), `render_pages.py` (a built device's pages as PNGs + layout facts,
+  the overlap rule; needs Pillow).
 - `references/`: the sources the kit follows (Max, Live, Live's preset format, the techniques' papers: `dsp.md`; circuits' datasheets: `circuits/`).
 - `m4l_dev/plugin/` and `plugin/cpp/`: a device as a VST3 plugin (JUCE), the pieces every port shares: its host
   parameters and presets from the device's patch, its gen~ programs as C, its `[js]` brain run unchanged.

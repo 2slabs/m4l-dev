@@ -14,6 +14,7 @@ DIAL_WIDTH, DIAL_HEIGHT = 44, 48
 VIEW_Y, VIEW_H, ROW_Y, DIAL_Y = 28, 64, 98, 119
 ROW_H = 15
 HEADER_Y = 3
+SUBTITLE_BASELINE = 15          # the header's subtitle, drawn by the chrome after the page tabs
 HEADER_GAP = 12                 # px between header items, and the margin at either end of the device
 COZETTE_ADVANCE = 6
 CHIP_PADDING = 4                # px of chip either side of its text (the link chip)
@@ -119,35 +120,189 @@ def link_chip_width(link_chip_text):
     return COZETTE_ADVANCE * len(link_chip_text) + 2 * CHIP_PADDING
 
 
-def overlap_problems(shown_boxes, page_names, boxes_on_page, groups, device_width):
-    """Two things shown at the same time that overlap, or one leaving the device: for every page and every choice
-    of its group selectors, the header and the page's visible boxes.
+# ---- what each thing draws, and the rule that no two drawn things overlap ------------------------------------------
 
-    shown_boxes: presentation boxes (not the background); boxes_on_page: page -> varnames on it (a varname on no
-    page is in the header, shown on every page); groups: selector varname -> {"page", "members": [[varnames]]}."""
+# Live's unit styles (parameter_unitstyle, the live.dial reference's "Unit Style": Int, Float, Time, Hertz, deciBel, %,
+# Pan, Semitones, MIDI, Custom, Native, in that order)
+UNIT_INT, UNIT_FLOAT, UNIT_TIME, UNIT_HERTZ, UNIT_DECIBEL, UNIT_PERCENT, UNIT_PAN, UNIT_SEMITONES, UNIT_MIDI, \
+    UNIT_CUSTOM, UNIT_NATIVE = range(11)
+PARAMETER_TYPE_INT = 1
+LIVE_TEXT_LINE_PIXELS = 11            # a line of Live's text: a dial's name on its top line, its value on its bottom
+DIAL_VALUE_SWEEP_STEPS = 1000         # a float dial's values looked at for its widest text: this many steps of its travel
+COZETTE_ASCENT, COZETTE_DESCENT = 10, 3  # a chrome text's line above and below its baseline (the views script's text())
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def three_figures(value):
+    """`value` to three significant figures as Live shows a quantity (2.00, 12.5, 125): a stand-in (SHORTCUTS.md)."""
+    places = 2 if abs(value) < 10 else 1 if abs(value) < 100 else 0
+    return f"{value:.{places}f}"
+
+
+def live_value_text(value, unit_style, integer=False):
+    """The text a live.dial or live.numbox shows for `value` in `unit_style`, as the kit's stand-in for Live's
+    formatting (no source gives Live's; SHORTCUTS.md): a quantity to three figures with its unit (ms / s, Hz / kHz),
+    dB to a tenth, an Int-type value whole."""
+    number = (lambda v: str(int(round(v)))) if integer else three_figures
+    if unit_style in (UNIT_TIME, UNIT_HERTZ):
+        small, large = ("ms", "s") if unit_style == UNIT_TIME else ("Hz", "kHz")
+        return f"{number(value / 1000)} {large}" if abs(value) >= 1000 else f"{number(value)} {small}"
+    if unit_style == UNIT_DECIBEL:
+        return f"{value:.1f} dB"
+    if unit_style == UNIT_PERCENT:
+        return f"{number(value)} %"
+    if unit_style == UNIT_PAN:
+        whole = int(round(value))
+        return "C" if whole == 0 else f"{abs(whole)}{'L' if whole < 0 else 'R'}"
+    if unit_style == UNIT_SEMITONES:
+        text = number(value)
+        return f"{'+' if value > 0 else ''}{text} st"
+    if unit_style == UNIT_MIDI:
+        note = int(round(value))
+        return f"{NOTE_NAMES[note % 12]}{note // 12 - 2}"
+    if unit_style == UNIT_INT or integer:
+        return str(int(round(value)))
+    if unit_style in (UNIT_FLOAT, UNIT_NATIVE):
+        return f"{value:.2f}"
+    raise BuildError(f"unit style {unit_style!r}: the kit has no stand-in for how Live shows it (a Custom unit's text "
+                     "isn't read yet): add it to layout_rules.live_value_text")
+
+
+def live_value_texts(values):
+    """Every text a control with these saved values (`saved_attribute_attributes.valueof`) shows as its value: an
+    enum's items; an Int's every value; a float's at DIAL_VALUE_SWEEP_STEPS steps of its travel (Live's exponent)."""
+    if values.get("parameter_enum"):
+        return list(values["parameter_enum"])
+    low, high = float(values["parameter_mmin"]), float(values["parameter_mmax"])
+    unit_style = values["parameter_unitstyle"]
+    if values.get("parameter_type") == PARAMETER_TYPE_INT:
+        return [live_value_text(v, unit_style, integer=True) for v in range(int(round(low)), int(round(high)) + 1)]
+    exponent = float(values.get("parameter_exponent", 1.0))
+    return sorted({live_value_text(low + (high - low) * (step / DIAL_VALUE_SWEEP_STEPS) ** exponent, unit_style)
+                   for step in range(DIAL_VALUE_SWEEP_STEPS + 1)})
+
+
+def widest_live_text(texts):
+    return max(live_text_width(text) for text in texts)
+
+
+def centred_line(x, w, line_y, text_width):
+    """The extent of a line of text `text_width` wide centred over the box x..x+w."""
+    return (x + (w - text_width) / 2, line_y, text_width, LIVE_TEXT_LINE_PIXELS)
+
+
+def box_name(box):
+    return box.get("varname", box.get("id"))
+
+
+def drawn_parts(box):
+    """[(what, (x, y, w, h))]: what a shown box draws, as far as it can reach: its box and the text Live draws on it,
+    each as wide as the stand-in measures it. A live.dial: its name centred on its top line and its widest value
+    centred on its bottom line; a live.numbox: its widest value; a live.menu: its longest item from its inset; a
+    live.text: its text. Text may reach past the box, which is how two things come to overlap."""
+    x, y, w, h = box["presentation_rect"]
+    parts = [("box", (x, y, w, h))]
+    values = box.get("saved_attribute_attributes", {}).get("valueof", {})
+    kind = box["maxclass"]
+    if kind == "live.dial":
+        parts.append(("name", centred_line(x, w, y, live_text_width(values["parameter_shortname"]))))
+        parts.append(("value", centred_line(x, w, y + h - LIVE_TEXT_LINE_PIXELS,
+                                            widest_live_text(live_value_texts(values)))))
+    elif kind == "live.numbox":
+        parts.append(("value", centred_line(x, w, y + (h - LIVE_TEXT_LINE_PIXELS) / 2,
+                                            widest_live_text(live_value_texts(values)))))
+    elif kind == "live.menu":
+        parts.append(("item", (x + LIVE_MENU_TEXT_INSET_PIXELS, y + (h - LIVE_TEXT_LINE_PIXELS) / 2,
+                               widest_live_text(values["parameter_enum"]), LIVE_TEXT_LINE_PIXELS)))
+    elif kind == "live.text":
+        text = box.get("text") or values.get("parameter_shortname", "")
+        parts.append(("text", centred_line(x, w, y + (h - LIVE_TEXT_LINE_PIXELS) / 2, live_text_width(text))))
+    return parts
+
+
+def chrome_text_extent(text, x, baseline):
+    """A text the chrome draws in Cozette (a label, a hint, the subtitle) at (x, baseline): its extent."""
+    return (x, baseline - COZETTE_ASCENT, COZETTE_ADVANCE * len(text), COZETTE_ASCENT + COZETTE_DESCENT)
+
+
+def chrome_texts(layout, page_index):
+    """[(what, (text, x, baseline))]: every text the chrome draws on page `page_index` of `layout` (the views script's
+    LAYOUT: the header's labels already in each page's): the page's labels and the header's subtitle."""
+    texts = [(f"{kind} {text!r}", (text, x, baseline)) for text, x, baseline, kind in layout["pages"][page_index]["labels"]]
+    subtitle = f"{layout['subtitle_text']}  v{layout['version']}"
+    texts.append((f"subtitle {subtitle!r}", (subtitle, layout["subtitle"], SUBTITLE_BASELINE)))
+    return texts
+
+
+def overlap_area(a, b):
+    """(w, h) of where rects a and b overlap, or None."""
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    return (w, h) if w > 0 and h > 0 else None
+
+
+def rect_text(rect):
+    x, y, w, h = rect
+    return f"x {x:g}..{x + w:g}, y {y:g}..{y + h:g}"
+
+
+def drawn_overlap_problems(boxes, layout, page_names, boxes_on_page, groups, device_width):
+    """Two things drawn at the same time whose drawn extents overlap, or one reaching off the device: on every page
+    and every choice of its group selectors, every shown box's drawn parts (drawn_parts) and every text the chrome
+    draws (chrome_texts). A background box (Max's "Include in Background": the chrome) is what everything sits on, so
+    it is exempt; a part never counts against another part of its own box.
+
+    boxes: the presentation boxes; layout: the views script's LAYOUT (DevicePatchBuilder.full_layout);
+    boxes_on_page: page -> varnames on it (a varname on no page is in the header, shown on every page); groups:
+    selector varname -> {"page", "members": [[varnames]]}."""
+    shown = [b for b in boxes if b.get("presentation") == 1 and not b.get("background")]
+    parts_of = {id(b): drawn_parts(b) for b in shown}
     on_some_page = {n for names in boxes_on_page.values() for n in names}
     problems = []
-    for box in shown_boxes:
-        x, y, w, h = box["presentation_rect"]
-        if x < 0 or y < 0 or x + w > device_width or y + h > DEVICE_HEIGHT:
-            problems.append(f"{box.get('varname', box['id'])} at {box['presentation_rect']} leaves the "
-                            f"{device_width} x {DEVICE_HEIGHT} device")
-    for page in page_names:
-        selectors = [s for s, g in groups.items() if g["page"] == page]
+    for page_index, page in enumerate(page_names):
+        selectors = sorted(s for s, g in groups.items() if g["page"] == page)
         choices = [[]]
         for selector in selectors:
             choices = [c + [(selector, i)] for c in choices for i in range(len(groups[selector]["members"]))]
         for choice in choices:
             hidden = {n for selector, picked in choice
                       for i, members in enumerate(groups[selector]["members"]) if i != picked for n in members}
-            visible = [b for b in shown_boxes if (b.get("varname") not in on_some_page or b["varname"] in boxes_on_page[page])
-                       and b.get("varname") not in hidden]
-            for i, a in enumerate(visible):
-                ax, ay, aw, ah = a["presentation_rect"]
-                for b in visible[i + 1:]:
-                    bx, by, bw, bh = b["presentation_rect"]
-                    if ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah:
-                        problems.append(f"page {page!r} {dict(choice) or ''}: {a.get('varname', a['id'])} "
-                                        f"{a['presentation_rect']} overlaps {b.get('varname', b['id'])} "
-                                        f"{b['presentation_rect']}")
+            elements = [(box_name(b), parts_of[id(b)]) for b in shown
+                        if (b.get("varname") not in on_some_page or b["varname"] in boxes_on_page[page])
+                        and b.get("varname") not in hidden]
+            elements += [(what, [("text", chrome_text_extent(*placed))]) for what, placed in chrome_texts(layout, page_index)]
+            where = f"page {page!r}" + (f" {dict(choice)}" if choice else "")
+            for name, parts in elements:
+                for part, rect in parts:
+                    x, y, w, h = rect
+                    if x < 0 or y < 0 or x + w > device_width or y + h > DEVICE_HEIGHT:
+                        problems.append(f"{where}: {name}'s {part} ({rect_text(rect)}) reaches off the "
+                                        f"{device_width} x {DEVICE_HEIGHT} device")
+            for i, (name_a, parts_a) in enumerate(elements):
+                for name_b, parts_b in elements[i + 1:]:
+                    for part_a, rect_a in parts_a:
+                        for part_b, rect_b in parts_b:
+                            overlap = overlap_area(rect_a, rect_b)
+                            if overlap:
+                                problems.append(f"{where}: {name_a}'s {part_a} ({rect_text(rect_a)}) overlaps "
+                                                f"{name_b}'s {part_b} ({rect_text(rect_b)}) by {overlap[0]:g} x "
+                                                f"{overlap[1]:g} px")
     return sorted(set(problems))
+
+
+def display_text_problems(display_name, drawn_texts, width, height):
+    """Two texts one display draws over each other, or one reaching off it: `drawn_texts` [(text, (x, y, w, h))] in
+    the display's own pixels (display_text.display_texts), on a display `width` x `height` px."""
+    problems = []
+    for text, extent in drawn_texts:
+        x, y, w, h = extent
+        if x < 0 or y < 0 or x + w > width or y + h > height:
+            problems.append(f"display {display_name} ({width:g} x {height:g}): {text!r} ({rect_text(extent)}) reaches "
+                            f"off the display")
+    for i, (text_a, extent_a) in enumerate(drawn_texts):
+        for text_b, extent_b in drawn_texts[i + 1:]:
+            overlap = overlap_area(extent_a, extent_b)
+            if overlap:
+                problems.append(f"display {display_name}: {text_a!r} ({rect_text(extent_a)}) overlaps {text_b!r} "
+                                f"({rect_text(extent_b)}) by {overlap[0]:g} x {overlap[1]:g} px")
+    return problems

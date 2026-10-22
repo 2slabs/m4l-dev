@@ -88,7 +88,7 @@ function anything() {
 
 def fixture_patch(preset_book):
     patch = DevicePatchBuilder(device_name="kit fixture", script_name=FIXTURE_SCRIPT_NAME, version="1.2.3",
-                               subtitle="a test device", link_chip_text="kit fixture", device_type="instrument",
+                               subtitle="a test", link_chip_text="kit fixture", device_type="instrument",
                                device_width=480, page_names=["one", "two"], info=dict(FIXTURE_INFO),
                                preset_book=preset_book, latency_samples=0)
     brain = patch.box(f"js {FIXTURE_SCRIPT_NAME}.js", rect=(30, 120, 110, 22), ins=2, outs=3)
@@ -134,7 +134,8 @@ def fixture_patch(preset_book):
     return patch
 
 
-FIXTURE_LAYOUT = {"subtitle": 200, "pages": [{"rules": [140], "labels": []}, {"rules": [], "labels": []}]}
+# the subtitle a header gap after the page tabs (12 + the link chip 74 + 12 + two page tabs 96 + 12), as the devices place it
+FIXTURE_LAYOUT = {"subtitle": 206, "pages": [{"rules": [140], "labels": []}, {"rules": [], "labels": []}]}
 
 
 def stored_memory_of_preset(preset_values):
