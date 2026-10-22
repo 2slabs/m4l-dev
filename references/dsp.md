@@ -349,6 +349,26 @@ the two clocks never fully cancel (Morrin's BBD page). Its level is UNVERIFIED (
   the level the filters left, so a tone comes out at the chain's response squared: +16.6 dB at its peak (0.28 of
   the clock; measured +15.2 dB at 0.25 and 0.3, as the twin). A howl is a steady tone, so the loop's howl point is set by that (`PEAK_LOOP_GAIN`, 6.79), and a sound
   whose level is mostly in the flat part of the band comes round at about feedback / 6.79 a pass.
+- *The compander inside the filters*, an option (`compander_inside_filters=True`; 2sl dub SPEC v0.4 §3.4: "If that
+  sounds too honky in Live, the compander moves inside the filters", chosen by ear). RS10 §1.3's "most" says some
+  circuits have it there; no source draws one, so the block puts the halves where the name says: input →
+  anti-aliasing filter → compressor → BBD → expander → reconstruction filter → output (the compressor on the filter's
+  samples at the even edges, the expander on the buckets' output at the odd edges, both averagers at the clock, the
+  coupling high-pass before the expander). Then a steady tone's level is expanded as the chip left it, not as the
+  filters did: the filters and the hold count once, the chip's insertion gain twice, |chain| |insertion|. Its peak
+  is +6.19 dB a pass at 0.267 of the clock (`INSIDE_PEAK_LOOP_GAIN` 2.04), against +16.64 dB at 0.276 outside:
+  the filters' +8.3 dB once, less the insertion loss there (-2.1 dB) counted twice, so a little under half the lift
+  in dB (the sources' "about halved"). Measured at 32 kHz and 500 ms (the host's straight line, given back by the
+  feedback, takes 0.33 dB outside, 0.15 dB inside, where it is before the compressor): +16.31 dB outside,
+  +5.98 dB inside, each within 0.08 dB of its twin from 0.05 of the clock to the peak. The howl stays at feedback 1
+  in both (the loop's gain a round at the peak, the loop's tone filters taken off, 0.932 / 1.029 at feedback 0.95 /
+  1.05 outside, 0.935 / 1.033 inside: both 1.5-2 % under the feedback, alike), the grid within 0.28 ms in every
+  stereo mode, the heard gain level-independent within 0.03 dB, the noise -66 dB under a tone and -116 dB after it.
+  The clock's leakage, which the edges don't carry, is added after the reconstruction filter scaled by the
+  expander's gain (DESIGN). How long a mixed sound rings, a pink-ish noise burst (100 ms, -20 dB RMS) at feedback 0.7
+  and 500 ms, rounds down to the first under -60 dB of the burst's energy: tape 19, bbd outside 12, bbd inside 15
+  with the loop's tone filters open; tape 17, outside 6, inside 8 with them at 3 kHz / 40 Hz (outside converges on
+  the peak's tone and rings on it; at 3 kHz the tone filter takes that peak down).
 - *The grid.* The chain's group delay is taken where the loop's gain is highest (3.83 clock periods; 1.15 at DC): the
   repeats converge there. A low sound's first repeat is then 2.7 periods early, 0.33 ms at 500 ms, 0.66 ms at 1 s.
 - *Against a cheaper model.* A plain modulated delay with the same filters at the host rate (RS10's simplest) has no

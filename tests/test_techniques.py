@@ -921,10 +921,14 @@ class BucketBrigadeEchoTests(unittest.TestCase):
         return (late - centre) / samplerate * 1000, energy
 
     def test_repeats_land_on_the_grid_in_every_stereo_mode(self):
+        # at the loop's peak (0.28 of the 8.2 kHz clock), where the repeats converge and the grid is set; wide's right
+        # side runs at 1.5 T, its clock 5.5 kHz: its own burst at its own peak, 1.5 kHz
+        self.check_the_grid_in_every_stereo_mode(2260.0, 1510.0)
+
+    def check_the_grid_in_every_stereo_mode(self, peak_hz, wide_right_peak_hz, **options):
         samplerate, period, lag = 16000.0, 0.5, 0.010
         total = int(samplerate * 2.9)
-        # at the loop's peak (0.28 of the 8.2 kHz clock), where the repeats converge and the grid is set
-        burst = hann_burst(2260.0, 20.0, 0.1, samplerate, 100, total)
+        burst = hann_burst(peak_hz, 20.0, 0.1, samplerate, 100, total)
         burst_centre, _ = energy_centroid(burst, 0, total)
         half = 0.1 * samplerate
         # (side, where its repeats are, where they are not), in seconds after the burst, per mode
@@ -936,11 +940,10 @@ class BucketBrigadeEchoTests(unittest.TestCase):
                      (1, [k * period * WIDE_RIGHT_RATIO + lag for k in (1, 2, 3)], [period + lag])],
             "mono": [(0, [k * period for k in range(1, 6)], []), (1, [k * period for k in range(1, 6)], [])],
         }
-        # wide's right side runs at 1.5 T, its clock 5.5 kHz: its own burst at its own peak, 1.5 kHz
-        right_burst = {"wide": hann_burst(1510.0, 20.0, 0.1, samplerate, 100, total)}
+        right_burst = {"wide": hann_burst(wide_right_peak_hz, 20.0, 0.1, samplerate, 100, total)}
         worst = 0.0
         for mode, sides in expected.items():
-            program = self.echo(samplerate, right_input="in2", stereo_mode="mode")
+            program = self.echo(samplerate, right_input="in2", stereo_mode="mode", **options)
             program.set_param("mode", float(STEREO_MODES.index(mode)))
             program.run(int(samplerate * 0.3), [[0.0] * int(samplerate * 0.3)] * 2)   # every mode's weight settled
             outputs = program.run(total, [burst, right_burst.get(mode, burst)])
@@ -952,14 +955,15 @@ class BucketBrigadeEchoTests(unittest.TestCase):
                     for elsewhere in not_here:
                         _, stray = self.repeat_lateness_ms(outputs[side], burst_centre, elsewhere, samplerate, half)
                         self.assertLess(stray, 1e-3 * energy, (mode, side, elsewhere))
-        print(f"\n[bbd grid] the worst repeat, every mode, five rounds: {worst:.3f} ms off n T")
+        print(f"\n[bbd grid{' inside' if options else ''}] the worst repeat, every mode, five rounds: {worst:.3f} ms "
+              "off n T")
 
-    def steady_gain_db(self, samplerate, time_ms, frequencies):
+    def steady_gain_db(self, samplerate, time_ms, frequencies, **options):
         """The steady-tone gain, dB, of the echo's first pass at each frequency (two at a time, one a side)."""
         gains = []
         for pair_start in range(0, len(frequencies), 2):
             pair = frequencies[pair_start:pair_start + 2]
-            program = self.echo(samplerate, right_input="in2")
+            program = self.echo(samplerate, right_input="in2", **options)
             program.set_param("time", time_ms)
             program.set_param("feedback", 0.0)
             total = int(samplerate * (time_ms / 1000 + 0.6))
@@ -1193,6 +1197,245 @@ class BucketBrigadeEchoTests(unittest.TestCase):
                                                       saturation_gain="1", wow_cents="0", flutter_cents="0",
                                                       stop_pressed="0", stages=TWO_CHIP_STAGES, longest_time_ms=10.0,
                                                       right_lag_ms=0.0, rounds_kept=0), left="0", right="0")
+
+    # The compander inside the filters (`compander_inside_filters=True`): the option's claims, measured.
+    INSIDE = {"compander_inside_filters": True}
+
+    def test_inside_the_filters_the_lift_counts_once(self):
+        # The steady-tone gain a pass. Outside the filters the expander expands the level the filters made: the chain
+        # squared. Inside, the compander has only the chip between its halves: the filters and the hold count once,
+        # the chip's insertion gain twice. Each against its twin (with the host's straight line, sinc^2, as the
+        # placement counts it), across the band and at each placement's own peak.
+        samplerate, time_ms = 32000.0, 500.0
+        fractions = (0.0513, 0.1537, bucket_brigade_echo.INSIDE_PEAK_CLOCK_FRACTION,
+                     bucket_brigade_echo.PEAK_CLOCK_FRACTION, 0.35)
+        lifts = {}
+        for name, options in (("outside", {}), ("inside", self.INSIDE)):
+            clock = self.echo(samplerate, **options).run(1, [[0.0]])[2][0]
+            def twin(x):  # noqa: E306
+                line = bucket_brigade_echo.hold_response(x * clock / samplerate) ** 2
+                if options:
+                    return 20 * math.log10(bucket_brigade_echo.inside_loop_gain(x) * line)
+                return 2 * 20 * math.log10(abs(bucket_brigade_echo.chain_response(x)) * line)
+            gains = self.steady_gain_db(samplerate, time_ms, [x * clock for x in fractions], **options)
+            print(f"\n[bbd lift {name}] 500 ms (clock {clock:.0f} Hz): "
+                  + ", ".join(f"{x:.4g}: {g:+.2f} (twin {twin(x):+.2f})" for x, g in zip(fractions, gains)))
+            for fraction, gain in zip(fractions, gains):
+                self.assertAlmostEqual(gain, twin(fraction), delta=0.15 if fraction <= 0.3 else 1.0,
+                                       msg=(name, fraction, gains))
+            lifts[name] = max(gains)
+        # the circuit's own figures (no host): +16.64 dB outside, +6.19 dB inside; at 32 kHz the host's straight line
+        # takes 0.33 / 0.15 dB more there (the feedback gives it back)
+        print(f"\n[bbd lift] a steady tone's lift a pass at the loop's peak, 32 kHz: outside {lifts['outside']:+.2f} dB "
+              f"(circuit {20 * math.log10(bucket_brigade_echo.PEAK_LOOP_GAIN):+.2f}), inside {lifts['inside']:+.2f} "
+              f"dB (circuit {20 * math.log10(bucket_brigade_echo.INSIDE_PEAK_LOOP_GAIN):+.2f})")
+        self.assertLess(lifts["inside"], 0.5 * lifts["outside"], "inside, at most half the lift in dB")
+
+    def round_levels(self, signal, burst_centre, period_samples, rounds):
+        """The RMS within half a period of each round's n T, n = 1..rounds."""
+        return [math.sqrt(sum(v * v for v in signal[int(burst_centre + (n - 0.5) * period_samples):
+                                                    int(burst_centre + (n + 0.5) * period_samples)]))
+                for n in range(1, rounds + 1)]
+
+    def test_feedback_1_is_the_howl_in_both_placements(self):
+        # A 200 ms burst at each placement's own peak, small enough that the buckets stay clean (32 kHz, 500 ms):
+        # its rounds 4 to 14 decay or grow by the loop's gain a round. With the loop's tone filters taken off (two
+        # one-poles at 0.45 of the host rate and one at 1 Hz taken away: 0.987 there), feedback 0.95 dies and 1.05
+        # grows in both placements, each within 0.03 of its feedback and the two placements within 0.01 of each
+        # other. (Both come round 1.5 to 2 % under the feedback: 0.04 dB of it is the chain's measured pass under
+        # its twin at the peak, test_inside_the_filters_the_lift_counts_once; the rest the loop's, in both alike.)
+        samplerate, time_ms = 32000.0, 500.0
+        gains = {}
+        for name, options in (("outside", {}), ("inside", self.INSIDE)):
+            fraction = (bucket_brigade_echo.INSIDE_PEAK_CLOCK_FRACTION if options
+                        else bucket_brigade_echo.PEAK_CLOCK_FRACTION)
+            for feedback in (0.95, 1.05):
+                program = self.echo(samplerate, **options)
+                program.set_param("time", time_ms)
+                program.set_param("feedback", feedback)
+                program.set_param("saturation", 2.0)
+                clock = program.run(1, [[0.0]])[2][0]
+                total = int(samplerate * 8.0)
+                burst = hann_burst(fraction * clock, 200.0, 0.003, samplerate, 100, total)
+                burst_centre, _ = energy_centroid(burst, 0, total)
+                levels = self.round_levels(program.run(total - 1, [burst[1:]])[0], burst_centre - 1,
+                                           time_ms * samplerate / 1000, 14)
+                z = cmath.exp(-2j * math.pi * fraction * clock / samplerate)
+                one_pole = lambda hz: (1 - math.exp(-2 * math.pi * hz / samplerate)) / (  # noqa: E731
+                    1 - math.exp(-2 * math.pi * hz / samplerate) * z)
+                tone = abs(one_pole(0.45 * samplerate) ** 2 * (1 - one_pole(1.0)))
+                gains[name, feedback] = (levels[13] / levels[3]) ** (1 / 10) / tone
+                self.assertAlmostEqual(gains[name, feedback], feedback, delta=0.03, msg=(name, feedback, levels))
+                self.assertEqual(gains[name, feedback] > 1, feedback > 1, (name, feedback))
+            print(f"\n[bbd howl {name}] the loop's gain a round at its peak, the tone filters taken off: feedback "
+                  f"0.95 -> {gains[name, 0.95]:.3f}, 1.05 -> {gains[name, 1.05]:.3f}")
+        for feedback in (0.95, 1.05):
+            self.assertAlmostEqual(gains["outside", feedback], gains["inside", feedback], delta=0.01)
+
+    def test_inside_the_filters_over_unity_it_howls_held_where_the_buckets_clip(self):
+        samplerate = 32000.0
+        program = self.echo(samplerate, **self.INSIDE)
+        clock = program.run(1, [[0.0]])[2][0] * 2          # the 500 ms clock, doubled: 250 ms
+        burst = hann_burst(bucket_brigade_echo.INSIDE_PEAK_CLOCK_FRACTION * clock, 20.0, 0.1, samplerate, 100,
+                           int(samplerate * 6))
+        for feedback, sings in ((1.25, True), (0.7, False)):
+            program = self.echo(samplerate, **self.INSIDE)
+            program.set_param("time", 250.0)
+            program.set_param("feedback", feedback)
+            program.set_param("saturation", 2.0)
+            left = program.run(len(burst), [burst])[0]
+            last_second = max(abs(v) for v in left[-int(samplerate):])
+            print(f"\n[bbd howl inside] feedback {feedback}: last second's peak {last_second:.3g}, "
+                  f"highest {max(abs(v) for v in left):.3g}")
+            if sings:
+                self.assertGreater(last_second, 0.1, "it still sings 6 s after the burst")
+                self.assertLess(max(abs(v) for v in left), 0.75, "held near the full level, 1 / saturation")
+            else:
+                self.assertLess(last_second, 1e-3, "under unity it dies away")
+        program = self.echo(samplerate, **self.INSIDE)
+        program.set_param("time", 250.0)
+        program.set_param("feedback", 4.0)
+        left = program.run(int(samplerate * 6), [[0.0] * int(samplerate * 6)])[0]
+        self.assertGreater(max(abs(v) for v in left[-int(samplerate):]), 0.1, "the noise alone starts it")
+
+    def test_inside_the_filters_repeats_land_on_the_grid_in_every_stereo_mode(self):
+        # its own peak, 0.267 of the clock: 2.19 kHz at 500 ms, 1.46 kHz on wide's right side
+        self.check_the_grid_in_every_stereo_mode(2190.0, 1460.0, **self.INSIDE)
+
+    def test_inside_the_filters_the_compander_is_transparent_and_breathes(self):
+        # the heard gain is the same at every level (2:1 then 1:2 about the same reference), and the chip's noise,
+        # inside the compander, rides the tone and closes after it
+        samplerate, frequency = 16000.0, 400.0
+        full_level = BucketBrigadeEcho("probe", left_input="0", right_input="0", time_ms="1", feedback="0",
+                                       loop_lowpass_hz="1", loop_highpass_hz="1", saturation_gain="1", wow_cents="0",
+                                       flutter_cents="0", stop_pressed="0", stages=TWO_CHIP_STAGES,
+                                       longest_time_ms=10.0, right_lag_ms=0.0, rounds_kept=0,
+                                       compander_inside_filters=True).full_level
+        gains = []
+        for level_db in (-30.0, -40.0, -50.0):
+            amplitude = full_level * 10 ** (level_db / 20)
+            program = self.echo(samplerate, **self.INSIDE)
+            program.set_param("feedback", 0.0)
+            program.set_param("time", 250.0)
+            total = int(samplerate * 0.9)
+            tone = [amplitude * math.sin(2 * math.pi * frequency * i / samplerate) for i in range(total)]
+            outputs = program.run(total, [tone])
+            heard = amplitude_at(outputs[0][-int(samplerate * 0.25):], frequency, samplerate)
+            gains.append(20 * math.log10(heard / amplitude))
+            twin = 20 * math.log10(bucket_brigade_echo.inside_loop_gain(frequency / outputs[2][0])
+                                   * bucket_brigade_echo.hold_response(frequency / samplerate) ** 2)
+            self.assertAlmostEqual(gains[-1], twin, delta=0.1, msg=level_db)
+        total = int(samplerate * 2.0)
+        tone = [0.1 * math.sin(2 * math.pi * 300 * i / samplerate) if i < samplerate else 0.0 for i in range(total)]
+        renders = []
+        for seed in (1, 2):
+            program = self.echo(samplerate, **self.INSIDE)
+            program.set_seed(seed)
+            program.set_param("feedback", 0.0)
+            program.set_param("time", 250.0)
+            renders.append(program.run(total, [tone])[0])
+        noise = [a - b for a, b in zip(*renders)]
+        rms = lambda values: math.sqrt(sum(v * v for v in values) / len(values))  # noqa: E731
+        under = rms(noise[int(samplerate * 0.6):int(samplerate * 1.2)])
+        after = rms(noise[int(samplerate * 1.5):int(samplerate * 2.0)])
+        print(f"\n[bbd inside] heard gain at -30/-40/-50 dB: {', '.join(f'{g:+.2f}' for g in gains)}; noise under "
+              f"a -20 dB tone {20 * math.log10(under):.1f} dB, after it {20 * math.log10(after):.1f} dB")
+        self.assertGreater(20 * math.log10(under / after), 30.0)
+        self.assertLess(20 * math.log10(under / 0.1), -40.0, "the noise stays well under the tone")
+
+    def test_inside_the_filters_stop_and_the_loop_insert_hold(self):
+        samplerate = 16000.0
+        program = self.echo(samplerate, **self.INSIDE)
+        program.set_param("time", 200.0)
+        program.set_param("feedback", 1.3)
+        tone = [0.3 * math.sin(i * 0.9) for i in range(int(samplerate))]
+        program.run(len(tone), [tone])
+        program.set_param("stop", 1.0)
+        program.run(1, [[0.0]])
+        program.set_param("stop", 0.0)
+        left, right, _, _, rounds, _, _ = program.run(int(samplerate * 0.6), [[0.0] * int(samplerate * 0.6)])
+        after_the_fade = int(samplerate * 0.003)
+        self.assertLess(max(abs(v) for v in left[after_the_fade:] + right[after_the_fade:]), 1e-4)
+        self.assertLess(rounds[-1], 1e-4)
+        total = int(samplerate * 2.4)
+        burst = hann_burst(2190.0, 20.0, 0.1, samplerate, 100, total)
+        burst_centre, _ = energy_centroid(burst, 0, total)
+        reference = self.echo(samplerate, **self.INSIDE).run(total, [burst])[:2]
+        writer = lambda echo: BucketBrigadeEchoWriter(echo, left="echo_left_into_tape", right="echo_right_into_tape")  # noqa: E731
+        candidate = self.echo(samplerate, [writer], loop_insert=True, insert_delay_samples="0",
+                              **self.INSIDE).run(total, [burst])[:2]
+        assert_renders_similar(reference, candidate, samplerate)
+        late = [lambda echo: WholeSampleDelay("insert_left", input="echo_left_into_tape", samples=23),
+                lambda echo: WholeSampleDelay("insert_right", input="echo_right_into_tape", samples=23),
+                lambda echo: BucketBrigadeEchoWriter(echo, left="insert_left_out", right="insert_right_out")]
+        left = self.echo(samplerate, late, loop_insert=True, insert_delay_samples="23",
+                         **self.INSIDE).run(total, [burst])[0]
+        for k in range(1, 5):
+            late_ms, _ = self.repeat_lateness_ms(left, burst_centre, k * 0.5, samplerate, 0.1 * samplerate)
+            self.assertLess(abs(late_ms), 1.0, (k, late_ms))
+
+    def test_repeats_above_minus_60_db_tape_against_bbd_both_ways(self):
+        # How long a mixed sound rings at the same feedback: a burst of pink-ish noise (seeded white noise through
+        # Kellet's economy pink filter and a 4 kHz one-pole, 100 ms Hann-windowed, -20 dB RMS) at feedback 0.7 and
+        # 500 ms, saturation 1, no wow; each round's energy (a window around n T) against the burst's. The rounds
+        # counted are those down to the first under -60 dB. For 2sl dub's Dub curve per Echo Type.
+        samplerate, time_ms, feedback = 32000.0, 500.0, 0.7
+        period = int(samplerate * time_ms / 1000)
+        rounds_heard = 40
+        total = period * (rounds_heard + 1) + int(samplerate * 0.2)
+        rng = random.Random(2026)
+        b0 = b1 = b2 = smooth = 0.0
+        length, start = int(samplerate * 0.1), 100
+        pole = 1 - math.exp(-2 * math.pi * 4000.0 / samplerate)
+        burst = [0.0] * total
+        for i in range(length):
+            white = rng.uniform(-1, 1)
+            b0 = 0.99765 * b0 + white * 0.0990460
+            b1 = 0.96300 * b1 + white * 0.2965164
+            b2 = 0.57000 * b2 + white * 1.0526913
+            smooth += pole * (b0 + b1 + b2 + white * 0.1848 - smooth)
+            burst[start + i] = smooth * math.sin(math.pi * i / length) ** 2
+        scale = 0.1 / math.sqrt(sum(v * v for v in burst) / length)
+        burst = [v * scale for v in burst]
+        margin = int(samplerate * 0.03)
+        burst_energy = sum(v * v for v in burst)
+
+        def rounds_above(left):
+            count = 0
+            for n in range(1, rounds_heard + 1):
+                low, high = start + n * period - margin, start + n * period + length + margin
+                if 10 * math.log10(max(sum(v * v for v in left[low:high]), 1e-300) / burst_energy) < -60:
+                    break
+                count += 1
+            return count
+
+        table = {}
+        for lowpass, highpass in ((20000.0, 1.0), (3000.0, 40.0)):
+            row = {}
+            for name in ("tape", "bbd outside", "bbd inside"):
+                params = {"time": time_ms, "feedback": feedback, "lowpass": lowpass, "highpass": highpass,
+                          "saturation": 1.0, "wow": 0.0, "flutter": 0.0, "stop": 0.0}
+                if name == "tape":
+                    block = TapeStyleEcho("echo", left_input="in1", right_input="in1", time_ms="time",
+                                          feedback="feedback", loop_lowpass_hz="lowpass", loop_highpass_hz="highpass",
+                                          saturation_gain="saturation", wow_cents="wow", flutter_cents="flutter",
+                                          stop_pressed="stop > 0", longest_time_ms=3000.0, right_lag_ms=10.0,
+                                          rounds_kept=0)
+                else:
+                    block = BucketBrigadeEcho("echo", left_input="in1", right_input="in1", time_ms="time",
+                                              feedback="feedback", loop_lowpass_hz="lowpass",
+                                              loop_highpass_hz="highpass", saturation_gain="saturation",
+                                              wow_cents="wow", flutter_cents="flutter", stop_pressed="stop > 0",
+                                              stages=TWO_CHIP_STAGES, longest_time_ms=3000.0, right_lag_ms=10.0,
+                                              rounds_kept=0, compander_inside_filters=name.endswith("inside"))
+                program = harness([block], params, ["echo_left"], samplerate=samplerate)
+                row[name] = rounds_above(program.run(total, [burst])[0])
+            table[(lowpass, highpass)] = row
+            print(f"\n[bbd repeats] feedback {feedback}, {time_ms:g} ms, loop filters {lowpass:g} / {highpass:g} Hz: "
+                  + ", ".join(f"{name} {count}" for name, count in row.items()) + " rounds above -60 dB")
+        for row in table.values():
+            self.assertGreater(row["bbd inside"], row["bbd outside"])
+            self.assertGreater(row["tape"], row["bbd outside"])
 
     def test_its_cpu_beside_the_tape_echo(self):
         # one run each, at 44.1 kHz, built as the patch matcher's renders are (-O2): ten seconds of a burst echoing

@@ -29,10 +29,10 @@ What it promises (tests/test_techniques.py checks each):
   nothing else moves under fixed filters. At 1 s the clock is 4.1 kHz, its Nyquist 2.05 kHz, and the band is -3 dB
   at 1.61 kHz (2sl dub SPEC §3.4: "near 2 kHz").
 - **The compander.** A feedback 2:1 compressor before the anti-aliasing filter and a feed-forward 1:2 expander after
-  the reconstruction filter, outside the filters (RS10 §1.3, §3.4: f(x) = x / avg(|f(x)|), f(x) = avg(|x|) x), each
-  averaging a full-wave rectified signal over COMPANDER_TIME_MS (RS10 §3.3: 10 kOhm x 0.22-1 uF). Unity at the BBD's
-  full level; the compressor solved with no unit delay. Its breathing is the expander's gain following its averager:
-  the noise floor rises with the signal and falls after it.
+  the reconstruction filter, outside the filters (RS10 §1.3, §3.4: f(x) = x / avg(|f(x)|), f(x) = avg(|x|) x; inside
+  them with `compander_inside_filters`, below), each averaging a full-wave rectified signal over COMPANDER_TIME_MS
+  (RS10 §3.3: 10 kOhm x 0.22-1 uF). Unity at the BBD's full level; the compressor solved with no unit delay. Its
+  breathing is the expander's gain following its averager: the noise floor rises with the signal and falls after it.
 - **The chips' own faults.** A noise floor NOISE_DB under a full-level sine at the buckets' output (RS10 §3.1, §4.3:
   "about 60 dB"), shaped by the hold and the reconstruction filter, so it darkens with the clock; RS10's
   third-order distortion (§4.5) scaled so a full-level sine has RS10's THD for N stages, 1.01^(N / 1024) - 1 (§4.4),
@@ -73,9 +73,27 @@ and the writer's marker, after the device's processing, gives the BBDs what the 
 on the next sample: the sample counted in the loop's delay). No diffusion and no clean loop:
 the BBD's clip is its saturation.
 
+`compander_inside_filters=True` (left out: False, the code as without it): the other circuit RS10 §1.3 gives ("most"
+put the compander outside the filters, so some don't): the compressor after the anti-aliasing filter, on its samples
+at each even edge, and the expander on the buckets' output at each odd edge, before the reconstruction filter (the
+coupling high-pass moves with it, before the expander, at the clock). Both averagers are COMPANDER_TIME_MS one-poles,
+now at the clock, and a full-wave average of the held output is the average of its samples, so they work as outside.
+For a steady tone only the chip is between the compander's halves: the filters and the hold count once, the chip's
+insertion gain twice: the loop's steady-tone gain is |chain| |insertion| (`inside_loop_gain`), its peak +6.2 dB a pass
+at 0.267 of the clock (`INSIDE_PEAK_LOOP_GAIN`, `INSIDE_PEAK_CLOCK_FRACTION`) against +16.6 dB at 0.28 outside: the
+filters' lift no more doubled (and the insertion loss at the peak, -2 dB, doubled instead), so a sound whose level
+is mostly low comes round at about feedback / 2.04 a pass, not / 6.79. Everything above holds as it is, from its own
+peak: feedback 1 is the howl (`INSIDE_PEAK_LOOP_GAIN`), the host's straight line given back once, not doubled (it is
+before the compressor now), the howl's full level (1 - a - b)^2 i^2 h F = 1 (i the insertion gain, h the hold and the
+reconstruction filter), the grid from the chain's group delay at that peak (`INSIDE_CHAIN_PERIODS`, 3.7 periods),
+Stop, the stereo modes and the loop insert. The noise is still inside the compander (it breathes). The clock's
+leakage, outside the expander's detector in this model, is scaled by the expander's gain (DESIGN: the leak is a
+square at the clock the edges don't carry; it comes after the expander in the circuit, its level UNVERIFIED anyway).
+
 Outputs: `<name>_left`, `<name>_right` (the repeats), `<name>_level`, `<name>_round_peak_so_far`,
 `<name>_round_peak_1` .. `_<rounds_kept>`, `<name>_loop_samples` (T), `<name>_left_clock_hz`,
-`<name>_right_clock_hz` (the chips' clocks, wobble included); `<name>_left_u` (the compressor's output, for a test).
+`<name>_right_clock_hz` (the chips' clocks, wobble included); `<name>_left_u` (what reaches the anti-aliasing filter:
+the compressor's output outside the filters, the input inside; for a test).
 """
 import cmath
 import math
@@ -234,17 +252,38 @@ def chain_group_delay_periods(clock_fraction, step=1e-6):
 # that last converge there (3.8 periods; 1.15 at DC, so a low sound's first repeat is 2.7 periods early: 0.33 ms at
 # 500 ms, 0.66 ms at 1 s).
 CHAIN_PERIODS = generated_number(chain_group_delay_periods(PEAK_CLOCK_FRACTION))
+
+
+def inside_loop_gain(clock_fraction):
+    """The loop's steady-tone gain with the compander inside the filters (`compander_inside_filters=True`): the
+    compressor after the anti-aliasing filter, the expander before the reconstruction filter, so only the chip (its
+    insertion gain) is between them and is expanded again; the filters and the hold count once. |chain| |insertion|."""
+    return abs(chain_response(clock_fraction)) * abs(insertion_response(clock_fraction))
+
+
+# The same three numbers with the compander inside the filters: the peak +6.2 dB a pass at 0.267 of the clock (the
+# filters' +8.2 dB there once, the chip's insertion loss twice), its group delay 3.7 periods.
+INSIDE_PEAK_CLOCK_FRACTION = generated_number(max(range(1, 10000), key=lambda k: inside_loop_gain(k / 20000)) / 20000)
+INSIDE_PEAK_LOOP_GAIN = generated_number(inside_loop_gain(INSIDE_PEAK_CLOCK_FRACTION))
+INSIDE_CHAIN_PERIODS = generated_number(chain_group_delay_periods(INSIDE_PEAK_CLOCK_FRACTION))
 # The clock's leakage through the reconstruction filter at the clock: a constant, the filter scaling with the clock.
 _LEAK_AT_CLOCK = response(RECONSTRUCTION_DENOMINATOR, DESIGN_CLOCK_HZ)
 LEAK_GAIN = generated_number(10 ** (CLOCK_LEAKAGE_DB / 20) * 4 / math.pi * abs(_LEAK_AT_CLOCK))
 LEAK_PHASE = generated_number(cmath.phase(_LEAK_AT_CLOCK))
 
 
-def howl_full_level(distortion):
+def howl_full_level(distortion, compander_inside_filters=False):
     """The buckets' full level for a howl held at 1 (x 1 / saturation_gain): a howl is a tone at the loop's peak,
     clipped at the buckets to the curve's top (1 - a - b of the full level F), through the reconstruction side's gain
-    there g, and expanded (an amplitude A comes out as A^2 / F): (1 - a - b)^2 g^2 F = 1."""
+    there g, and expanded (an amplitude A comes out as A^2 / F): (1 - a - b)^2 g^2 F = 1. With the compander inside
+    the filters only the insertion gain i is expanded, the hold and the reconstruction filter h after the expander:
+    (1 - a - b)^2 i^2 h F = 1."""
     a, b = distortion
+    if compander_inside_filters:
+        fraction = INSIDE_PEAK_CLOCK_FRACTION
+        insertion = abs(insertion_response(fraction))
+        after = abs(response(RECONSTRUCTION_DENOMINATOR, fraction * DESIGN_CLOCK_HZ)) * hold_response(fraction)
+        return generated_number(1 / ((1 - a - b) ** 2 * insertion ** 2 * after))
     reconstruction_gain = abs(chain_response(PEAK_CLOCK_FRACTION)
                               / response(ANTI_ALIASING_DENOMINATOR, PEAK_CLOCK_FRACTION * DESIGN_CLOCK_HZ))
     return generated_number(1 / ((1 - a - b) ** 2 * reconstruction_gain ** 2))
@@ -284,7 +323,8 @@ class BucketBrigadeEcho(Technique):
 
     def __init__(self, instance_name, *, left_input, right_input, time_ms, feedback, loop_lowpass_hz,
                  loop_highpass_hz, saturation_gain, wow_cents, flutter_cents, stop_pressed, stages, longest_time_ms,
-                 right_lag_ms, rounds_kept, stereo_mode=None, loop_insert=False, insert_delay_samples=None):
+                 right_lag_ms, rounds_kept, stereo_mode=None, loop_insert=False, insert_delay_samples=None,
+                 compander_inside_filters=False):
         inputs = dict(left_input=left_input, right_input=right_input, time_ms=time_ms, feedback=feedback,
                       loop_lowpass_hz=loop_lowpass_hz, loop_highpass_hz=loop_highpass_hz,
                       saturation_gain=saturation_gain, wow_cents=wow_cents, flutter_cents=flutter_cents,
@@ -307,9 +347,16 @@ class BucketBrigadeEcho(Technique):
                              "number >= 0")
         self.stages = int(stages)
         self.buckets = self.stages // 2          # samples in the chain: one in on every second edge
-        self.chain_periods = generated_number(self.buckets + CHAIN_PERIODS)   # the clock periods a pass takes
+        self.compander_inside = bool(compander_inside_filters)
+        if self.compander_inside:
+            self.peak_clock_fraction, self.peak_loop_gain = INSIDE_PEAK_CLOCK_FRACTION, INSIDE_PEAK_LOOP_GAIN
+            chain_periods = INSIDE_CHAIN_PERIODS
+        else:
+            self.peak_clock_fraction, self.peak_loop_gain = PEAK_CLOCK_FRACTION, PEAK_LOOP_GAIN
+            chain_periods = CHAIN_PERIODS
+        self.chain_periods = generated_number(self.buckets + chain_periods)   # the clock periods a pass takes
         self.distortion = distortion_polynomial(self.stages)
-        self.full_level = howl_full_level(self.distortion)
+        self.full_level = howl_full_level(self.distortion, self.compander_inside)
         self.longest_time_ms = float(longest_time_ms)
         self.right_lag_ms = generated_number(float(right_lag_ms))
         self.rounds_kept = int(rounds_kept)
@@ -359,7 +406,18 @@ class BucketBrigadeEcho(Technique):
         s = f"{p}_{side}"
         a, b = self.distortion
         c0, c1 = INSERTION_TAPS
-        lines = [f"""
+        if self.compander_inside:
+            lines = [f"""
+// {side}: the compander is inside the filters, at the clock's edges: the compressor on the anti-aliasing filter's
+// samples, the expander on the buckets' output before the reconstruction filter; its averagers' poles and the
+// coupling high-pass's are a clock period's
+{s}_x = {p}_stop_now ? 0 : {s}_into_bbd;
+{s}_u = {s}_x;
+{s}_edge_compander_pole = smoothing_coefficient({COMPANDER_TIME_MS!r}, {s}_clock_hz);
+{s}_edge_coupling_pole = 1 - exp(-twopi * {COUPLING_HIGH_PASS_HZ!r} / {s}_clock_hz);
+if ({p}_stop_now) {{"""]
+        else:
+            lines = [f"""
 // {side}: the compressor (2:1, feedback, solved with this sample's own level: the level a is the root of
 // a^2 - (1 - k) a_before a - k |x| ref = 0, the output x ref / a)
 {s}_x = {p}_stop_now ? 0 : {s}_into_bbd;
@@ -423,6 +481,18 @@ if ({p}_stop_now) {{"""]
 {name}_re = {name}_re + {ratio.real!r} * {name}_e_re - {ratio.imag!r} * {name}_e_im;
 {name}_im = {name}_im + {ratio.real!r} * {name}_e_im + {ratio.imag!r} * {name}_e_re;""")
         indent = lambda text, tabs: text.replace("\n", "\n" + "\t" * tabs)  # noqa: E731
+        compress_at_edge, expand_at_edge = [], ""
+        if self.compander_inside:
+            compress_at_edge = [f"""// the compressor (2:1, feedback, solved with this edge's own level, as outside the filters)
+{s}_held_level = (1 - {s}_edge_compander_pole) * {s}_compressor_level;
+{s}_compressor_level = 0.5 * ({s}_held_level + sqrt({s}_held_level * {s}_held_level + 4 * {s}_edge_compander_pole * abs({s}_v) * {p}_reference));
+{s}_v = {s}_compressor_level > 0 ? {s}_v * {p}_reference / {s}_compressor_level : 0;"""]
+            expand_at_edge = f"""
+// the coupling high-pass, then the expander (1:2, feed-forward on its own input), before the reconstruction filter
+{s}_coupling = {s}_coupling + {s}_edge_coupling_pole * ({s}_out - {s}_coupling);
+{s}_coupled = {s}_out - {s}_coupling;
+{s}_expander_level = {s}_expander_level + {s}_edge_compander_pole * (abs({s}_coupled) - {s}_expander_level);
+{s}_out = {s}_coupled * {s}_expander_level / {p}_reference;"""
         lines.append(f"""
 // the clock's edges in this sample (HP18 Algorithm 1), at {s}_edge_time samples after the last one: an even edge
 // samples the anti-aliasing filter into the buckets, an odd edge puts the oldest out, held to the next odd edge
@@ -434,7 +504,7 @@ for ({s}_edge = 0; {s}_edge < {MAXIMUM_EDGES_PER_SAMPLE}; {s}_edge += 1) {{
 	}}
 	{s}_d = {s}_edge_time;
 	if ({s}_odd_edge_next < 0.5) {{
-		{indent(chr(10).join(sample_in), 2)}
+		{indent(chr(10).join(sample_in + compress_at_edge), 2)}
 		// the chip's distortion (RS10 §4.5, scaled for {self.stages} stages), clipped at the full level
 		{s}_w = clamp({s}_v / {p}_full_level, -1, 1);
 		poke({s}_buckets, {p}_full_level * ({s}_w - {a!r} * {s}_w * {s}_w - {b!r} * {s}_w * {s}_w * {s}_w), {s}_enqueued % {self.buckets});
@@ -444,7 +514,7 @@ for ({s}_edge = 0; {s}_edge < {MAXIMUM_EDGES_PER_SAMPLE}; {s}_edge += 1) {{
 		// the insertion gain, the chip's noise
 		{s}_bucket = peek({s}_buckets, {s}_enqueued % {self.buckets}) * ({s}_enqueued - {self.buckets} >= {s}_stop_index ? 1 : {p}_stop_fade);
 		{s}_out = {c0!r} * {s}_bucket + {c1!r} * {s}_bucket_previous + {p}_noise_level * noise();
-		{s}_bucket_previous = {s}_bucket;
+		{s}_bucket_previous = {s}_bucket;{indent(expand_at_edge, 2)}
 		{s}_delta = {s}_out - {s}_held;
 		{s}_held = {s}_out;
 		{indent(chr(10).join(step_out), 2)}
@@ -470,7 +540,14 @@ for ({s}_edge = 0; {s}_edge < {MAXIMUM_EDGES_PER_SAMPLE}; {s}_edge += 1) {{
         # the reconstruction filter's output now (HP18 eq. 25: H0 = 1), then its states a sample on
         output = " + ".join(f"{'2 * ' if weight == 2 else ''}{s}_out_{number}_re"
                             for number, (_, _, weight) in enumerate(RECONSTRUCTION_POLES))
-        lines.append(f"""
+        if self.compander_inside:
+            lines.append(f"""
+// the reconstruction filter (HP18 eq. 25, H0 = 1), the clock's leakage through it (and the expander's gain)
+{s}_y = {s}_held + {output}
+	+ {p}_leak_level * {s}_expander_level / {p}_reference * clamp((0.45 * samplerate - {s}_clock_hz) / (0.05 * samplerate), 0, 1)
+	* sin(pi * ({s}_odd_edge_next < 0.5 ? 1 : 0) + pi * (1 - {s}_edge_time / {s}_edge_step) + {LEAK_PHASE!r});""")
+        else:
+            lines.append(f"""
 // the reconstruction filter (HP18 eq. 25, H0 = 1), the clock's leakage through it, the coupling high-pass
 {s}_y = {s}_held + {output}
 	+ {p}_leak_level * clamp((0.45 * samplerate - {s}_clock_hz) / (0.05 * samplerate), 0, 1)
@@ -483,6 +560,10 @@ for ({s}_edge = 0; {s}_edge < {MAXIMUM_EDGES_PER_SAMPLE}; {s}_edge += 1) {{
                 lines.append(f"""{complex_product(f"{name}_next", (f"{name}_step_re", f"{name}_step_im"), (f"{name}_re", f"{name}_im"))}
 {name}_re = {name}_next_re;
 {name}_im = {name}_next_im;""")
+        if self.compander_inside:
+            lines.append(f"""{s}_z = {s}_y;
+{s}_heard.write({s}_z);""")
+            return "\n".join(lines)
         lines.append(f"""{s}_coupling = {s}_coupling + {p}_coupling_pole * ({s}_y - {s}_coupling);
 {s}_coupled = {s}_y - {s}_coupling;
 // the expander (1:2, feed-forward on its own input)
@@ -557,7 +638,7 @@ if ({p}_stop_now) {{
 
 // the loop's own delays in host samples: the tone filters' group delay at the middle of their band (as the tape
 // echo's), the sample the loop waits, the sample the BBD's input waits, what the device puts in the loop
-{p}_feedback = ${{feedback}} / {PEAK_LOOP_GAIN!r};
+{p}_feedback = ${{feedback}} / {self.peak_loop_gain!r};
 {p}_full_level = {self.full_level!r} / max(${{saturation_gain}}, 1);
 {p}_reference = {generated_number(2 / math.pi)!r} * {p}_full_level;
 {p}_noise_level = {generated_number(10 ** (NOISE_DB / 20) * math.sqrt(0.5) * math.sqrt(3))!r} * {p}_full_level;
@@ -609,9 +690,9 @@ if ({p}_stop_fade <= 0 && {p}_reset_done < 1) {{
 // the host samples reach the anti-aliasing filter as a straight line between them, sinc^2(f / fs) at the loop's
 // peak, doubled by the compander for a steady tone: given back, so feedback 1 is unity there at any host rate while
 // the peak is under a quarter of it (a shorter time's peak is past what the host carries well: no more is given)
-{s}_peak_angle = min({generated_number(math.pi * PEAK_CLOCK_FRACTION)!r} * {s}_filter_clock / samplerate, {generated_number(math.pi / 4)!r});
+{s}_peak_angle = min({generated_number(math.pi * self.peak_clock_fraction)!r} * {s}_filter_clock / samplerate, {generated_number(math.pi / 4)!r});
 {s}_line_loss = sin({s}_peak_angle) / {s}_peak_angle;
-{s}_fed = ({s}_lowpass_2 - {s}_highpass) * {p}_feedback * {p}_loop_open / pow({s}_line_loss, 4);
+{s}_fed = ({s}_lowpass_2 - {s}_highpass) * {p}_feedback * {p}_loop_open / pow({s}_line_loss, {2 if self.compander_inside else 4});
 {s}_z_previous = {s}_z;
 """
         code += f"""
