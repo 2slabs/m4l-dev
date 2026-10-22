@@ -159,3 +159,92 @@ def equalised_adaa_outputs(raw_means, taps):
     them, the means before the first taken as 0 (its Histories' start)."""
     padded = [0.0] * (len(taps) - 1) + list(raw_means)
     return [sum(tap * padded[i + k] for k, tap in enumerate(taps)) for i in range(len(raw_means))]
+
+
+def fft(values):
+    """The DFT of `values` (a power-of-two length), complex, by an iterative radix-2 FFT."""
+    n = len(values)
+    if n & (n - 1):
+        raise ValueError(f"fft: the length must be a power of two, got {n}")
+    values = [complex(value) for value in values]
+    bits = n.bit_length() - 1
+    for i in range(n):
+        j = int(format(i, f"0{bits}b")[::-1], 2) if bits else 0
+        if j > i:
+            values[i], values[j] = values[j], values[i]
+    size = 2
+    while size <= n:
+        twiddle_step = cmath.exp(-2j * math.pi / size)
+        for start in range(0, n, size):
+            twiddle = 1 + 0j
+            for k in range(size // 2):
+                even, odd = values[start + k], values[start + k + size // 2] * twiddle
+                values[start + k], values[start + k + size // 2] = even + odd, even - odd
+                twiddle *= twiddle_step
+        size *= 2
+    return values
+
+
+def autocorrelation(signal, lags):
+    """The autocorrelation of `signal` at lags 0..lags - 1 (zero-padded, so not circular), normalised to 1 at lag 0."""
+    size = 1
+    while size < len(signal) + lags:
+        size *= 2
+    spectrum = fft(list(signal) + [0.0] * (size - len(signal)))
+    power = [abs(value) ** 2 for value in spectrum]
+    # the inverse DFT of a real, even sequence: the conjugate's forward DFT over n
+    correlation = [value.real / size for value in fft(power)[:lags]]
+    return [value / correlation[0] for value in correlation]
+
+
+def group_delay_seconds(signal, frequency, samplerate, step_hz=0.25):
+    """The group delay of the impulse response `signal` at `frequency`, from its DFT's phase at frequency +- step_hz
+    (the whole signal, rectangular window: the response must have died away inside it)."""
+    def dft(at):
+        w = 2 * math.pi * at / samplerate
+        rotation, phasor, total = cmath.exp(-1j * w), 1 + 0j, 0j
+        for value in signal:
+            total += value * phasor
+            phasor *= rotation
+        return total
+    return -cmath.phase(dft(frequency + step_hz) / dft(frequency - step_hz)) / (2 * math.pi * 2 * step_hz)
+
+
+def band_decay_seconds(signal, frequency, samplerate, q=2.0, upper_db=-5.0, lower_db=-25.0):
+    """The T60 of `signal` (an impulse response) around `frequency`: through a band-pass (RBJ's, 0 dB peak, `q`), the
+    Schroeder energy decay curve's time from `upper_db` to `lower_db`, extrapolated to 60 dB."""
+    w = 2 * math.pi * frequency / samplerate
+    alpha = math.sin(w) / (2 * q)
+    b0, b2, a0, a1, a2 = alpha, -alpha, 1 + alpha, -2 * math.cos(w), 1 - alpha
+    x1 = x2 = y1 = y2 = 0.0
+    energy = []
+    for x in signal:
+        y = (b0 * x + b2 * x2 - a1 * y1 - a2 * y2) / a0
+        x2, x1, y2, y1 = x1, x, y1, y
+        energy.append(y * y)
+    remaining, total = [], 0.0
+    for value in reversed(energy):
+        total += value
+        remaining.append(total)
+    remaining.reverse()
+    levels = [10 * math.log10(value / remaining[0]) if value > 0 else -400.0 for value in remaining]
+    upper = next(n for n, level in enumerate(levels) if level <= upper_db)
+    lower = next(n for n, level in enumerate(levels) if level <= lower_db)
+    return (lower - upper) / samplerate * 60 / (upper_db - lower_db)
+
+
+def band_levels_db(signal, bands, samplerate, frame=8192):
+    """The mean power of `signal` in each (low Hz, high Hz) band, dB re the first band's: Hann-windowed frames of
+    `frame` samples, half overlapped, their power spectra summed (Welch's average)."""
+    window = [0.5 - 0.5 * math.cos(2 * math.pi * i / (frame - 1)) for i in range(frame)]
+    power = [0.0] * (frame // 2 + 1)
+    for start in range(0, len(signal) - frame + 1, frame // 2):
+        spectrum = magnitude_spectrum([value * weight for value, weight in zip(signal[start:start + frame], window)])
+        for k, value in enumerate(spectrum):
+            power[k] += value * value
+    bin_hz = samplerate / frame
+    levels = []
+    for low, high in bands:
+        bins = range(max(1, int(math.ceil(low / bin_hz))), int(high / bin_hz) + 1)
+        levels.append(10 * math.log10(sum(power[k] for k in bins) / len(bins)))
+    return [level - levels[0] for level in levels]

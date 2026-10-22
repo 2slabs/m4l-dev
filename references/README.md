@@ -7,13 +7,15 @@ these by section; the examples are 2sl stab's, where each rule was first found.
 ## DSP
 
 The techniques' sources (the zero-delay ladder and state-variable filters, the antiderivative saturator, the knee soft
-clip, band-limited edges, the tape-style echo, and what gen~ accepts) are in
+clip, band-limited edges, the tape-style echo, the spring tanks' loops and chirps, and what gen~ accepts) are in
 `dsp.md`, with quotes and pages; `fetch-dsp-sources.sh` downloads and checks them (not kept in git).
 
 ## Circuits
 
 One file per modelled circuit (a kit circuit module, architecture/dsp-blocks.md), its datasheets and schematics quoted
-with pages: `circuits/ltc1060-mf10.md`, `circuits/mutron-bi-phase.md` (below). `circuits/fetch-circuit-sources.sh` downloads and checks them (not kept in
+with pages: `circuits/ltc1060-mf10.md`, `circuits/mutron-bi-phase.md` (below), the spring tanks
+(`circuits/buchla-208-spring-reverb.md`, `circuits/accutronics-type-9-spring-tank.md`,
+`circuits/grampian-636-spring-reverb.md`: their sources are 2sl gate's and 2sl dub's, linked, not fetched here). `circuits/fetch-circuit-sources.sh` downloads and checks them (not kept in
 git). `circuit-module-catalogue.md` ranks the circuits still to model.
 
 ## Phasers and all-pass DSP

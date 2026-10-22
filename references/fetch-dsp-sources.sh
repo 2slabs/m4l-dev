@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetches the sources references/dsp.md was written from into references/dsp-sources/ and checks each is the copy
-# it was read from (sha256, 2026-10-18 / 2026-10-19 / 2026-10-20). Nothing fetched is kept in git (.gitignore).
+# it was read from (sha256, 2026-10-18 / 2026-10-19 / 2026-10-20 / 2026-10-21). Nothing fetched is kept in git (.gitignore).
 # Fails loudly, naming the file, when a download fails or a file changed upstream.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -23,6 +23,10 @@ sources=(
   "microtonic-user-guide-3.3.4.pdf|https://soniccharge.com/public/Microtonic%20User%20Guide.pdf|511c69d53991288431eb890e8ee80f7a5c44f513f4a6a876f718f78d41fcfb94"
   "park-miller-cacm1988.pdf|https://www.firstpr.com.au/dsp/rand31/p1192-park.pdf|69b0a6f2df4a794b982de14e3af12d97047668ee5e11dd098a6bacb6f85c28f6"
   "jomox-mbase11-manual.pdf|https://www.jomox.de/upload/manuals/MBase11_E.pdf|10350e766ff794a6afca61b268d8aea2e094cbe8d595aebeb0449c81240b0ef0"
+  # the spring tanks (2026-10-21)
+  "parker-bilbao-dafx09.pdf|https://www.dafx.de/paper-archive/2009/papers/paper_84.pdf|db1a09541d7e0579238c60bb2c668d6638f1a92172ce3e7b3f565fd855655885"
+  "parker-eurasip2011.pdf|https://acris.aalto.fi/ws/portalfiles/portal/13004391/art_10.1155_2011_646134.pdf|ffdb0ddc74ae9b7e7352ad8698f2d0fc7c0c18b4654a14e93b5bcc39d014b9fe"
+  "gamper-parker-valimaki-dafx11.pdf|https://www.dafx.de/paper-archive/2011/Papers/39_e.pdf|1a5f630165a7ab302998abb5c66dcc05fffbb4acd6c9305344feabe5bec92fbb"
   "lapastina-dangelo-gabrielli-dafx21.pdf|https://www.dafx.de/paper-archive/2021/proceedings/papers/DAFx20in21_paper_27.pdf|2673492050d120d39962d65805764fa2368dc0bc614930e15c8bb93cc971b7bc"
   "hiir-1.40.zip|https://ldesoras.fr/src/hiir-1.40.zip|ed1d630f85b4ed1eeda8de16acb1f785b18fc93d1430c1956192c6cc1df4221e"
 )

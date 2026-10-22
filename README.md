@@ -32,7 +32,7 @@ my_device.build(DeviceRepository.of_build_script(__file__), sys.argv[1:])
 ## What's here
 
 - `m4l_dev/`: the library ([architecture/overview.md](architecture/overview.md) lists each module), with the gen~ DSP
-  blocks a device's audio code includes: ladder, saturator, band-limited edges, tape echo
+  blocks a device's audio code includes: ladder, saturator, band-limited edges, tape echo, spring tanks
   ([architecture/dsp-blocks.md](architecture/dsp-blocks.md)).
 - `templates/`: the UI and views scripts every device gets, the blocks a device includes (the transport clock, the
   seeded random, the chord block and its display, the ladder's response for a filter display), and the Cozette glyphs

@@ -3,7 +3,7 @@
 What the techniques (architecture/dsp-blocks.md; `m4l_dev/techniques/`) are built from, with quotes and pages. A
 circuit module's sources are its circuit's own file in `circuits/`.
 `fetch-dsp-sources.sh` downloads every source below into `references/dsp-sources/` (not in git) and checks each is
-the copy these notes were written from (sha256, fetched 2026-10-18 and 2026-10-19). Page numbers are the printed
+the copy these notes were written from (sha256, fetched 2026-10-18, 2026-10-19 and 2026-10-21). Page numbers are the printed
 page, with the PDF page in brackets where they differ.
 
 ## Zero-delay ladder filter (m4l_dev/techniques/zero_delay_ladder_filter.py)
@@ -505,6 +505,90 @@ at Δ = N − 1 + frac(P), after the whole rest (Δ in (N − 1, N) is where eac
 0.072 samples off at 10 kHz, at Δ 1.5 0.218). Worst |phase delay − P|: order 1 (pads under 1) 0.003 / 0.073 / 0.33 /
 0.49 samples to 2 / 10 / 18 / 20 kHz; order 4 (pads of 3 or more) 1e-4 / 0.0023 / 0.14 / 0.30. A whole pad is a ring of
 Histories, exact; a pad of 0 is the input.
+
+## Dispersive-loop spring tank (m4l_dev/techniques/dispersive_loop_spring_tank.py)
+
+No outside source for the structure: it is 2sl gate's spring (src/gate_dsp.py, `_spring_code`, gate commit
+68bfd110), moved into the kit so a second device can have it, stated whole in the module docstring. A delay line a
+spring per loop, read at the round trip with linear interpolation; a one-pole low-pass; a one-pole DC blocker; the
+loop gain 10^(-3 T / Length); eight first-order all-passes (a + z⁻¹)/(1 + a z⁻¹) of 0.62; tanh where the loop
+writes back. The all-pass's group delay is Parker 2011's eq. 5 (below), (1 − a²)/(1 + 2a cos ω + a²) samples:
+(1 + a)/(1 − a) = 4.26 at Nyquist, (1 − a)/(1 + a) = 0.23 at DC for 0.62, so eight spread an echo over 32 samples
+(0.73 ms at 44.1 kHz, tested): a dispersive comb, not a spring's chirp (2sl dub's references/springs.md §1 computed
+it first). The parametric spring reverb (next) is the kit's chirping spring. Gate's numbers in the kit:
+`Buchla208SpringReverb` (references/circuits/buchla-208-spring-reverb.md), which renders gate's own code (tested).
+
+## Parametric spring reverb (m4l_dev/techniques/parametric_spring_reverb.py)
+
+**Parker & Bilbao, "Spring reverberation: a physical perspective", DAFx-09** (`parker-bilbao-dafx09.pdf`):
+- §3: "The nature of these echoes can be described by two parameters - the transition frequency F_C, and the time
+  between each echo, T_D"; the energy above F_C is much lower, "therefore it would seem reasonable to assume that the
+  characteristic sound of a spring reverberator is mainly related to the region below F_C".
+- §4: "The local maximum in the dispersion relation therefore corresponds with a point of minimum propagation
+  velocity. It is clear from the dispersion relation that this point corresponds with the transition frequency F_C
+  observed in the impulse response" (the chirp's delay is greatest at F_C); eq. (3), the wire's length
+  L = √((2πRN)² + H²), eq. (4), F_C ≈ (3r / (16√5 π R²)) √(E/ρ), with T_D (eq. 2) proportional to L: the whole delay
+  curve scales with the spring's length, which is why the sections a spring gets scale with its round trip.
+
+**Parker, "Efficient dispersion generation structures for spring reverb emulation", EURASIP J. Adv. Signal Process.
+2011:646134** (`parker-eurasip2011.pdf`, CC BY):
+- §2, eqs. (1)-(3): A(z) = (a + z⁻¹)/(1 + az⁻¹); the stretched H_single(z) = A(z^k); the cascade A^M(z^k). "This
+  structure can also be extended to allow noninteger values of k by replacing one of the internal unit delays with an
+  interpolating first-order all-pass filter."
+- §2: C_lf, "two parallel delay lines with feedback, with an appropriately designed spectral delay filter placed
+  within each feedback loop ... One feedback structure produces the chirped echo sequence below f_C ... This feedback
+  structure is followed by a lowpass filter, in order to suppress any behaviour above f_C." VPA10's random delay
+  modulation, cross-coupling and equalisation filter are "computationally light (on the order of 10 multiplications
+  per sample period)" and left out there (and here).
+- §3.1, eq. (4): the cascade's group delay D = kM (1 − a²)/(1 + 2a cos(kω) + a²) samples: with a real k, the
+  reference the technique is measured against (`ideal_chain_group_delay_seconds`). Eq. (5)-(6): a first-order
+  all-pass designed for "a particular fractional delay at an arbitrary frequency" (not at DC): the technique's
+  fractional section is set this way, its phase delay exact at π / K, where the section's delay peaks (our use of
+  it; Parker uses it to time-align the crossover's bands).
+- §3.2: "it makes sense to run the C_lf structure at f_s / 4"; the anti-aliasing filter a 10th-order Chebyshev type
+  1. §4, Table 2: the multirate, chirp-straightened structure costs 355 multiplies a sample against 1023, "around
+  one third"; the C_hf sequence is "generally at least 30 dB below the other chirp sequence ... it may be
+  acceptable to discard it completely and use only C_lf ... at the cost of some realism". The straightened chirp is
+  "audible as a slight hardness of the echoes ... especially when presented with percussive material".
+
+**Gamper, Parker & Välimäki, "Automated calibration of a parametric spring reverb model", DAFx-11**
+(`gamper-parker-valimaki-dafx11.pdf`):
+- §2: "The filter H_dc(z) is a dc blocking filter with a cutoff frequency at 40 Hz [5]"; "Each allpass filter section
+  is an interpolated stretched allpass filter, which is composed of a Schroeder allpass filter with an embedded delay
+  line of K − 1 samples and a first-order fractional-delay allpass filter to implement a delay equal to 1 plus the
+  decimal part of K"; eqs. (4)-(6), K1 = round(K) − 1.
+- §3.1.1: T_D "can be derived from the maximum absolute value of the autocorrelation of the impulse response" (the
+  tests' measure of echo spacing). §3.2.1: g_lf = K 10^(d/20) with K the sign of the autocorrelation's maximum:
+  g_lf = −0.64 for the Leem Pro (negative).
+- Table 1, Leem Pro KA-1210 spring 1, VPA10's manual calibration: T_D 0.056, F_C 4300, M_low 100, a_1 0.62, g_lf −0.8,
+  M_high 200, a_high −0.6, g_hf −0.77 (the technique's REFERENCE_* constants and the module's stand-in dispersion);
+  automated, M_low limited to 100: a_1 0.63, F_C 4216.
+- §4: the optimal M_low "can become very large, such as about 300 ... the maximum number of filter sections is
+  limited to 100. This can lead to a sufficiently good fit".
+
+**Välimäki, Parker & Abel, "Parametric spring reverberation effect", JAES 58(7/8) 2010** (VPA10): paywalled, not read;
+everything taken from it here is quoted by the three papers above. **Välimäki, Parker, Savioja, Smith & Abel, "Fifty
+years of artificial reverberation", IEEE TASLP 2012** (FY12): quoted from 2sl dub's references/springs.md §4 (the line
+"set to T_D after taking into account the inherent delay-time of the allpass-chain", the negative loop gains "to match
+the reversal of the first echo").
+
+What the technique adds, measured (tests/test_techniques.py, 2026-10-21; the reference is eq. (4) with a real K, 100
+sections of 0.62, F_C 4.5 kHz, over 0-0.98 F_C):
+
+| fractional section | 44.1 kHz | 48 kHz | 96 kHz | 192 kHz |
+|---|---|---|---|---|
+| GPV11's (Thiran, exact at DC, K1 = round(K) − 1) | 0.306 ms worst | 1.368 | 0.065 | 0.023 |
+| the kit's (eq. 6's idea: phase delay exact at π/K, K1 = floor(K − 1/4)) | 0.105 ms worst | 0.141 | 0.021 | 0.002 |
+
+Rejected on numbers: the loops at fs / R (P11's multirate C_lf, K / R about 2 to keep the sections' delays whole and
+small): the same eq. 6 sections leave 1.2-2 ms of error near F_C (a fractional delay that must hold to π/2), against
+0.1 ms at the host rate. Linear or spline interpolation of the loop's line: up to 0.45 / 0.38 dB a trip lost at F_C
+(at a half-sample fraction, 4.5 kHz, 44.1 kHz); the line's fraction is a first-order Thiran all-pass instead
+(lossless). Cost, measured in the kit renderer (optimised C, one run, 4 s at 44.1 kHz, load 3.6 on 10 cores): the
+three-spring tank (198 sections) 0.51 µs a sample, the two-spring studio tank (118) 0.36, gate's spring 0.11, gate's
+whole idle core 1.83.
+
+`neutral_damping_hz` and `sections_for_round_trip` are DESIGN, stated in the module.
 
 ## gen~ (what Max accepts)
 

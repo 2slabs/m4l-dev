@@ -65,9 +65,15 @@ from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetall
 from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
 from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
 from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
-from gen_block_harness import (amplitude_at, cents, coherent_frequency, coherent_worst_alias_db,  # noqa: E402
-                               complex_amplitude_at, equalised_adaa_outputs, exact_second_order_mean, folded,
-                               frequency_by_zero_crossings, harness, phase_degrees, worst_alias_db)
+from m4l_dev.techniques.dispersive_loop_spring_tank import (DispersiveLoopSpringTank,  # noqa: E402
+                                                             allpass_chain_group_delay_samples)
+from m4l_dev.techniques.parametric_spring_reverb import (ParametricSpringReverb,  # noqa: E402
+                                                         chain_group_delay_seconds, ideal_chain_group_delay_seconds,
+                                                         section_response, sections_for_round_trip)
+from gen_block_harness import (amplitude_at, autocorrelation, band_decay_seconds, cents,  # noqa: E402
+                               coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,
+                               equalised_adaa_outputs, exact_second_order_mean, folded, frequency_by_zero_crossings,
+                               group_delay_seconds, harness, magnitude_spectrum, phase_degrees, worst_alias_db)
 
 
 class ZeroDelayLadderFilterTests(unittest.TestCase):
@@ -2185,6 +2191,250 @@ class DefinedLatencyPadTests(unittest.TestCase):
                 self.assertLessEqual(self.phase_delay_error(response, frequency, 1), bound, frequency)
                 w = 2 * math.pi * frequency / self.SAMPLERATE
                 self.assertAlmostEqual(abs(response), math.cos(w / 2), delta=1e-9, msg="the twin's own magnitude")
+
+
+def spring_impulse(seconds, samplerate):
+    return [1.0] + [0.0] * (int(seconds * samplerate) - 1)
+
+
+class DispersiveLoopSpringTankTests(unittest.TestCase):
+    """2sl gate's setting is held to gate's own code in tests/test_circuit_module_buchla_208_spring_reverb.py; these are
+    the technique's own claims, on gate's numbers."""
+    SAMPLERATE = 44100.0
+
+    def tank(self, samplerate=SAMPLERATE, round_trips_ms=(33.7, 41.3), allpasses=8, **params):
+        block = DispersiveLoopSpringTank("tank", input="in1", lowpass_hz="lowpass", length_s="length",
+                                         clear="clear > 0", round_trips_ms=round_trips_ms, allpasses=allpasses,
+                                         allpass_coefficient=0.62, dc_block_hz=3.69, clear_ms=60.0)
+        defaults = {"lowpass": 2500.0, "length": 2.0, "clear": 0.0}
+        defaults.update(params)
+        outputs = [f"tank_spring_{i}" for i in range(1, len(round_trips_ms) + 1)] + ["tank_clean"]
+        return harness([block], defaults, outputs, samplerate=samplerate), block
+
+    def test_echoes_come_a_round_trip_and_the_chains_delay_apart(self):
+        # max |autocorrelation| (Gamper et al. 2011's T_D) of each spring: its round trip plus what gate leaves in the
+        # loop, the all-passes' delay at the low end (8 x (1 - a) / (1 + a) = 1.88 samples) and the low-pass's
+        program, block = self.tank(lowpass=20000.0)
+        outputs = program.run(int(0.5 * self.SAMPLERATE), [spring_impulse(0.5, self.SAMPLERATE)])
+        for spring, round_trip_ms in zip(outputs, block.round_trips_ms):
+            correlation = autocorrelation(spring, int(0.06 * self.SAMPLERATE))
+            start = int(0.02 * self.SAMPLERATE)
+            lag = max(range(start, len(correlation)), key=lambda n: abs(correlation[n]))
+            expected = round_trip_ms / 1000 * self.SAMPLERATE + allpass_chain_group_delay_samples(
+                0.0, self.SAMPLERATE, 8, 0.62)
+            self.assertLess(abs(lag - expected), 1.5, (round_trip_ms, lag, expected))
+            self.assertGreater(correlation[lag], 0)              # gate's loop gain is positive
+
+    def test_its_dispersion_is_the_all_pass_chains_and_spans_under_a_millisecond(self):
+        # one trip (Length 1 ms: the loop gain 1e-101): its group delay is the round trip's line plus the chain's;
+        # gate's eight of 0.62 spread an echo by 32 samples between DC and Nyquist, 0.7 ms (2sl dub springs.md §1)
+        program, block = self.tank(round_trips_ms=(33.7,), length=0.001, lowpass=20000.0)
+        # long enough for the DC blocker's 43 ms tail to die: a cut one reads as phase at the low end
+        response = program.run(32768, [spring_impulse(32768 / self.SAMPLERATE, self.SAMPLERATE)])[0]
+        for frequency in (200.0, 2000.0, 8000.0, 15000.0):
+            expected = (0.0337 * self.SAMPLERATE + allpass_chain_group_delay_samples(
+                frequency, self.SAMPLERATE, 8, 0.62)) / self.SAMPLERATE
+            measured = group_delay_seconds(response, frequency, self.SAMPLERATE)
+            # the one-pole low-pass at 20 kHz and the DC blocker add under 0.05 ms here
+            self.assertAlmostEqual(measured * 1000, expected * 1000, delta=0.05, msg=frequency)
+        spread = allpass_chain_group_delay_samples(self.SAMPLERATE / 2, self.SAMPLERATE, 8, 0.62) \
+            - allpass_chain_group_delay_samples(0.0, self.SAMPLERATE, 8, 0.62)
+        self.assertAlmostEqual(spread, 32.2, delta=0.1)
+        self.assertAlmostEqual(spread / self.SAMPLERATE * 1000, 0.73, delta=0.01)
+
+    def test_clear_silences_the_lines_for_its_window_and_keeps_nothing_from_before(self):
+        program, _ = self.tank(length=6.0)
+        noise = [math.sin(0.37 * n) * 0.5 for n in range(int(0.3 * self.SAMPLERATE))]
+        program.run(len(noise), [noise])
+        program.set_param("clear", 1.0)
+        window = int(0.06 * self.SAMPLERATE)
+        first = program.run(1, [[0.0]])
+        program.set_param("clear", 0.0)
+        during = program.run(window, [[0.0] * window])
+        clean = during[2]
+        self.assertEqual(first[2][0], 0.0)
+        self.assertEqual(clean[:window - 2], [0.0] * (window - 2))
+        self.assertEqual(clean[-1], 1.0)
+        after = program.run(int(0.2 * self.SAMPLERATE), [[0.0] * int(0.2 * self.SAMPLERATE)])
+        # what the lines hold after the window is what came in after (nothing): the springs only ring out the
+        # low-passes' and all-passes' last values, which never reached a line
+        self.assertLess(max(abs(value) for value in after[0] + after[1]), 1e-6)
+
+    def test_a_hot_input_is_held_by_the_loops_tanh(self):
+        program, _ = self.tank(length=6.0)
+        hot = [8.0 * (1 if (n // 30) % 2 else -1) for n in range(int(1.0 * self.SAMPLERATE))]
+        outputs = program.run(len(hot), [hot])
+        self.assertTrue(all(math.isfinite(value) for value in outputs[0] + outputs[1]))
+        self.assertLess(max(abs(value) for value in outputs[0] + outputs[1]), 1.05)
+
+    def test_impossible_settings_fail_the_build(self):
+        for settings in ({"round_trips_ms": ()}, {"round_trips_ms": (0.0,)}, {"allpasses": -1}, {"allpasses": 2.5},
+                         {"allpass_coefficient": 1.0}, {"dc_block_hz": 0.0}, {"clear_ms": 41.3}):
+            arguments = dict(input="in1", lowpass_hz="2500", length_s="2", clear="0", round_trips_ms=(33.7, 41.3),
+                             allpasses=8, allpass_coefficient=0.62, dc_block_hz=3.69, clear_ms=60.0)
+            arguments.update(settings)
+            with self.assertRaises(BuildError, msg=settings):
+                DispersiveLoopSpringTank("tank", **arguments)
+
+
+class ParametricSpringReverbTests(unittest.TestCase):
+    """The reference: the parametric spring reverb's low-frequency chirps (VPA10 as Parker 2011 and Gamper et al. 2011
+    give it): T_D, F_C, M sections of a, and the stretched cascade's group delay with a real stretch (Parker 2011 eq.
+    4, `ideal_chain_group_delay_seconds`)."""
+    SAMPLERATE = 44100.0
+    TRANSITION_HZ = 4500.0
+
+    def tank(self, samplerate=SAMPLERATE, round_trips_ms=(33.0,), pans=(0.0,), loop_sign=-1, **params):
+        block = ParametricSpringReverb(
+            "tank", input="in1", damping_hz="damping", length_s="length", clear="clear > 0",
+            round_trips_ms=round_trips_ms, sections=tuple(sections_for_round_trip(t) for t in round_trips_ms),
+            pans=pans, transition_hz=self.TRANSITION_HZ, allpass_coefficient=0.62, loop_sign=loop_sign,
+            decay_reference_hz=1000.0)
+        defaults = {"damping": 11000.0, "length": 2.0, "clear": 0.0}
+        defaults.update(params)
+        outputs = ["tank_left", "tank_right", "tank_clean"] + [f"tank_spring_{i}"
+                                                              for i in range(1, len(round_trips_ms) + 1)]
+        return harness([block], defaults, outputs, samplerate=samplerate), block
+
+    def test_the_built_chain_is_the_stretched_cascade_at_every_rate(self):
+        # VPA10's 100 sections of 0.62, F_C 4.5 kHz: the built chain's group delay against the reference's (a real
+        # stretch) over 0-0.98 F_C, and the same sections with GPV11's Thiran fraction (exact at DC), measured
+        # 2026-10-21: worst error (ms) here / with Thiran's
+        measured = {44100.0: (0.105, 0.306), 48000.0: (0.141, 1.368), 96000.0: (0.021, 0.065),
+                    192000.0: (0.002, 0.023)}
+        for samplerate, (worst_here, worst_thiran) in measured.items():
+            errors = []
+            for i in range(1, 393):
+                frequency = self.TRANSITION_HZ * i / 400
+                errors.append(abs(chain_group_delay_seconds(frequency, samplerate, self.TRANSITION_HZ, 100, 0.62)
+                                  - ideal_chain_group_delay_seconds(frequency, samplerate, self.TRANSITION_HZ, 100,
+                                                                    0.62)))
+            self.assertAlmostEqual(max(errors) * 1000, worst_here, delta=0.002, msg=samplerate)
+            # every section's phase is -pi at F_C (the chirp tops out there at every rate), to the last bits
+            phase = cmath.phase(section_response(self.TRANSITION_HZ, samplerate, self.TRANSITION_HZ, 0.62))
+            self.assertAlmostEqual(abs(phase), math.pi, delta=1e-9, msg=samplerate)
+            # GPV11's Thiran fraction (K1 = round(K) - 1, exact at DC) is the worse at every rate
+            k = samplerate / (2 * self.TRANSITION_HZ)
+            k1 = round(k) - 1
+            c = (1 - (k - k1)) / (1 + (k - k1))
+
+            def thiran_delay(frequency):
+                def response(at):
+                    z = cmath.exp(-2j * math.pi * at / samplerate)
+                    d = z ** k1 * (c + z) / (1 + c * z)
+                    return (0.62 + d) / (1 + 0.62 * d)
+                return -100 * cmath.phase(response(frequency + 1e-3) / response(frequency - 1e-3)) / (
+                    2 * math.pi * 2e-3)
+            thiran_errors = [abs(thiran_delay(self.TRANSITION_HZ * i / 400) - ideal_chain_group_delay_seconds(
+                self.TRANSITION_HZ * i / 400, samplerate, self.TRANSITION_HZ, 100, 0.62)) for i in range(1, 393)]
+            self.assertAlmostEqual(max(thiran_errors) * 1000, worst_thiran, delta=0.002, msg=samplerate)
+        # the chirp: 2.5 ms at DC, 47.4 ms at F_C at 44.1 kHz (VPA10's 100 sections: 2.7 and 50 ms at F_C 4300 Hz)
+        self.assertAlmostEqual(ideal_chain_group_delay_seconds(0.0, 44100.0, self.TRANSITION_HZ, 100, 0.62) * 1000,
+                               2.61, delta=0.01)
+        self.assertAlmostEqual(ideal_chain_group_delay_seconds(self.TRANSITION_HZ, 44100.0, self.TRANSITION_HZ, 100,
+                                                               0.62) * 1000, 47.37, delta=0.01)
+
+    def test_one_trip_is_the_round_trip_and_the_chirp(self):
+        # Length 10 ms: the loop gain is 1e-10, so the output is one trip. Its group delay over 200 Hz-0.95 F_C is the
+        # round trip plus the reference chirp's rise above DC (the built chain's DC delay is taken out of the line),
+        # within the built chain's error and the loop's low-pass, blocker and transducer (a fraction of a ms, below)
+        for samplerate in (44100.0, 48000.0):
+            program, block = self.tank(samplerate, length=0.01)
+            response = program.run(8192, [spring_impulse(8192 / samplerate, samplerate)])[3]
+            sections = block.sections[0]
+            worst = 0.0
+            for frequency in (200.0, 500.0, 1000.0, 2000.0, 3000.0, 3500.0, 4000.0, 4275.0):
+                expected = 0.033 + ideal_chain_group_delay_seconds(frequency, samplerate, self.TRANSITION_HZ,
+                                                                   sections, 0.62) \
+                    - ideal_chain_group_delay_seconds(0.0, samplerate, self.TRANSITION_HZ, sections, 0.62)
+                measured = group_delay_seconds(response, frequency, samplerate)
+                worst = max(worst, abs(measured - expected))
+            print(f"\n[parametric spring] one trip at {samplerate:.0f} Hz: worst {worst * 1000:.3f} ms off the "
+                  "round trip + the reference chirp")
+            self.assertLess(worst * 1000, 0.25, samplerate)
+            # the chirp's spread, 200 Hz to 0.95 F_C: 23.6 ms of the 26.4 ms the 59 sections spread from DC to F_C
+            spread = group_delay_seconds(response, 4275.0, samplerate) - group_delay_seconds(response, 200.0, samplerate)
+            reference = ideal_chain_group_delay_seconds(4275.0, samplerate, self.TRANSITION_HZ, sections, 0.62) \
+                - ideal_chain_group_delay_seconds(200.0, samplerate, self.TRANSITION_HZ, sections, 0.62)
+            print(f"[parametric spring] spread 200 Hz to 0.95 F_C at {samplerate:.0f} Hz: {spread * 1000:.2f} ms "
+                  f"(reference {reference * 1000:.2f})")
+            self.assertAlmostEqual(spread * 1000, reference * 1000, delta=0.25, msg=samplerate)
+
+    def test_echoes_are_a_round_trip_apart_and_each_one_turned_over(self):
+        # Gamper et al. 2011's T_D, the lag of the autocorrelation's largest magnitude, at the round trip (within a
+        # quarter of a ms: the loop's blocker and low-pass delay the low end a little); its sign negative, the loop's
+        for samplerate in (44100.0, 48000.0):
+            for round_trip_ms in (29.0, 41.0):
+                program, _ = self.tank(samplerate, round_trips_ms=(round_trip_ms,), length=2.0)
+                spring = program.run(int(0.6 * samplerate), [spring_impulse(0.6, samplerate)])[3]
+                correlation = autocorrelation(spring, int(0.07 * samplerate))
+                start = int(0.02 * samplerate)
+                lag = max(range(start, len(correlation)), key=lambda n: abs(correlation[n]))
+                self.assertAlmostEqual(lag / samplerate * 1000, round_trip_ms, delta=0.25,
+                                       msg=(samplerate, round_trip_ms))
+                self.assertLess(correlation[lag], 0)
+
+    def test_length_is_the_t60_at_the_reference_frequency(self):
+        for length in (1.0, 3.4):
+            program, _ = self.tank(round_trips_ms=(37.0,), length=length)
+            spring = program.run(int(length * 1.2 * self.SAMPLERATE),
+                                 [spring_impulse(length * 1.2, self.SAMPLERATE)])[3]
+            t60 = band_decay_seconds(spring, 1000.0, self.SAMPLERATE)
+            print(f"\n[parametric spring] Length {length} s: T60 at 1 kHz {t60:.3f} s")
+            self.assertAlmostEqual(t60 / length, 1.0, delta=0.05, msg=length)
+
+    def test_the_output_low_pass_takes_the_stretched_images_out(self):
+        # white noise in: the springs' output above 1.5 F_C (the cascade's mirrored chirps) at least 30 dB under the
+        # band below F_C, a 1.25 F_C to 1.5 F_C at least 15 dB under
+        generator = random.Random(5)
+        noise = [2 * generator.random() - 1 for _ in range(16384)]
+        program, _ = self.tank(round_trips_ms=(33.0, 41.0), pans=(-1.0, 1.0), length=1.0)
+        left = program.run(len(noise), [noise])[0][8192:]
+        spectrum = magnitude_spectrum(left)
+        bin_hz = self.SAMPLERATE / len(left)
+
+        def band_energy(low, high):
+            return sum(value * value for value in spectrum[int(low / bin_hz):int(high / bin_hz)]) / (
+                int(high / bin_hz) - int(low / bin_hz))
+        below = band_energy(300.0, 0.9 * self.TRANSITION_HZ)
+        for low, high, at_least in ((1.25, 1.5, 15.0), (1.5, 2.4, 30.0)):
+            level = 10 * math.log10(band_energy(low * self.TRANSITION_HZ, high * self.TRANSITION_HZ) / below)
+            print(f"\n[parametric spring] {low}-{high} F_C: {level:.1f} dB re the band")
+            self.assertLess(level, -at_least, (low, high))
+
+    def test_clear_empties_it_exactly(self):
+        program, _ = self.tank(round_trips_ms=(33.0, 41.0), pans=(-1.0, 1.0), length=10.0)
+        tone = [0.7 * math.sin(0.05 * n) for n in range(int(0.3 * self.SAMPLERATE))]
+        program.run(len(tone), [tone])
+        program.set_param("clear", 1.0)
+        program.run(1, [[0.0]])
+        program.set_param("clear", 0.0)
+        after = program.run(int(0.3 * self.SAMPLERATE), [[0.0] * int(0.3 * self.SAMPLERATE)])
+        # nothing comes out of it at all: every state and Delay holds zeros
+        self.assertEqual(max(abs(value) for value in after[0] + after[1] + after[3] + after[4]), 0.0)
+        # and it is a tank again after the window: the next sound rings
+        again = program.run(int(0.1 * self.SAMPLERATE), [spring_impulse(0.1, self.SAMPLERATE)])
+        self.assertGreater(max(abs(value) for value in again[0]), 0.01)
+
+    def test_a_hot_input_is_bounded(self):
+        program, _ = self.tank(round_trips_ms=(33.0, 37.0, 41.0), pans=(-1.0, 0.0, 1.0), length=30.0, damping=40000.0)
+        generator = random.Random(9)
+        hot = [30 * (2 * generator.random() - 1) for _ in range(int(1.5 * self.SAMPLERATE))]
+        outputs = program.run(len(hot), [hot])
+        self.assertTrue(all(math.isfinite(value) for value in outputs[0] + outputs[1]))
+        self.assertLess(max(abs(value) for value in outputs[0] + outputs[1]), 20.0)
+
+    def test_impossible_settings_fail_the_build(self):
+        good = dict(input="in1", damping_hz="9000", length_s="2", clear="0", round_trips_ms=(33.0,), sections=(59,),
+                    pans=(0.0,), transition_hz=4500.0, allpass_coefficient=0.62, loop_sign=-1,
+                    decay_reference_hz=1000.0)
+        for settings in ({"sections": (59, 66)}, {"sections": (0,)}, {"pans": (1.5,)}, {"allpass_coefficient": -0.3},
+                         {"loop_sign": 0}, {"transition_hz": 20000.0}, {"decay_reference_hz": 5000.0},
+                         {"sections": (2000,)}):
+            arguments = dict(good)
+            arguments.update(settings)
+            with self.assertRaises(BuildError, msg=settings):
+                ParametricSpringReverb("tank", **arguments)
 
 
 if __name__ == "__main__":

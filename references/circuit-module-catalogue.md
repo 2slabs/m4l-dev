@@ -123,7 +123,7 @@ tape echo / RE-201 module's sources are in dsp.md, not repeated here.
 | BBD (MN3005 / MN3007 / MN3009 etc.) with companding and filters | Boss CE-1/CE-2, Roland Juno-6/60 chorus (MN3009 delay + MN3101 clock driver) [SECONDARY via search of clone vendors], Dimension D (Roland SDD-320; chip assignment UNVERIFIED) | clocked delay line that aliases; input / output low-pass filters mask its artefacts: "Filters sit before and after the BBDs to mask artifacts from the chip" [SECONDARY], noise and companding | Juno-60 service manual; Boss CE-2 schematic (public) [UNVERIFIED] | Panasonic MN3005/3007/3009 datasheets exist [UNVERIFIED location]; sdiy pages for MN3005 / MN3007 were 404 | Raffel & Smith DAFx-10 "Practical modeling of BBD circuits" (200) https://dafx10.iem.at/proceedings/papers/RaffelSmith_DAFx10_P42.pdf ; Holters & Parker DAFx-18 "A combined model for a BBD and its input and output filters" https://dafx.de/paper-archive/details/KbFTgvcTMmHQ2bHZvOUekw (implemented in chowdsp_utils, listed in search) | Juno-60-type plugins; CE-2 pedals | **3** |
 | Mu-Tron Bi-Phase | Mu-Tron | LED + photocell phaser, two six-stage op-amp all-pass phasors (ARP drawing 77204); MODELLED 2026-10-20: m4l_dev/circuit_modules/mutron_bi_phase.py, references/circuits/mutron-bi-phase.md | | | | | modelled |
 | Uni-Vibe (opto phaser) | Univibe, Shin-ei | 4 allpass stages with LDR + lamp, asymmetric LFO; the lamp-driven photocell = the vactrol story (circuits/buchla-292-low-pass-gate.md) [INFERENCE] | public (electrosmash analysis, not reachable from this machine) [UNVERIFIED] | n/a | no paper checked | | 1 |
-| Spring reverb tank | Fender, Hammond, Rhodes amps | dispersive chirp: "chirps" and dripping; dispersion from the helical spring [SECONDARY] | n/a (mechanical, Accutronics datasheets [UNVERIFIED]) | | Bilbao & Parker, IEEE TASLP 2010 "A virtual model of spring reverberation" https://era.ed.ac.uk/handle/1842/3718?show=full ; Parker & Bilbao DAFx-09 "Spring reverberation: a physical perspective" https://dafx.de/paper-archive/details/MBjqiMDVjnAseoN9C-fzBw ; Valimaki, Parker, Abel, "Parametric spring reverberation effect" JAES 2010 (https://aes2.org/publications/elibrary-page/?id=15511); Gamper, Parker, Valimaki DAFx-11 calibration | spring tank hardware if owned | 2 (no electrical schematic needed; allpass chain structure belongs to allpass-and-diffusion.md, another agent) |
+| Spring reverb tank | Fender, Hammond, Rhodes amps | dispersive chirp: "chirps" and dripping; dispersion from the helical spring [SECONDARY] | n/a (mechanical, Accutronics datasheets [UNVERIFIED]) | | Bilbao & Parker, IEEE TASLP 2010 "A virtual model of spring reverberation" https://era.ed.ac.uk/handle/1842/3718?show=full ; Parker & Bilbao DAFx-09 "Spring reverberation: a physical perspective" https://dafx.de/paper-archive/details/MBjqiMDVjnAseoN9C-fzBw ; Valimaki, Parker, Abel, "Parametric spring reverberation effect" JAES 2010 (https://aes2.org/publications/elibrary-page/?id=15511); Gamper, Parker, Valimaki DAFx-11 calibration | spring tank hardware if owned | 2; MODELLED 2026-10-21: the techniques dispersive_loop_spring_tank.py (2sl gate's) and parametric_spring_reverb.py (VPA10's chirps, references/dsp.md), the modules buchla_208_spring_reverb.py, accutronics_type_9_spring_tank.py, grampian_636_spring_reverb.py (references/circuits/) |
 | Tape echo / RE-201 | Roland RE-201 Space Echo | in dsp.md (Downing & Terjesen; Chowdhury DAFx-19) | | | already in the kit's DSP sources | | see dsp.md |
 
 ## 7. What the kit already has (not to rebuild)
@@ -164,12 +164,13 @@ instruments need. [INFERENCE throughout.]
    row); held back to 2 only because no datasheet and no IR3109-specific model were found, so the project's
    "Roland (IR3109, BA662)" plan step (kit-layers step 5) starts with sources to find, not to read.
 10. **Oberheim SEM SVF** (2) - SEM, OB-X lineage; the kit already has the SVF technique, so it is a small step.
-11. **Spring reverb tank** (2) - physical-model papers exist (Bilbao/Parker); no electrical circuit needed; shares work with
-    the allpass note.
+11. **Spring reverb tank** (2) - physical-model papers exist (Bilbao/Parker); no electrical circuit needed. MODELLED
+    2026-10-21: the Easel's (as 2sl gate has it), the Accutronics type 9 and the Grampian 636, on the parametric spring
+    reverb technique (VPA10's chirps); no tank's own dispersion is measured, the Leem Pro's stands in.
 12. **CEM3340 VCO core** (2) - the most-used oscillator chip, datasheet in hand; no chip paper, so the oscillator model
     would be generic ramp-core + polyBLEP.
 
-Already built (the base the above extends): 259 sine core + folder, 292 LPG, LTC1060.
+Already built (the base the above extends): 259 sine core + folder, 292 LPG, LTC1060, the spring tanks.
 
 ## 9. Biggest gaps
 
