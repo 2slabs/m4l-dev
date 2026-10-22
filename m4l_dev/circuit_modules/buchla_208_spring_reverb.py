@@ -1,9 +1,10 @@
-"""The Buchla 208's spring reverb, as 2sl gate has it (a circuit module): the Music Easel's card 12 driver (an LM380
+"""The Buchla 208's spring reverb, as 2sl gate had it (a circuit module): the Music Easel's card 12 driver (an LM380
 into the tank's 8 ohm input coil through 390 uF: a series R-L-C, resonant at 226 Hz, Q 2.23) and a two-spring tank,
 33.7 and 41.3 ms, on the kit's dispersive-loop spring tank (references/circuits/buchla-208-spring-reverb.md).
 
 It is gate's spring moved into the kit, sound unchanged: tests/test_circuit_module_buchla_208_spring_reverb.py renders
-gate's own spring code (copied verbatim) beside it. Gate itself is left on its own copy.
+gate's own spring code (copied verbatim) beside it. 2sl gate had the spring until 0.6.0, which took it out (Graham,
+2026-10-22: "keep it as a dsp block but remove the spring"); the test keeps that copy as the reference.
 
 The driver (references/circuits/buchla-208-spring-reverb.md §2): the coil's current against the coil driven straight
 is H(s) = 1 - 1 / (s^2 LC + sRC + 1), so the springs are driven by the input less the kit's state-variable filter's
@@ -132,7 +133,7 @@ class Buchla208SpringReverb(CircuitModule):
 
     def statements(self):
         return "\n".join([
-            self.substituted("""// ${p}: the Buchla 208's spring reverb, as 2sl gate has it (kit circuit module: Buchla 208 spring reverb)
+            self.substituted("""// ${p}: the Buchla 208's spring reverb, as 2sl gate had it (kit circuit module: Buchla 208 spring reverb)
 ${p}_input = ${input};
 ${p}_clear = ${clear};
 // card 12's driver: the coil's current is the input less the coil and C2's resonant low-pass

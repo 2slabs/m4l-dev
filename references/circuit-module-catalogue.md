@@ -165,7 +165,7 @@ instruments need. [INFERENCE throughout.]
    "Roland (IR3109, BA662)" plan step (kit-layers step 5) starts with sources to find, not to read.
 10. **Oberheim SEM SVF** (2) - SEM, OB-X lineage; the kit already has the SVF technique, so it is a small step.
 11. **Spring reverb tank** (2) - physical-model papers exist (Bilbao/Parker); no electrical circuit needed. MODELLED
-    2026-10-21: the Easel's (as 2sl gate has it), the Accutronics type 9 and the Grampian 636, on the parametric spring
+    2026-10-21: the Easel's (as 2sl gate had it), the Accutronics type 9 and the Grampian 636, on the parametric spring
     reverb technique (VPA10's chirps); no tank's own dispersion is measured, the Leem Pro's stands in.
 12. **CEM3340 VCO core** (2) - the most-used oscillator chip, datasheet in hand; no chip paper, so the oscillator model
     would be generic ramp-core + polyBLEP.

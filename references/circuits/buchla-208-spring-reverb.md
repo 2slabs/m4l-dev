@@ -1,7 +1,7 @@
-# Buchla 208 (Music Easel): the spring reverb, card 12's driver and the tank as 2sl gate has it
+# Buchla 208 (Music Easel): the spring reverb, card 12's driver and the tank as 2sl gate had it
 
-Moved here 2026-10-21 from 2sl gate's `references/buchla-208-reverb.md` (gate commit 68bfd110; gate keeps its own copy
-and its own code), with the tank's numbers from gate's `src/gate_dsp.py` and the kick from 2sl dub's
+Moved here 2026-10-21 from 2sl gate's `references/buchla-208-reverb.md` (gate commit 68bfd110; gate kept its own copy
+and its own code until 0.6.0 took the spring out), with the tank's numbers from gate's `src/gate_dsp.py` and the kick from 2sl dub's
 `references/springs.md` §5. Tags: **[VERIFIED]** read in the source, **[SECONDARY]**, **[INFERRED]** our reading,
 **[UNVERIFIED]**, **[DESIGN]** a choice, **[MEASURED]**. Gate's `fetch-buchla-208-reverb-sources.sh` fetches the three
 sources (2026-10-21, sha256 in that script); each source has one page, so a place in it is named by its label.
@@ -51,9 +51,9 @@ pretty lousy" and the "muddy" reports fit a bump at 226 Hz. It acts once, on wha
 runs it as the kit's state-variable filter: the input less its low-pass at f0, Q (tested against these figures).
 
 The recovery's corners are not the low end: its 3.39 Hz shelf is far below the driver's 226 Hz, and its 7.23 kHz
-roll-off sits inside the loops' low-pass range; the module leaves the recovery flat, as gate does.
+roll-off sits inside the loops' low-pass range; the module leaves the recovery flat, as gate did.
 
-## 3. The tank, as gate has it
+## 3. The tank, as gate had it
 - Two springs, **33.7 ms** (left) and **41.3 ms** (right), each a loop read at its round trip [UNVERIFIED: gate's
   file gives no source; they sit near the Accutronics 33 / 41 ms springs, 2sl dub springs.md §1].
 - Eight first-order all-passes of **0.62** a loop (gate's). Their group delay spreads an echo over 0.73 ms between DC
