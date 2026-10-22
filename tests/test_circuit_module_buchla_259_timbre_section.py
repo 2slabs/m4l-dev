@@ -183,7 +183,7 @@ class FolderGenExprTests(unittest.TestCase):
         with self.assertRaises(TypeError):                     # never a default
             Buchla259TimbreSection("timbre", drive_volts="drive", symmetry_offset_volts="offset",
                                    frequency_hz="frequency")
-        for unknown in (3, 4, 0, True, None):
+        for unknown in (3, 8, 0, True, None):
             with self.assertRaises(BuildError, msg=unknown):
                 section(oversampling=unknown)
 

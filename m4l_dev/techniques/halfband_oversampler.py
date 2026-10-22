@@ -269,6 +269,20 @@ def linear_phase_halfband_response(frequency_over_doubled_rate, taps):
     return sum(tap * complex(math.cos(w * n), -math.sin(w * n)) for n, tap in enumerate(taps))
 
 
+def linear_phase_halfband_stage_taps(output_oversampling=1):
+    """The taps of one stage of a cascade of linear-phase half-bands bringing an N x section down (N a power of 2):
+    the stage whose output runs at `output_oversampling` x the host rate. The last stage (1) is the kit's default
+    (`linear_phase_halfband_taps()`); an earlier one keeps the last's pass band (0.21 of the 2x rate, 0.42 of the
+    host's) and stops everything that would fold onto it, so its transition is 0.25 - 0.21 / output_oversampling of
+    its input rate (4x -> 2x: 0.145, 27 taps). [try/gate-4x: ours, measured on 2sl gate only]"""
+    if isinstance(output_oversampling, bool) or not isinstance(output_oversampling, int) or output_oversampling < 1 \
+            or output_oversampling & (output_oversampling - 1):
+        raise BuildError(f"linear_phase_halfband_stage_taps: output_oversampling is a power of 2, got {output_oversampling!r}")
+    if output_oversampling == 1:
+        return linear_phase_halfband_taps()
+    return linear_phase_halfband_taps(transition=0.25 - (0.25 - DEFAULT_TRANSITION) / output_oversampling)
+
+
 class HalfbandLinearPhaseDownsampler(Technique):
     """`<name>_out`: the two samples `first`, `second` (a base-rate sample's two at twice the rate, as
     `HalfbandDownsampler` takes them) through `linear_phase_halfband_taps` and taken at the base rate, polyphase: the
@@ -276,9 +290,9 @@ class HalfbandLinearPhaseDownsampler(Technique):
     phase: `latency_samples` (K - 1) late at every frequency re `first`'s time. State: 2 K - 1 past second samples,
     K - 1 past first samples."""
 
-    def __init__(self, instance_name, first, second, taps=None):
+    def __init__(self, instance_name, first, second, taps=None, output_oversampling=1):
         super().__init__(instance_name, first=first, second=second)
-        taps = linear_phase_halfband_taps() if taps is None else tuple(taps)
+        taps = linear_phase_halfband_stage_taps(output_oversampling) if taps is None else tuple(taps)
         length = len(taps)
         if length < 3 or length % 4 != 3 or taps != tuple(reversed(taps)) or taps[length // 2] != 0.5 \
                 or any(taps[n] != 0.0 for n in range(1, length, 2) if n != length // 2) \
@@ -287,7 +301,10 @@ class HalfbandLinearPhaseDownsampler(Technique):
                              f"symmetric, middle 0.5, every other one 0, summing to 1), got {length} taps")
         self.taps = taps
         self.pairs = (length + 1) // 4
-        self.latency_samples = self.pairs - 1
+        # K - 1 samples of its output rate (`output_oversampling` x the host's: a cascade's earlier stage), in host samples
+        self.output_oversampling = output_oversampling
+        self.latency_samples = Fraction(self.pairs - 1, output_oversampling)
+        self.latency_samples = int(self.latency_samples) if self.latency_samples.denominator == 1 else float(self.latency_samples)
 
     def _second_name(self, age):
         return f"{self.instance_name}_second" if age == 0 else f"{self.instance_name}_second_before_{age}"

@@ -124,12 +124,19 @@ def _five_symmetric_taps(outer, inner):
     return checked_equaliser_taps((outer, inner, middle, inner, outer), "ADAA_EQUALISER_DECISIONS")
 
 
+# 4x (try/gate-4x, 2026-10-21: 2sl gate's voices at 4x): order 2 only, adaa_equaliser_remez_design(2, 5/48, 2) (20 kHz
+# at 4x 48 kHz): the product with the 3-tap mean within +-0.000123 (0.0011 dB) up to the edge.
+ADAA_EQUALISER_EDGE_AT_4X = 5 / 48
+SECOND_ORDER_OUTER_TAP_AT_4X = 0.1361045795
+SECOND_ORDER_INNER_TAP_AT_4X = -0.8744133585
 ADAA_EQUALISER_DECISIONS = {
     (1, 1): None,
     (1, 2): (_five_symmetric_taps(FIRST_ORDER_OUTER_TAP_AT_2X, FIRST_ORDER_INNER_TAP_AT_2X), ADAA_EQUALISER_EDGE_AT_2X),
     (2, 1): None,
     (2, 2): (_five_symmetric_taps(SECOND_ORDER_OUTER_TAP_AT_2X, SECOND_ORDER_INNER_TAP_AT_2X),
              ADAA_EQUALISER_EDGE_AT_2X),
+    (2, 4): (_five_symmetric_taps(SECOND_ORDER_OUTER_TAP_AT_4X, SECOND_ORDER_INNER_TAP_AT_4X),
+             ADAA_EQUALISER_EDGE_AT_4X),
 }
 ADAA_OVERSAMPLINGS = tuple(sorted({oversampling for _, oversampling in ADAA_EQUALISER_DECISIONS}))
 

@@ -242,7 +242,7 @@ class AntiderivativeAntialiasingEqualiserTests(unittest.TestCase):
             self.assertEqual((equaliser.remember_statements("now"), equaliser.declarations()), ("", ""))
 
     def test_a_pair_without_a_decision_fails_the_build(self):
-        for order, oversampling in ((1, 3), (2, 4), (1, 0), (2, True), (1, 2.0), (1, None), (3, 2), (0, 1), (True, 1)):
+        for order, oversampling in ((1, 3), (2, 8), (1, 0), (2, True), (1, 2.0), (1, None), (3, 2), (0, 1), (True, 1)):
             with self.assertRaises(BuildError, msg=(order, oversampling)):
                 adaa_equaliser_decision(order, oversampling, "test")
             with self.assertRaises(BuildError, msg=(order, oversampling)):
@@ -926,7 +926,7 @@ class AntiderivativePiecewiseLinearShaperTests(unittest.TestCase):
         table = PiecewiseLinearTable("clip", self.CLIP)
         with self.assertRaises(TypeError):                     # never a default
             AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=2)
-        for unknown in (3, 4, 0, True, 2.0, None):
+        for unknown in (3, 8, 0, True, 2.0, None):
             for order in (1, 2):
                 with self.assertRaises(BuildError, msg=(order, unknown)):
                     AntiderivativePiecewiseLinearShaper("shaper", input="in1", table=table, order=order,
