@@ -278,6 +278,17 @@ stab: quarter-sine ramp in, `1 + 3 curve` power recovery, 20 ms hand-over betwee
 glide on the gain; 2sl filter: a 3 ms linear ramp in, a squared recovery, a hard switch between the two clocks, no
 glide, plus the gate) with stab's, which is continuous at every join and glides every change.
 
+## Input-keyed duck (m4l_dev/techniques/input_keyed_duck.py)
+
+After the TC 2290's ducker, from its manual (TC2290-DT / TC2290 Native user manual, TC Electronic, 2018,
+[PDF via Full Compass](https://www.fullcompass.com/common/files/33690-TCELECTRONICTC2290DTUserManual.pdf); read for 2sl
+dub, its references/dub.md §3): "A ducking delay uses the input signal to attenuate the delay signal, causing the
+echoes to stay 'out of the way' while you're playing, but still allow the echo tails to be audible during gaps." Input
+level triggers it; DEPTH is how much, in % of the most; SPEED is the release as a ramp time ("a setting of '1' means a
+ramp time of 1 second, whereas a setting of '5' means a ramp time of 1/5 of a second"); the threshold has 9 settings 3
+dB apart. The manual gives no detector or attack: those are ours (a peak follower falling over 10 ms, a 3 dB soft knee
+in place of the switch, a 2 ms one-pole rise), stated in the module docstring.
+
 ## Zero-delay one-pole filter (m4l_dev/techniques/zero_delay_one_pole_filter.py)
 
 **Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2** (`zavalishin-va-filter-design-2.1.2.pdf`).

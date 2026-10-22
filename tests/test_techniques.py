@@ -24,6 +24,7 @@ from m4l_dev.techniques.antiderivative_tanh_saturator import (AntiderivativeTanh
                                                               AntiderivativeTanhSaturatorLinearTwin)
 from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
 from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
+from m4l_dev.techniques.input_keyed_duck import KNEE_DB, InputKeyedDuck  # noqa: E402
 from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
 from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: E402
 
@@ -610,6 +611,50 @@ class HistoriesStartAtTheirTargetsTests(unittest.TestCase):
             HistoriesStartAtTheirTargets("start", targets={})
         with self.assertRaises(BuildError):
             HistoriesStartAtTheirTargets("start", targets={"Not History": "x"})
+
+
+class InputKeyedDuckTests(unittest.TestCase):
+    SAMPLERATE = 8000.0
+
+    def duck(self, **params):
+        defaults = {"threshold": -24.0, "depth": 0.75, "release": 200.0}
+        defaults.update(params)
+        block = InputKeyedDuck("duck", key="in1", threshold_db="threshold", depth="depth", release_ms="release")
+        return harness([block], defaults, ["duck_gain", "duck_amount", "duck_key_db"], samplerate=self.SAMPLERATE)
+
+    def test_under_the_threshold_it_never_moves(self):
+        quiet = [10 ** (-25 / 20) * math.sin(i * 0.3) for i in range(4000)]
+        gain, amount, _ = self.duck().run(len(quiet), [quiet])
+        self.assertEqual(set(gain), {1.0})
+        self.assertEqual(set(amount), {0.0})
+
+    def test_over_the_knee_it_settles_at_the_depth_and_in_the_knee_part_way(self):
+        for over_db, amount_expected in ((KNEE_DB + 3, 1.0), (KNEE_DB / 2, 0.5)):
+            level = 10 ** ((-24 + over_db) / 20)
+            gain, amount, _ = self.duck().run(800, [[level] * 800])
+            assert_matches_model(amount[-100:], [amount_expected] * 100, 1e-9, "the settled amount",
+                                 "a steady key: the one-pole has settled to its target within 1e-9 by 600 samples")
+            assert_matches_model(gain[-100:], [1 - 0.75 * amount_expected] * 100, 1e-9, "the settled gain",
+                                 "gain = 1 - depth x amount, on the settled amount")
+
+    def test_it_comes_down_without_a_jump(self):
+        loud = [0.5] * 400
+        gain = self.duck().run(len(loud), [loud])[0]
+        gain = [1.0] + gain                             # before the first sample: open
+        steps = [a - b for a, b in zip(gain, gain[1:])]
+        biggest = max(steps)
+        # the one-pole's first step is its coefficient x depth: 2 ms at 8 kHz
+        self.assertAlmostEqual(biggest, 0.75 * (1 - math.exp(-1000 / (2.0 * self.SAMPLERATE))), places=12)
+
+    def test_the_release_is_a_ramp_of_its_time(self):
+        program = self.duck(release=250.0)
+        program.run(400, [[0.5] * 400])
+        amount = program.run(4000, [[0.0] * 4000])[1]
+        falling = [b - a for a, b in zip(amount, amount[1:]) if 0 < b < a]
+        # every falling step is the ramp's: all the way in 250 ms
+        assert_matches_model(falling, [-1000 / (250.0 * self.SAMPLERATE)] * len(falling), 1e-12, "the ramp's steps",
+                             "a straight ramp: each step the same subtraction")
+        self.assertEqual(amount[-1], 0.0)
 
 
 class TapeStyleEchoTests(unittest.TestCase):
