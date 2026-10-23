@@ -254,6 +254,26 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
 tape as hysteresis plus playback-head loss filters. Not modelled; the echo's tape is a saturating loop, which is why it is a technique and not a circuit
 module of a tape machine.
 
+## Multi-head tape echo (m4l_dev/techniques/multi_head_tape_echo.py)
+
+The sourcing is in 2sl dub's references (`references/tape.md`, `references/multihead.md` in 2slabs/2sl-dub), each
+claim tagged there. What the block takes from them:
+- **Spacing loss** 54.6 d / λ dB, λ = v / f (a Nortronics head application note, worked example checked;
+  tape.md §2.1): its -3 dB point is 3 v / (54.6 d) Hz. The block fits it with two one-poles (-3 dB at 0.642 of their
+  corner). At 14.7 cm/s and 3 µm: 2.7 kHz (tape.md §2.4).
+- **Head bump** at v / λ_bump, a few dB, the roll-off under it (Nortronics: the longest wavelength a head reproduces;
+  u-he Satin's plots, about +2 dB; tape.md §2.2). The block: +2.5 dB at v / 4 mm, two one-pole low cuts an octave
+  under it.
+- **Speed from time** (every product surveyed ties darkening and flutter to speed; tape.md §2.3, §4, design 1): v =
+  5.5 cm / T, 5-40 cm/s.
+- **Flutter** at the capstan's turn v / (π D) with harmonics 2 and 3 at ChowTape's 230 : 80 : 99 (ChowTape's
+  `FlutterProcess`, from a TC-260 measurement; tape.md §4); **wow** as the tape-style echo's (Downing & Terjesen,
+  noise under 1 Hz). A real machine stays under about 10 cents (Satin's maximum 0.55 %: tape.md §4).
+- **Hiss** written into the loop each round builds as N0 / (1 - g^2) (tape.md §5).
+- **Heads**: one tape read at several points, the fed-back heads summed, so the loop's gain at 0 Hz is the feedback
+  times the heads fed back; the block divides by them (multihead.md §3). Time is the longest head, the others
+  fractions of it (Strymon Volante's rule, its manual; multihead.md §2).
+
 ## Bucket-brigade echo (m4l_dev/techniques/bucket_brigade_echo.py)
 
 Read 2026-10-21 for 2sl dub's bbd Echo Type (2sl dub SPEC v0.3 §3.4; the device's research is its
