@@ -6,7 +6,7 @@
 BASELINE and CANDIDATE are each one build of one device, given as either
   - a directory: searched (recursively) for NAME.maxpat, the unfrozen NAME.amxd, the frozen NAME[-version].amxd,
     the .js scripts next to the unfrozen .amxd and the .adv presets next to each .amxd. Works on a saved baseline
-    folder and on an m4l-dev checkout alike (pass --device there: it has several devices); or
+    folder and on an 2sl-dsp checkout alike (pass --device there: it has several devices); or
   - one file (.maxpat or .amxd): that patch, with the .js and .adv files in its folder.
 NAME defaults to the stem of the only .maxpat found.
 
@@ -99,7 +99,7 @@ def read_amxd(path):
 
 def read_frozen_container_entries(container, path):
     """The files in a frozen device's mx@c container, in directory order: {type, fnam, sz32, of32, vers, flag,
-    mdat, data}. The layout is the one Max's Freeze writes (m4l-dev tools/amxd.py writes and reads the same)."""
+    mdat, data}. The layout is the one Max's Freeze writes (2sl-dsp tools/amxd.py writes and reads the same)."""
     directory_offset = struct.unpack(">I", container[12:16])[0]
     if container[directory_offset:directory_offset + 4] != b"dlst":
         raise BuildInputError(f"{path}: frozen device has no dlst directory at offset {directory_offset}")

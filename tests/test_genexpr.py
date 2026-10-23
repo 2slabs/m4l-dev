@@ -1,4 +1,4 @@
-"""Tests for m4l_dev/genexpr.py, our GenExpr subset checker and renderer. A device's own gen~ code is tested in its
+"""Tests for twosl_dsp/genexpr.py, our GenExpr subset checker and renderer. A device's own gen~ code is tested in its
 repository (2sl stab: tests/test_stab_dsp.py)."""
 
 import math
@@ -10,11 +10,11 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.c_library_cache import CLibraryBuildError  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.cpu_timing import THREAD, CpuTiming  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
-from m4l_dev.genexpr import GenExprError, GenProgram, analyze, check, code_with_param_defaults  # noqa: E402
+from twosl_dsp.c_library_cache import CLibraryBuildError  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.cpu_timing import THREAD, CpuTiming  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
+from twosl_dsp.genexpr import GenExprError, GenProgram, analyze, check, code_with_param_defaults  # noqa: E402
 
 
 def render_single_output(code, num_samples, inputs=None, num_inputs=1):

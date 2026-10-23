@@ -1,4 +1,4 @@
-"""Tests for m4l_dev/genexpr_export.py: the exported C, built as a plugin would build it, renders GenProgram's sound
+"""Tests for twosl_dsp/genexpr_export.py: the exported C, built as a plugin would build it, renders GenProgram's sound
 (within the kit's render comparator's tolerance, architecture/testing.md)."""
 
 import array
@@ -12,10 +12,10 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.genexpr import GenProgram, NoiseState  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.genexpr import GenProgram, NoiseState  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.genexpr_export import FLOATING_POINT_FLAGS, export_c  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
 
 # a little of everything the export touches: a function using samplerate, mstosamps, noise, a delay, a data (after
 # the delay in the memory), histories, bounded loops (in a function and stepping a History, with break and continue)

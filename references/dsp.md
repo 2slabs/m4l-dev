@@ -1,12 +1,12 @@
 # DSP sources: the kit's techniques
 
-What the techniques (architecture/dsp-blocks.md; `m4l_dev/techniques/`) are built from, with quotes and pages. A
+What the techniques (architecture/dsp-blocks.md; `twosl_dsp/techniques/`) are built from, with quotes and pages. A
 circuit module's sources are its circuit's own file in `circuits/`.
 `fetch-dsp-sources.sh` downloads every source below into `references/dsp-sources/` (not in git) and checks each is
 the copy these notes were written from (sha256, fetched 2026-10-18, 2026-10-19 and 2026-10-21). Page numbers are the printed
 page, with the PDF page in brackets where they differ.
 
-## Zero-delay ladder filter (m4l_dev/techniques/zero_delay_ladder_filter.py)
+## Zero-delay ladder filter (twosl_dsp/techniques/zero_delay_ladder_filter.py)
 
 **Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2 (2020)** (`zavalishin-va-filter-design-2.1.2.pdf`;
 NI's URL is gone, the Wayback copy is fetched).
@@ -36,7 +36,7 @@ predictor) tracks its own model as well but its self-oscillation sinks 4 to 32 c
 analog model does the same), so it isn't kept. Huovilainen (DAFx-04) uses five tanh and 2x oversampling for that
 model; not needed here.
 
-## Zero-delay state-variable filter (m4l_dev/techniques/zero_delay_state_variable_filter.py)
+## Zero-delay state-variable filter (twosl_dsp/techniques/zero_delay_state_variable_filter.py)
 
 **Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2 (2020)** (`zavalishin-va-filter-design-2.1.2.pdf`).
 - §4.1, p. 95 [107], eq. (4.1): "yHP = x − 2RyBP − yLP, ẏBP = ωc · yHP, ẏLP = ωc · yBP"; p. 96 [108]:
@@ -61,7 +61,7 @@ The technique is that tick, with 2R = 1 / Q (the circuit literature's Q, e.g. a 
 Q = ½ √(C1/C2)) and g = tan(π fp / sr) · fc / fp, prewarped at fp (by default the cutoff: g = tan(π fc / sr)). Not the LTC1060 / MF10 module's LDI (Chamberlin) form,
 which is a clocked chip's own recursion and is kept for that (circuits/ltc1060-mf10.md).
 
-## Antiderivative piecewise-linear shaper (m4l_dev/techniques/antiderivative_piecewise_linear_shaper.py)
+## Antiderivative piecewise-linear shaper (twosl_dsp/techniques/antiderivative_piecewise_linear_shaper.py)
 
 The same method as the tanh saturator's (below): **Bilbao, Esqueda, Parker & Välimäki 2017**, eq. (5), first-order
 ADAA, y = (F1(x) − F1(x_before)) / (x − x_before), with §II.B's midpoint fallback where the step is too small to divide
@@ -97,7 +97,7 @@ Butterworth or Chebyshev kernel, at the cost of complex exponential integrals of
 split the tanh saturator used to use, whose error once a folder folds is (1 − the 3-tap mean) × (the line − the
 transfer), the line's whole size at the input's frequency.
 
-## Antiderivative antialiasing equaliser (m4l_dev/techniques/antiderivative_antialiasing_equaliser.py)
+## Antiderivative antialiasing equaliser (twosl_dsp/techniques/antiderivative_antialiasing_equaliser.py)
 
 ADAA's linear filtering: Bilbao et al. 2017 (above), §II.A after eq. (16) [PDF p. 4]: "In practice, though aliasing is
 indeed suppressed, such methods do introduce a degree of linear filtering to the original signal, and thus all
@@ -148,7 +148,7 @@ So at 1× there is no equaliser for either order, and a block takes its oversamp
 equaliser at 2× (the 259 folder at 2× 48 kHz, worst alias under 20 kHz, raw → equalised): 4 V at 3.1 kHz −36.4 → −31.5
 dB (under 16 kHz −44.5 → −42.6), 8 V at 1.37 kHz −48.7 → −45.8, 4 V at 410 Hz −69.8 → −65.9 dB.
 
-## Antiderivative tanh saturator (m4l_dev/techniques/antiderivative_tanh_saturator.py)
+## Antiderivative tanh saturator (twosl_dsp/techniques/antiderivative_tanh_saturator.py)
 
 **Bilbao, Esqueda, Parker & Välimäki, "Antiderivative Antialiasing for Memoryless Nonlinearities", IEEE SPL 24(7),
 2017, pp. 1049–1053** (`bilbao-adaa-spl2017.pdf`, Aalto's accepted version). The technique is eq. (5) on tanh, F1 =
@@ -187,7 +187,7 @@ Measured 2026-10-20 (tests/test_techniques.py keeps each):
 | bound for any input (`output_bound_per_unit_mean`: the sum of the chain's \|taps\| after the mean, × the mean's bound 1, or 1 + \|tanh b\| biased) | 1 | 2.19 |
 | CPU a host sample (below): plain / biased | 55–63 / 75–86 ns | 150–171 / 183–209 ns with the elliptic downsampler; the linear-phase one +45 / +59 ns (re-measured 2026-10-20, best of 5 interleaved runs: 106 → 151, 132 → 191 ns) |
 
-CPU (ours, 2026-10-20): the kit renderer's C (`m4l_dev/genexpr.py`'s translation, CPython's libm calls) built at −O2
+CPU (ours, 2026-10-20): the kit renderer's C (`twosl_dsp/genexpr.py`'s translation, CPython's libm calls) built at −O2
 instead of the test suite's −O0, 2^20 samples of a hot sweeping sine through preallocated buffers, best of 31, three
 runs (ranges) on an i7-8700 under load (load average ~70 on 12 threads): not Max's gen~ compiler, so a ratio, not a
 budget. A naive tanh(x) is 25–35 ns; the elliptic half-band pair alone 17–23 ns; the 259 folder's second-order shaper 50–54 ns
@@ -222,7 +222,7 @@ residual is mostly −x, which the 2-tap mean filters and the allpass does not, 
 3.2; 15 kHz drive 20: peaks 10.9). Measured with the kit's renderer against tanh's Fourier series (the ideal,
 band-limited, as late); tests/test_techniques.py keeps the new figures.
 
-## Band-limited edges (m4l_dev/techniques/band_limited_edges.py)
+## Band-limited edges (twosl_dsp/techniques/band_limited_edges.py)
 
 **Esqueda, Välimäki & Bilbao, "Rounding Corners with BLAMP", DAFx-16** (`esqueda-blamp-dafx16.pdf`).
 - Abstract [p. 1]: "The polynomial BLAMP can reduce the level of aliasing components by up to 50 dB".
@@ -238,7 +238,7 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
   sawtooth emulation up to the fundamental frequency of 7.8 kHz at the sample rate of 44.1 kHz."
 - [p. 982]: "the second-order PolyBLEP is free from aliasing up to about 2 kHz" (what 2sl stab had).
 
-## Tape-style echo (m4l_dev/techniques/tape_style_echo.py)
+## Tape-style echo (twosl_dsp/techniques/tape_style_echo.py)
 
 **Downing & Terjesen, "Real-time digital modeling of the Roland Space Echo", U. Rochester ECE 472 class project,
 2016** (`downing-terjesen-re201-2016.pdf`; not peer-reviewed).
@@ -254,7 +254,7 @@ polynomial interpolation", JASA 131(1), 2012, pp. 974–986** (`valimaki-polyble
 tape as hysteresis plus playback-head loss filters. Not modelled; the echo's tape is a saturating loop, which is why it is a technique and not a circuit
 module of a tape machine.
 
-## Multi-head tape echo (m4l_dev/techniques/multi_head_tape_echo.py)
+## Multi-head tape echo (twosl_dsp/techniques/multi_head_tape_echo.py)
 
 The sourcing is in 2sl dub's references (`references/tape.md`, `references/multihead.md` in 2slabs/2sl-dub), each
 claim tagged there. What the block takes from them:
@@ -274,7 +274,7 @@ claim tagged there. What the block takes from them:
   times the heads fed back; the block divides by them (multihead.md §3). Time is the longest head, the others
   fractions of it (Strymon Volante's rule, its manual; multihead.md §2).
 
-## Bucket-brigade echo (m4l_dev/techniques/bucket_brigade_echo.py)
+## Bucket-brigade echo (twosl_dsp/techniques/bucket_brigade_echo.py)
 
 Read 2026-10-21 for 2sl dub's bbd Echo Type (2sl dub SPEC v0.3 §3.4; the device's research is its
 references/echoes.md §2). A technique, not a circuit module: the filters are a "typical" echo circuit's, not a named
@@ -399,7 +399,7 @@ the two clocks never fully cancel (Morrin's BBD page). Its level is UNVERIFIED (
   at 125 ms, 0.85 % at 1 s, stereo at 44.1 kHz, against the tape echo's 0.5 % (our renderer at -O2), so no cheaper
   model is needed.
 
-## Histories start at their targets (m4l_dev/techniques/histories_start_at_their_targets.py)
+## Histories start at their targets (twosl_dsp/techniques/histories_start_at_their_targets.py)
 
 No outside source: our construction, stated whole in the module docstring. gen~ gives a History a constant initial
 value; a smoother of a control would need that constant to repeat the control's Init value (a second copy:
@@ -408,13 +408,13 @@ sample, before it is read: a one-pole step from the target to itself is the targ
 History whose constant already equalled the target renders the same bits. Its `if` and History writes are the GenExpr
 the tape-style echo's Stop already uses.
 
-## Knee soft clip (m4l_dev/techniques/knee_soft_clip.py)
+## Knee soft clip (twosl_dsp/techniques/knee_soft_clip.py)
 
 No outside source: our construction, stated whole in the module docstring. Unity up to the knee, then
 knee + (1 - knee) tanh((|x| - knee) / (1 - knee)): the line's value and slope (tanh'(0) = 1) at the knee, so the join is
 C1, and bounded by 1. It replaced three devices' identical copies bit for bit (2sl gate, stab, filter).
 
-## Sidechain-style pump (m4l_dev/techniques/sidechain_style_pump.py)
+## Sidechain-style pump (twosl_dsp/techniques/sidechain_style_pump.py)
 
 No outside source: our construction, stated whole in the module docstring (a quarter-sine ramp in, a power-law recovery,
 a gain 1 - depth x duck, or the gate 1 - depth x (1 - duck)). The sound it imitates is a compressor ducked by a kick
@@ -423,7 +423,7 @@ stab: quarter-sine ramp in, `1 + 3 curve` power recovery, 20 ms hand-over betwee
 glide on the gain; 2sl filter: a 3 ms linear ramp in, a squared recovery, a hard switch between the two clocks, no
 glide, plus the gate) with stab's, which is continuous at every join and glides every change.
 
-## Input-keyed duck (m4l_dev/techniques/input_keyed_duck.py)
+## Input-keyed duck (twosl_dsp/techniques/input_keyed_duck.py)
 
 After the TC 2290's ducker, from its manual (TC2290-DT / TC2290 Native user manual, TC Electronic, 2018,
 [PDF via Full Compass](https://www.fullcompass.com/common/files/33690-TCELECTRONICTC2290DTUserManual.pdf); read for 2sl
@@ -434,7 +434,7 @@ ramp time of 1 second, whereas a setting of '5' means a ramp time of 1/5 of a se
 dB apart. The manual gives no detector or attack: those are ours (a peak follower falling over 10 ms, a 3 dB soft knee
 in place of the switch, a 2 ms one-pole rise), stated in the module docstring.
 
-## Zero-delay one-pole filter (m4l_dev/techniques/zero_delay_one_pole_filter.py)
+## Zero-delay one-pole filter (twosl_dsp/techniques/zero_delay_one_pole_filter.py)
 
 **Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2** (`zavalishin-va-filter-design-2.1.2.pdf`).
 - §3.10, p. 78 [90], "1-pole allpass": the TPT one-pole's tick, `yAP = yLP − yHP` with
@@ -447,7 +447,7 @@ The technique is the tick's LP and HP (`v = G (x − s)`, `LP = v + s`, `s = LP 
 responses `LP = G x + (1 − G) s`, `HP = (1 − G) x − (1 − G) s`, our algebra from the tick. Its LP − HP all-pass is not
 the kit's all-pass section: under fast cutoff modulation it gains energy (below, and tests/test_techniques.py).
 
-## Zero-delay all-pass cascade (m4l_dev/techniques/zero_delay_allpass_cascade.py)
+## Zero-delay all-pass cascade (twosl_dsp/techniques/zero_delay_allpass_cascade.py)
 
 Transfer functions: **Zavalishin rev. 2.1.2** eq. (2.12), p. 29, `H(s) = (1 − s)/(1 + s)`, and §4.7 eq. (4.23), p. 119,
 `HAP(s) = (s² − 2Rs + 1)/(s² + 2Rs + 1)`; "high order allpasses are often created by simply connecting several of 1- and
@@ -471,7 +471,7 @@ them 470, and a 0.5 feedback loop around six diverges; the lattice conserves ene
 same loop. Zavalishin's footnote 29, p. 42, warns that the continuous-time "cutoff modulation cannot destroy stability"
 argument "will not automatically hold" after discretisation: this is that case.
 
-## LED-driven photocell (m4l_dev/techniques/led_driven_photocell.py)
+## LED-driven photocell (twosl_dsp/techniques/led_driven_photocell.py)
 
 **Parker & D'Angelo, "A Digital Model of the Buchla Lowpass-Gate", DAFx-13** (`parker-dangelo-dafx13.pdf`).
 - p. 6, eq. (39): `Rf = A / If^1.4 + B`, "where A = 3.464 ΩA1.4 and B = 1136.212 Ω" (the text layer drops the fraction
@@ -496,7 +496,7 @@ and the times are the caller's. Undriven, `release_ms` is exactly the time from 
 `release_to_amps`. The Buchla 292 channel (circuits/buchla-292-low-pass-gate.md, the VTL5C3/2's constants; moved onto
 this block bit for bit) and the Mu-Tron Bi-Phase (circuits/mutron-bi-phase.md, its own UNVERIFIED constants) use it.
 
-## Drum envelope (m4l_dev/techniques/drum_envelope.py)
+## Drum envelope (twosl_dsp/techniques/drum_envelope.py)
 
 **Sonic Charge, *Microtonic User Guide* v3.3.4** (`microtonic-user-guide-3.3.4.pdf`; 2sl drums
 references/er1-microtonic-genopatch.md §1.2 reads the whole voice from it).
@@ -521,7 +521,7 @@ controls (the guide folds them into Attack with no law) and each pulse's 60 dB f
 starts the attack at the level the envelope has (the attack curve inverted), our rule for "restart on hit without
 clicks".
 
-## Pitch modulator (m4l_dev/techniques/pitch_modulator.py)
+## Pitch modulator (twosl_dsp/techniques/pitch_modulator.py)
 
 **Microtonic User Guide v3.3.4**, p. 17: Decaying, "the rate setting controls the time it takes the oscillator to go
 from the highest frequency down to the base frequency (or from the lowest frequency and up if the modulation amount is
@@ -542,7 +542,7 @@ rate 0), the cyclic jumps and corners through `BandLimitedEdges` (C7 square and 
 0 at the decay time), and the random shape's filter, a one-pole AR(1) y <- (1 - c) y + sqrt(c(2 - c)) w that keeps the
 variance of a uniform draw at every cutoff.
 
-## Seeded white noise (m4l_dev/techniques/seeded_white_noise.py)
+## Seeded white noise (twosl_dsp/techniques/seeded_white_noise.py)
 
 **Park & Miller, "Random Number Generators: Good Ones Are Hard to Find", CACM 31(10), 1988, pp. 1192-1201**
 (`park-miller-cacm1988.pdf`, a copy hosted at firstpr.com.au).
@@ -556,7 +556,7 @@ variance of a uniform draw at every cutoff.
 The technique is Real Version 1 (floor for Trunc: the operands are positive), as 2 z / m - 1. That gen~ computes in
 64-bit floats is [UNVERIFIED] here (the 2sl devices' gen~ code has never needed it to be exact before).
 
-## Metallic noise (m4l_dev/techniques/metallic_noise.py)
+## Metallic noise (twosl_dsp/techniques/metallic_noise.py)
 
 **Jomox, *MBase 11 manual*** (`jomox-mbase11-manual.pdf`), p. 11, 3.12 MetNze: "Changes the noise of the noise
 generator to a metallic noise. At a value of <000> the noise is a random noise as in the older MBase01. On values above
@@ -573,7 +573,7 @@ bits the value selects, clocked at a tune, its lowest bit out, a constant state 
 the manual says (digital, high multi-tones, one pattern a value, jumps between values) and what adx1.md asks (a
 tune). The seam for an ADX-1 source: `METALLIC_NOISE_SOURCES` and the interface its docstring states.
 
-## Bell equalizer (m4l_dev/techniques/bell_equalizer.py)
+## Bell equalizer (twosl_dsp/techniques/bell_equalizer.py)
 
 **Zavalishin, *The Art of VA Filter Design*, rev. 2.1.2** (`zavalishin-va-filter-design-2.1.2.pdf`).
 - §4.7, p. 118 [130]: "By adding/subtracting the unit gain bandpass signal to/from the input signal one obtains the
@@ -588,7 +588,7 @@ bandwidth at the half-gain (dB) points, |1 − ω²| = ω/Q, is our algebra from
 Microtonic's EQ range (MT-UG p. 15, Equalizer Gain "Range: -40db to +40db"; "The peak or dip width (i.e., the q
 value) is fixed and cannot be changed", its value not given; its auto-attenuation at high gain is not taken).
 
-## Halfband oversampler (m4l_dev/techniques/halfband_oversampler.py)
+## Halfband oversampler (twosl_dsp/techniques/halfband_oversampler.py)
 
 **de Soras, *HIIR* 1.40 (2021-12-24, WTFPL)** (`hiir-1.40.zip`).
 - `PolyphaseIir2Designer.cpp`: `compute_coefs_spec_order_tbw`, `compute_transition_param`, `compute_coef`,
@@ -627,7 +627,7 @@ at 10 kHz, 3.34 at 16 kHz, 5.77 at 20 kHz (a spread of 9 / 32 / 83 µs): the sha
 excess a headroom matter (and what a saturator after it sees). Both still exceed the ideal by up to 1.35–1.67× with
 the 2× ADAA2 equaliser (0.99–1.01× without it below 1.8 kHz): open, PLANS/2026-10-20-instrument-2x-folder-peaks.md.
 
-## Defined-latency pad (m4l_dev/techniques/defined_latency_pad.py)
+## Defined-latency pad (twosl_dsp/techniques/defined_latency_pad.py)
 
 What it serves: Live's Defined Latency is whole samples (references/README.md, "Defined Latency": the Max user guide
 "Type in a value for the latency value in samples"; saved as the patcher's integer `"latency"`). A device whose paths
@@ -651,7 +651,7 @@ at Δ = N − 1 + frac(P), after the whole rest (Δ in (N − 1, N) is where eac
 0.49 samples to 2 / 10 / 18 / 20 kHz; order 4 (pads of 3 or more) 1e-4 / 0.0023 / 0.14 / 0.30. A whole pad is a ring of
 Histories, exact; a pad of 0 is the input.
 
-## Dispersive-loop spring tank (m4l_dev/techniques/dispersive_loop_spring_tank.py)
+## Dispersive-loop spring tank (twosl_dsp/techniques/dispersive_loop_spring_tank.py)
 
 No outside source for the structure: it is 2sl gate's spring (src/gate_dsp.py, `_spring_code`, gate commit
 68bfd110), moved into the kit so a second device can have it, stated whole in the module docstring. A delay line a
@@ -663,7 +663,7 @@ writes back. The all-pass's group delay is Parker 2011's eq. 5 (below), (1 − a
 it first). The parametric spring reverb (next) is the kit's chirping spring. Gate's numbers in the kit:
 `Buchla208SpringReverb` (references/circuits/buchla-208-spring-reverb.md), which renders gate's own code (tested).
 
-## Parametric spring reverb (m4l_dev/techniques/parametric_spring_reverb.py)
+## Parametric spring reverb (twosl_dsp/techniques/parametric_spring_reverb.py)
 
 **Parker & Bilbao, "Spring reverberation: a physical perspective", DAFx-09** (`parker-bilbao-dafx09.pdf`):
 - §3: "The nature of these echoes can be described by two parameters - the transition frequency F_C, and the time
@@ -790,4 +790,4 @@ reached), so it names what could have come next, not what was wrong.
   counters"; "With looping constructs, GenExpr supports `break` and `continue` statements. `break` causes an early
   exit from a loop[;] `continue` causes the loop to start the next iteration without finishing the current one." The
   kit renderer takes the guide's `for` with literal start, limit and step (so its count is known when the code is
-  checked), `break` and `continue`, and refuses `while` and any `for` it cannot bound (m4l_dev/genexpr.py).
+  checked), `break` and `continue`, and refuses `while` and any `for` it cannot bound (twosl_dsp/genexpr.py).

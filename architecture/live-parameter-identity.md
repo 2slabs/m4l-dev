@@ -7,7 +7,7 @@ exponent, and an enum's value as an index into its items. Change one of those an
 somewhere else, or nowhere.
 
 So every device repository keeps `src/live-parameters.lock.json`: one line per Live parameter, in patch order (Live's
-order), plus the device type. `m4l_dev/live_parameter_identity.py` makes the identity from the built patch:
+order), plus the device type. `twosl_dsp/live_parameter_identity.py` makes the identity from the built patch:
 
     maxclass, varname, long_name, short_name, type, items, minimum, maximum, exponent, unit_style, initial,
     initial_enabled, visibility, live_item_names (live.text: its automation / automationon names)

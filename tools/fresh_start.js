@@ -2,7 +2,7 @@
 // holds after the header's ready: node tools/fresh_start.js <device folder> [<saved values JSON>]
 // The saved values ({varname: number}) are what a set or preset recalls before ready; a control it doesn't name holds
 // Live's initial value (its neutral, the fresh-start flag 0). Prints {"values": {varname: number}, "errors": [...],
-// "posts": [...]} (m4l_dev/fresh_start.py reads it).
+// "posts": [...]} (twosl_dsp/fresh_start.py reads it).
 "use strict";
 const vm = require("vm");
 const fs = require("fs");

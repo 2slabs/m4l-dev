@@ -1,13 +1,13 @@
-"""The kit's preset-loudness harness (m4l_dev/preset_loudness.py): the phrase, and the comparison against Init."""
+"""The kit's preset-loudness harness (twosl_dsp/preset_loudness.py): the phrase, and the comparison against Init."""
 import math
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import bs1770, preset_loudness  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp import bs1770, preset_loudness  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
 
 
 class PhraseTests(unittest.TestCase):

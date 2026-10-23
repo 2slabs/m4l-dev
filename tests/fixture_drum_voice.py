@@ -12,7 +12,7 @@ KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if KIT_DIRECTORY not in sys.path:
     sys.path.insert(0, KIT_DIRECTORY)
 
-from m4l_dev.patch_match_voice import MatchedParameter, MatchedVoice, MatchTrigger  # noqa: E402
+from twosl_dsp.patch_match_voice import MatchedParameter, MatchedVoice, MatchTrigger  # noqa: E402
 
 FIXTURE_DRUM_CODE = """
 decay_coefficient(milliseconds) {

@@ -11,7 +11,7 @@ random reset (how many bars until we go back to the seed restart) and a way to s
   It is the kit's only generator: a device that needs numbers from a value of its own (2sl drums' random function,
   seeded by its settings) uses `seededSequence(seed)` directly.
 - **At audio rate** (gen~, where the brain cannot draw a number a sample): the `SeededWhiteNoise` technique
-  (Park-Miller's minimal standard, m4l_dev/techniques/seeded_white_noise.py) makes the samples, its seed drawn from
+  (Park-Miller's minimal standard, twosl_dsp/techniques/seeded_white_noise.py) makes the samples, its seed drawn from
   the brain's sequence (`floor(randomNext() * 2147483646)`) and sent to gen~, so its noise starts over with Seed and
   Loop like every other draw. gen~'s own noise() cannot be seeded and is not used for anything a seed must repeat.
 - **When it starts over** (`templates/seeded-random.template.js`): when Seed changes; when Live starts playing (so
@@ -23,7 +23,7 @@ random reset (how many bars until we go back to the seed restart) and a way to s
 - **Draws compare against the control** where a control sets a chance (fire if the draw is under Density): turning
   the control thins or thickens what plays. Drawing more or fewer numbers (another chord size, another Density)
   moves every later draw; that is accepted (user).
-- **Controls** (`m4l_dev/seeded_random.py`): Seed, 0-999 (a float with Live's Int unit style, the brain taking the
+- **Controls** (`twosl_dsp/seeded_random.py`): Seed, 0-999 (a float with Live's Int unit style, the brain taking the
   nearest whole number: the Live preset writer knows only float and enum parameters), a live.numbox in the row band
   (`seed_control`) or a live.dial in the dial band (`seed_dial`); the two are one parameter to Live (its long name,
   range and unit), so a device moving between them keeps its sets' Seed and automation, and only the lock's maxclass

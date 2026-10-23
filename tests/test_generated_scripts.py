@@ -1,12 +1,12 @@
-"""Templates and the ES5 check (m4l_dev/generated_scripts.py, m4l_dev/es5.py)."""
+"""Templates and the ES5 check (twosl_dsp/generated_scripts.py, twosl_dsp/es5.py)."""
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import es5  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.generated_scripts import check_es5, fill_template, kit_template_text  # noqa: E402
+from twosl_dsp import es5  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.generated_scripts import check_es5, fill_template, kit_template_text  # noqa: E402
 
 
 class FillTemplateTests(unittest.TestCase):

@@ -1,13 +1,13 @@
 # Buchla 292 low pass gate: the vactrol and the network
 
-The circuit behind `m4l_dev/circuit_modules/buchla_292_low_pass_gate_channel.py` (architecture/dsp-blocks.md, "Circuit
+The circuit behind `twosl_dsp/circuit_modules/buchla_292_low_pass_gate_channel.py` (architecture/dsp-blocks.md, "Circuit
 modules"): one channel of the 292, its vactrol and its audio network. Written 2026-10-18 for 2sl gate from its LPG
 audit (§1-§5); §6 is from 2sl gate's research brief (2026-10-17); both moved here with the module on 2026-10-20. What
 the strike is (a hit's strength as an LED current) and the level-mode loudness are 2sl gate's (§3), kept here because
 they are measured on this circuit. `fetch-circuit-sources.sh` downloads every source below into `sources/` (not in
 git) and checks it is the copy this was read from (sha256).
 
-## Buchla 292 low pass gate channel (m4l_dev/circuit_modules/buchla_292_low_pass_gate_channel.py)
+## Buchla 292 low pass gate channel (twosl_dsp/circuit_modules/buchla_292_low_pass_gate_channel.py)
 
 The network (§2: DAFx-13 eqs. 7-8, 11, Table 1; prewarped at its -3 dB corner), the photocell fit and the LED driver's
 current range (§3), the vactrol's time behaviour (§4, §5: a measured VTL5C3/2 turn-off). The CV shelf of the control
@@ -43,7 +43,7 @@ from verified inputs; the method is given. Page numbers are PDF pages (`pdftotex
   physically reasonable parameter values and under any rate of modulation". The authors' `LPG_nonlin.gendsp` uses
   `f = 0.5/samplerate`, i.e. g = ω/(2·sr), no prewarp. The core (0.3.15) uses the kit's state-variable block (TPT, the
   same form) at ω_n = sqrt(α1/α3) and damping α2/sqrt(α1 α3), output × 1/α1, but prewarped (Zavalishin eq. 3.18,
-  m4l-dev references/dsp.md) at the -3 dB corner below, held at 16 kHz (eq. 3.21): level and both are overdamped, so
+  2sl-dsp references/dsp.md) at the -3 dB corner below, held at 16 kHz (eq. 3.21): level and both are overdamped, so
   the corner is far below ω_n, which passes Nyquist at bright hits (294 kHz in level mode at a full hit).
   **[MEASURED]** Unprewarped, the corner lands flat by the bilinear warp alone, the same in every mode: −3 / −12 /
   −45 / −98 / −165 / −243 cents at 1 / 2 / 4 / 6 / 8 / 10 kHz (44.1 kHz). Prewarped at it: 0.0 cents up to 16 kHz in

@@ -1,4 +1,4 @@
-"""The spring tank modules' one interface (m4l_dev/circuit_modules/buchla_208_spring_reverb.py,
+"""The spring tank modules' one interface (twosl_dsp/circuit_modules/buchla_208_spring_reverb.py,
 accutronics_type_9_spring_tank.py, grampian_636_spring_reverb.py; architecture/dsp-blocks.md, "Spring tanks"): one set
 of controls drives any of them, and each says its wet's level so a device can switch tanks without a jump. Rendered
 through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
@@ -10,10 +10,10 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.accutronics_type_9_spring_tank import AccutronicsType9SpringTank  # noqa: E402
-from m4l_dev.circuit_modules.buchla_208_spring_reverb import Buchla208SpringReverb  # noqa: E402
-from m4l_dev.circuit_modules.grampian_636_spring_reverb import Grampian636SpringReverb  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.accutronics_type_9_spring_tank import AccutronicsType9SpringTank  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_208_spring_reverb import Buchla208SpringReverb  # noqa: E402
+from twosl_dsp.circuit_modules.grampian_636_spring_reverb import Grampian636SpringReverb  # noqa: E402
 from gen_block_harness import harness  # noqa: E402
 
 SAMPLERATE = 44100.0

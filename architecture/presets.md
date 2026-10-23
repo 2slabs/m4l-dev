@@ -1,7 +1,7 @@
 # Presets: one preset book, two outputs
 
 A device keeps its neutral values, its Init values and its presets in one JSON file, its preset book
-(`m4l_dev/preset_book.py`):
+(`twosl_dsp/preset_book.py`):
 
 ```json
 {"neutral": {"Cutoff": 12000, "Env Amount": 0},
@@ -65,8 +65,8 @@ What a device must do: give `"neutral"` in its preset book for every control it 
 not the kit's) and for every field of a stored table with an editor; accept the lock change
 (`--accept-live-parameter-changes`: every initial value that moves, and the new "Init Applied" parameter); a plugin
 port regenerates its header (`Parameter::neutral` the host's default, `Parameter::start` set on construction,
-plugins.md). Its tests hold three things: every parameter's initial value in the lock is its neutral (patch.neutral_values);
-a fresh device holds its start values after ready (`m4l_dev/fresh_start.py` `controls_after_ready`: the built UI
+2sl-plugin's architecture/plugins.md). Its tests hold three things: every parameter's initial value in the lock is its neutral (patch.neutral_values);
+a fresh device holds its start values after ready (`twosl_dsp/fresh_start.py` `controls_after_ready`: the built UI
 script in node on the controls as Live loads them) and so plays the Init sound (rendered from those values, compared
 with Init's by `assert_renders_similar`); a set saved with other values (a preset's, the flag at 1:
 `saved_values_of`) comes back unchanged.
@@ -90,7 +90,7 @@ Params first: `GenProgram.run` refuses while one is unset, `genexpr_export.expor
 
 The same book makes either or both outputs:
 
-- **Live preset files** (`.adv`, `m4l_dev/live_preset_files.py`), when the device passes `LivePresetFiles(...)` to
+- **Live preset files** (`.adv`, `twosl_dsp/live_preset_files.py`), when the device passes `LivePresetFiles(...)` to
   `build_device`: one file per preset next to the development device and next to the frozen release, named
   `<group> - <name>.adv` (`<name>.adv` for the group `init`), each made for that exact device file (its name, size and
   CRC). Stored Only parameters go in the preset's blob: a stored table's from the preset itself (stored-table.md),
@@ -107,8 +107,8 @@ preset of that name) are removed from devices/ with a line in the build's log.
 
 A device's presets are levelled to its Init sound: each preset's output level (the header's level control, a preset
 value like any other) is set so the preset's loudest moment on one phrase is as loud as Init's: the maximum momentary
-loudness, EBU Tech 3341's 400 ms sliding window over ITU-R BS.1770-5's K-weighted loudness (`m4l_dev/preset_loudness.py`
-`phrase_measures`, `m4l_dev/bs1770.py`, references/itu-r-bs1770.md, references/ebu-tech-3341.md), its peaks under the
+loudness, EBU Tech 3341's 400 ms sliding window over ITU-R BS.1770-5's K-weighted loudness (`twosl_dsp/preset_loudness.py`
+`phrase_measures`, `twosl_dsp/bs1770.py`, references/itu-r-bs1770.md, references/ebu-tech-3341.md), its peaks under the
 device's output ceiling (`presets_over_the_clip`): full scale, 0 dBFS (a device's output is clean: no soft clip,
 BUGS.md 2026-10-21), or the device's own limiter's ceiling where it has one. The loudest moment, not the phrase's average: a ping and a pad at the same
 level hit as hard, where the integrated loudness would pay the pad for lasting. A device's suite holds every preset

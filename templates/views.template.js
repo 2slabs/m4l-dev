@@ -1,5 +1,5 @@
 // /*SCRIPT_NAME*/-view.js: everything drawn (jsui), in the 2sl-ui look. One file, several displays, chosen by
-// jsarguments. The m4l-dev kit (templates/views.template.js) gives every device:
+// jsarguments. The 2sl-dsp kit (templates/views.template.js) gives every device:
 //   chrome  the device background: the header rule, rules between sections, labels and hints (per page)
 //   link    the 2sl wordmark chip: hover shows 2sl.to, click opens it
 // and the drawing helpers (Cozette text, chips, rects, the theme, every display's heading: viewHeading). The

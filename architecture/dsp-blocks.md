@@ -10,8 +10,8 @@ three layers; each layer uses only the layers below it:
 
 | layer | where | what it is | may use |
 |---|---|---|---|
-| 1. techniques | `m4l_dev/techniques/` (`Technique`) | how to do DSP well, with no circuit identity: antialiasing, zero-delay structures, a soft clip, an echo's loop | other techniques |
-| 2. circuit modules | `m4l_dev/circuit_modules/` (`CircuitModule`) | one modelled piece of hardware: a chip, a section of one, an instrument's circuit block | techniques |
+| 1. techniques | `twosl_dsp/techniques/` (`Technique`) | how to do DSP well, with no circuit identity: antialiasing, zero-delay structures, a soft clip, an echo's loop | other techniques |
+| 2. circuit modules | `twosl_dsp/circuit_modules/` (`CircuitModule`) | one modelled piece of hardware: a chip, a section of one, an instrument's circuit block | techniques |
 | 3. instruments | the devices' own repositories (2sl stab, gate, filter, drums) | wire modules and techniques, and either expose a module (gate shows the 259) or wrap it (drums) | modules, techniques |
 
 Every block is chosen by numbers against a stated reference (the analog model, the tempo grid, an oversampled ideal)
@@ -23,7 +23,7 @@ one, and a Mackie desk's channel and summing ("so it can sound like a mackie des
 
 ## The pattern every gen block keeps (both layers)
 
-- **Python**: a `Technique` or `CircuitModule` subclass (`m4l_dev/gen_blocks.py`; never `GenBlock` directly). An
+- **Python**: a `Technique` or `CircuitModule` subclass (`twosl_dsp/gen_blocks.py`; never `GenBlock` directly). An
   instance is made with a name and its inputs as GenExpr expressions
   (`ZeroDelayLadderFilter("ladder", input="osc", cutoff_hz="fc", resonance="reso")`). The name prefixes every
   History, Delay and local it makes; its outputs are locals named in its docstring (`ladder_out`). It gives
@@ -42,7 +42,7 @@ one, and a Mackie desk's channel and summing ("so it can sound like a mackie des
 - **Constants** a display also needs come from the block, never a copy: a block with a display gives
   `response_script_code()` (an ES5 template in `templates/`, filled from the block's constants), and a test holds the
   script, the Python formula and the rendered block equal.
-- **Only what Max accepts.** The kit renderer (`m4l_dev/genexpr.py`) is our subset, not Max: every construct a block
+- **Only what Max accepts.** The kit renderer (`twosl_dsp/genexpr.py`) is our subset, not Max: every construct a block
   uses has a source or a real GenExpr precedent in references/dsp.md ("gen~").
 - **Cites its sources**: the class's `references_entry` is a references/ file with a `## ` heading naming the block's
   source file, and the block's docstring names that file.
@@ -131,7 +131,7 @@ circuit modules too.
 
 ## Circuit modules (layer 2)
 
-A circuit module is one modelled piece of hardware, one module file each, in `m4l_dev/circuit_modules/`. Its
+A circuit module is one modelled piece of hardware, one module file each, in `twosl_dsp/circuit_modules/`. Its
 interface:
 
 - **Inputs are the circuit's**: its controls and CV in the circuit's units: volts at its pins, its clock in Hz, the
@@ -196,7 +196,7 @@ The three spring tank modules take the same controls, so an instrument switches 
 
 ## What is enforced (tests/test_gen_block_layers.py)
 
-- every `GenBlock` subclass in `m4l_dev/` is in `techniques/` (a `Technique`) or `circuit_modules/` (a
+- every `GenBlock` subclass in `twosl_dsp/` is in `techniques/` (a `Technique`) or `circuit_modules/` (a
   `CircuitModule`), never both;
 - a technique imports only `gen_blocks`, `build_error`, `generated_scripts`, `generated_numbers`, other techniques
   and the standard library (so never a circuit module); a circuit module the same plus techniques;

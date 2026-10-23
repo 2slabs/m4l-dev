@@ -1,4 +1,4 @@
-"""The kit's model-accuracy check (m4l_dev/model_accuracy.py, architecture/testing.md): within the tolerance passes and
+"""The kit's model-accuracy check (twosl_dsp/model_accuracy.py, architecture/testing.md): within the tolerance passes and
 says its largest difference; over it, another length, a NaN, or a tolerance without its reason fails loudly."""
 import math
 import os
@@ -6,7 +6,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.model_accuracy import assert_matches_model  # noqa: E402
+from twosl_dsp.model_accuracy import assert_matches_model  # noqa: E402
 
 REASON = "a stand-in reason"
 

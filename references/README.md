@@ -46,7 +46,7 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
 - **Time value syntax** (Max user guide): https://docs.cycling74.com/userguide/time_value_syntax/
   "one tick is 1/480 of a quarter note (equivalently, there are 480 ticks in one quarter note)".
   So a 16th is 120 ticks.
-  Its "Note Values in Ticks" table, every note value Max knows (m4l_dev/max_time_values.py's MAX_NOTE_VALUE_TICKS;
+  Its "Note Values in Ticks" table, every note value Max knows (twosl_dsp/max_time_values.py's MAX_NOTE_VALUE_TICKS;
   anything else shaped like one, e.g. `64nt`, isn't a time value, and the build refuses it in a [metro] / [delay] /
   ... box): 1nd 2880, 1n 1920, 1nt 1280, 2nd 1440, 2n 960, 2nt 640, 4nd 720, 4n 480, 4nt 320, 8nd 360, 8n 240,
   8nt 160, 16nd 180, 16n 120, 16nt 80, 32nd 90, 32n 60, 32nt 40, 64nd 45, 64n 30, 128n 15 (ticks).
@@ -119,7 +119,7 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
   automatable parameter list). 2 = Hidden is the inspector's order (Automated and Stored, Stored Only, Hidden),
   not yet seen in a saved file: a preset saved from this build should have no "Page" anywhere.
 
-## Live presets (m4l_dev/live_preset_files.py: the .adv files)
+## Live presets (twosl_dsp/live_preset_files.py: the .adv files)
 
 - **The Max Audio Effect example** (`ableton/example-max-audio-effect-preset.adv`, and `.xml`): a preset Live
   12.4.15b7 saved (2026-10-18) from a probe audio effect with a float, an enum (live.tab), an Int (live.numbox) and a
@@ -221,4 +221,4 @@ levelled by: `ebu-tech-3341.md`; `fetch-ebu-tech-3341.sh` downloads and checks t
 - **live.dial** (Max reference): https://docs.cycling74.com/reference/live.dial lists `fontname`, `fontsize`
   ("possible values from 8 to 72") and `fontface` with no default (checked 2026-10-18). No source here gives the
   font Live draws a dial's name, a menu's item or a live.text's text in, or its metrics, so the kit's stand-in
-  (Liberation Sans at 11 px, m4l_dev/layout_rules.py) stays a calibration (SHORTCUTS.md).
+  (Liberation Sans at 11 px, twosl_dsp/layout_rules.py) stays a calibration (SHORTCUTS.md).

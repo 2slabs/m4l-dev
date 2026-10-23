@@ -1,6 +1,6 @@
 # The Moog transistor ladder (904A / Minimoog VCF): sources, the circuit as drawn, the model the module runs
 
-Written 2026-10-20 for the kit's circuit module `m4l_dev/circuit_modules/moog_transistor_ladder.py` (the catalogue's
+Written 2026-10-20 for the kit's circuit module `twosl_dsp/circuit_modules/moog_transistor_ladder.py` (the catalogue's
 shortlist #1, references/circuit-module-catalogue.md §8). `references/circuits/fetch-circuit-sources.sh` downloads
 every source below into `references/circuits/sources/` (not in git) and checks it is the copy this was read from
 (sha256).
@@ -10,7 +10,7 @@ Tags: **[VERIFIED]** read in the source itself this session (file, page / equati
 **[UNVERIFIED]** a memory, a search excerpt, or a design choice with no source; do not build on it as fact.
 **[MEASURED]** our own numbers, from the research scripts named.
 
-## Moog transistor ladder (m4l_dev/circuit_modules/moog_transistor_ladder.py)
+## Moog transistor ladder (twosl_dsp/circuit_modules/moog_transistor_ladder.py)
 
 The module: the large-signal model of §3 (five tanh: the input pair and the four stages), the trapezoidal rule on all
 of it with the loop solved by Newton's method (§6), two steps a host sample by default, the cutoff from the control

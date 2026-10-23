@@ -1,4 +1,4 @@
-"""The Buchla 259 modulation oscillator module (m4l_dev/circuit_modules/buchla_259_modulation_oscillator.py): its
+"""The Buchla 259 modulation oscillator module (twosl_dsp/circuit_modules/buchla_259_modulation_oscillator.py): its
 waves are the trivial waves now (the look-ahead undone), band-limited, restartable, with their running integral,
 through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
 import math
@@ -8,11 +8,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.circuit_modules.buchla_259_modulation_oscillator import (  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_259_modulation_oscillator import (  # noqa: E402
     WAVES, Buchla259ModulationOscillator)
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
 from gen_block_harness import worst_alias_db  # noqa: E402
 
 SAMPLERATE = 44100.0

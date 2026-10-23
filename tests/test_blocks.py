@@ -1,4 +1,4 @@
-"""The kit's blocks as a device build uses them (m4l_dev/chord_block.py, seeded_random.py): the chord shapes fitted
+"""The kit's blocks as a device build uses them (twosl_dsp/chord_block.py, seeded_random.py): the chord shapes fitted
 to a device's notes, the blocks' order and dependency rules. Builds small patches in memory; writes nothing. Their
 scripts run in node in tests/kit-scripts.test.js (on the fixture device)."""
 import os
@@ -7,10 +7,10 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import chord_block  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.chord_block import ChordBlock  # noqa: E402
-from m4l_dev.seeded_random import SeededRandom  # noqa: E402
+from twosl_dsp import chord_block  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.chord_block import ChordBlock  # noqa: E402
+from twosl_dsp.seeded_random import SeededRandom  # noqa: E402
 from test_patch_builder import builder, preset_book  # noqa: E402
 
 

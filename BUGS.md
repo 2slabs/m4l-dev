@@ -1,7 +1,7 @@
 # Bugs and notes
 
 ## Every device soft clips its output, always (Graham, 2026-10-21)
-Every 2sl device ends in the kit's knee soft clip (`m4l_dev/techniques/knee_soft_clip.py`), with no way to turn it off,
+Every 2sl device ends in the kit's knee soft clip (`twosl_dsp/techniques/knee_soft_clip.py`), with no way to turn it off,
 and none of them says so on its face. Graham didn't know it was there and doesn't want it as a default.
 
 | device | where | knee |

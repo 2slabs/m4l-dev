@@ -1,4 +1,4 @@
-// The kit's Mu-Tron Bi-Phase (m4l_dev/circuit_modules/mutron_bi_phase.py), one instance of it, as a display draws it:
+// The kit's Mu-Tron Bi-Phase (twosl_dsp/circuit_modules/mutron_bi_phase.py), one instance of it, as a display draws it:
 // one phasor's small-signal response (the module's phasor_response, magnitude, the foot switch on) and its notches
 // (phasor_notches_hz, the same steps), from what the running module puts out: the stage corner, the feedback pot's
 // wiper position and the stages' spread (`<name>_corner_<side>_hz`, `<name>_pot_<side>`, `<name>_stage_corner_spread`).

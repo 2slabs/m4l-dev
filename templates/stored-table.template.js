@@ -1,6 +1,6 @@
-// ---- the m4l-dev kit's stored tables (templates/stored-table.template.js; architecture/stored-table.md) ----------
+// ---- the 2sl-dsp kit's stored tables (templates/stored-table.template.js; architecture/stored-table.md) ----------
 // A table of values (rows x fields) Live saves with the set and in presets as Stored Only parameters, 16 bits each
-// (m4l_dev/stored_table.py packs them the same way). The brain holds the table and is the only thing that changes it:
+// (twosl_dsp/stored_table.py packs them the same way). The brain holds the table and is the only thing that changes it:
 //   - Live recalls a stored parameter (a set loading, a Live preset, the Preset menu): `<its varname> <code>` comes
 //     in; the brain unpacks it, keeps each changed value, shows it on its editor, and tells the table's listener;
 //   - an editor (a Hidden control showing one value) is turned: `<its varname> <value>`, taken once the device is

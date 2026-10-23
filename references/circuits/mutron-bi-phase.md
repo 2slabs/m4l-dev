@@ -1,7 +1,7 @@
 # The Mu-Tron Bi-Phase and the phasers it is compared with: sources, the circuit as drawn
 
 Written 2026-10-20 for the kit's phaser block ("a bi-phase ... absolutely freaking nail that water phaser sound",
-user, 2026-10-20); the circuit behind `m4l_dev/circuit_modules/mutron_bi_phase.py` (the last section says what the
+user, 2026-10-20); the circuit behind `twosl_dsp/circuit_modules/mutron_bi_phase.py` (the last section says what the
 module takes from here). `references/fetch-phaser-diffusion-sources.sh` downloads every source below into
 `references/phaser-diffusion-sources/` (not in git) and checks it is the copy this was read from (sha256 / a phrase).
 
@@ -227,7 +227,7 @@ spaced notches" [VERIFIED]. (Equal stages, as in the Bi-Phase, are still non-uni
   that says what gives the Bi-Phase its "water" (the user's word); the best candidates to test by listening are the
   feedback peaks, the optical skew, and Rev-sync stereo, ranked by the kit's own matcher against a recording.
 
-## 8. Mu-Tron Bi-Phase (m4l_dev/circuit_modules/mutron_bi_phase.py)
+## 8. Mu-Tron Bi-Phase (twosl_dsp/circuit_modules/mutron_bi_phase.py)
 
 What the kit's module takes from the sections above, what it derives, and what it had to choose. Written 2026-10-20.
 
@@ -261,7 +261,7 @@ A's whole output into B); the Depth pots R131 / R138 10k over R96 / R105 560 Ω;
   range); (2) C12 0.47 µF into R26 4.7 kΩ (Z9B's virtual ground) ∥ the feedback pot (re-read on sheets 1 and
   2 this session: Z3B pin 7 → C12 → J1-1 → R26 and R133) cuts the wet below 106–137 Hz while C14's mix high-pass
   passes it from 44 Hz, so from ~44 to ~110 Hz the output is `(1 − α) dry`, −6 dB at α = 0.5. On the kit's effect
-  inputs (drums, bass, pad, a full mix, chords and a kick; m4l_dev/preset_loudness.py) 2sl phaser's presets, Output
+  inputs (drums, bass, pad, a full mix, chords and a kick; twosl_dsp/preset_loudness.py) 2sl phaser's presets, Output
   0 dB, lose 2.0–2.8 dB (median of the five) at low and moderate feedback (high feedback's peaks give some back:
   −0.9 dB with both at 80 in series; full feedback with an 18 Hz square sweep is +1.1 dB), of which C12 is ~1.4 dB on the classic setting (Init: −2.21 dB as
   drawn, −0.78 dB with C12 made huge) and the notches the rest; R123 moves it by under 0.2 dB (α 0.4: −2.18, α 0.6:

@@ -1,4 +1,4 @@
-// The kit's sidechain-style pump (m4l_dev/techniques/sidechain_style_pump.py) as a display draws it: the duck (0..1)
+// The kit's sidechain-style pump (twosl_dsp/techniques/sidechain_style_pump.py) as a display draws it: the duck (0..1)
 // at a phase of a division, a quarter sine in over the attack, then the curved recovery. The constants are the
 // technique's, filled in by the build.
 var SIDECHAIN_PUMP_LOWEST_ATTACK_FRACTION = /*SIDECHAIN_PUMP_LOWEST_ATTACK_FRACTION*/;

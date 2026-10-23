@@ -5,7 +5,7 @@ Every 2sl Max for Live device has its own repository, with the kit as a git subm
 ```
 <device repo>/
   build.py                     the entry point: python3 build.py [--accept-live-parameter-changes]
-  m4l-dev/                     this kit (git submodule add https://github.com/2slabs/m4l-dev.git m4l-dev)
+  2sl-dsp/                     this kit (git submodule add https://github.com/2slabs/2sl-dsp.git 2sl-dsp)
   src/                         hand-written sources only: the device's Python, its script templates, its preset
                                book, and live-parameters.lock.json (written by the build, reviewed by hand)
   devices/<script name>/       the development build, written by the build and committed: <name>.maxpat,
@@ -15,8 +15,8 @@ Every 2sl Max for Live device has its own repository, with the kit as a git subm
   tests/  references/  architecture/  README.md  LICENSE  SHORTCUTS.md
 ```
 
-`build.py` puts `m4l-dev/` and `src/` on `sys.path`, then `DeviceRepository.of_build_script(__file__)` finds the
-root from the entry point and fails loudly unless `src/` exists, `m4l-dev/` is an initialised submodule, and the kit
+`build.py` puts `2sl-dsp/` and `src/` on `sys.path`, then `DeviceRepository.of_build_script(__file__)` finds the
+root from the entry point and fails loudly unless `src/` exists, `2sl-dsp/` is an initialised submodule, and the kit
 running is that submodule (not another checkout that happened to be on the path).
 
 Why:

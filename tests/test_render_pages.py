@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(os.path.dirname(HERE), "tools")]
 import fixture_device  # noqa: E402
 import render_pages  # noqa: E402
-from m4l_dev import layout_rules  # noqa: E402
+from twosl_dsp import layout_rules  # noqa: E402
 
 
 class RenderPagesTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-// ---- the m4l-dev kit's seeded random (templates/seeded-random.template.js; architecture/seeded-random.md) ---------
+// ---- the 2sl-dsp kit's seeded random (templates/seeded-random.template.js; architecture/seeded-random.md) ---------
 // One generator per device: everything random the device does (a stab firing, a voicing, a throw, a random
 // modulator's next value) is randomNext(), the next number of the sequence Seed starts. Loop starts it over:
 //   - while Live plays, whenever the song position enters another Loop (every Loop bars of 16 16ths, counted from

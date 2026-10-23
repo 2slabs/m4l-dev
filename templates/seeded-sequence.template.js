@@ -1,4 +1,4 @@
-// ---- the m4l-dev kit's seeded sequence (templates/seeded-sequence.template.js) ----------------------------------
+// ---- the 2sl-dsp kit's seeded sequence (templates/seeded-sequence.template.js) ----------------------------------
 // mulberry32 (Tommy Ettinger, public domain; references/README.md "Randomness"): a 32-bit state stepped by a Weyl
 // constant and mixed with 32-bit multiplies and shifts, which JavaScript does exactly on 32-bit integers, so Max's
 // [js] and node give the same numbers. seededSequence(seed) -> a function giving the next number in [0, 1) each

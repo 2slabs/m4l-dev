@@ -3,7 +3,7 @@
 What a key plays, shared by every device that plays chords (2sl stab, 2sl gate). User, 2026-10-18: "the chord block
 i think is shared code and should be treated as such". It will grow; it grows here.
 
-- **Shapes** (`m4l_dev/chord_block.py`, `CHORD_SHAPES`): minor, m7, m9, m11, sus4, fifths, dark, each a list of tones
+- **Shapes** (`twosl_dsp/chord_block.py`, `CHORD_SHAPES`): minor, m7, m9, m11, sus4, fifths, dark, each a list of tones
   (degree, semitones above the key, scale steps above the key). The Chord menu is `held notes` and then these;
   a device that can sound one key alone puts `one note` first (`ChordBlock(..., one_note=True)`; 2sl gate: one
   oscillator, the last key wins, where it had a Mono / Chords switch: one choice, one menu). The brain asks

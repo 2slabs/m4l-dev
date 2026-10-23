@@ -1,4 +1,4 @@
-// ---- the m4l-dev kit's chord display (templates/chord-display.template.js; architecture/chord-block.md) ---------
+// ---- the 2sl-dsp kit's chord display (templates/chord-display.template.js; architecture/chord-block.md) ---------
 // What the chord block sounds: the kit's heading, the device's label with the notes as its reading (or, in orange,
 // the In key notice across the top line); below, the chord's name large; then two octaves of keys from the C at or
 // below the lowest note, the sounding ones lit. Drawn with the kit's views helpers. The device's views code passes every message to

@@ -13,16 +13,16 @@ KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if KIT_DIRECTORY not in sys.path:
     sys.path.insert(0, KIT_DIRECTORY)
 
-from m4l_dev import layout_rules  # noqa: E402
-from m4l_dev.chord_block import ChordBlock  # noqa: E402
-from m4l_dev.generated_scripts import fill_template  # noqa: E402
-from m4l_dev.device_build import build_device  # noqa: E402
-from m4l_dev.device_repository import DeviceRepository  # noqa: E402
-from m4l_dev.live_preset_files import LivePresetFiles  # noqa: E402
-from m4l_dev.patch_builder import DevicePatchBuilder  # noqa: E402
-from m4l_dev.preset_book import PresetBook  # noqa: E402
-from m4l_dev.seeded_random import SeededRandom  # noqa: E402
-from m4l_dev.stored_table import ChoiceField, ContinuousField, StoredTable, stored_tables_brain_code  # noqa: E402
+from twosl_dsp import layout_rules  # noqa: E402
+from twosl_dsp.chord_block import ChordBlock  # noqa: E402
+from twosl_dsp.generated_scripts import fill_template  # noqa: E402
+from twosl_dsp.device_build import build_device  # noqa: E402
+from twosl_dsp.device_repository import DeviceRepository  # noqa: E402
+from twosl_dsp.live_preset_files import LivePresetFiles  # noqa: E402
+from twosl_dsp.patch_builder import DevicePatchBuilder  # noqa: E402
+from twosl_dsp.preset_book import PresetBook  # noqa: E402
+from twosl_dsp.seeded_random import SeededRandom  # noqa: E402
+from twosl_dsp.stored_table import ChoiceField, ContinuousField, StoredTable, stored_tables_brain_code  # noqa: E402
 
 FIXTURE_SCRIPT_NAME = "kit-fixture"
 FIXTURE_PRESET_BOOK = {

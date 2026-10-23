@@ -5,7 +5,7 @@ level". https://www.itu.int/dms_pubrec/itu-r/rec/bs/R-REC-BS.1770-5-202311-I!!PD
 Fetched 2026-10-19, sha256 eefb926f72f72a96b96f251067bfee0650a0f29a26f60661d354162038b041ad;
 `fetch-itu-r-bs1770.sh` gets the same copy. PRIMARY (the standard). Text read with `pdftotext -layout`.
 
-Used by `m4l_dev/bs1770.py` (the meter) and, through it, `m4l_dev/preset_loudness.py`: every preset's loudness
+Used by `twosl_dsp/bs1770.py` (the meter) and, through it, `twosl_dsp/preset_loudness.py`: every preset's loudness
 against Init's, in each device's tests.
 
 ## Annex 1: loudness

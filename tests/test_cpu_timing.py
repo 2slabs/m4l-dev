@@ -1,4 +1,4 @@
-"""The kit's one way to time something (m4l_dev/cpu_timing.py, architecture/testing.md "Timing tests"): CPU time,
+"""The kit's one way to time something (twosl_dsp/cpu_timing.py, architecture/testing.md "Timing tests"): CPU time,
 a child process's included on PROCESS_AND_CHILDREN, the load read first, NOT JUDGED when the machine had no room."""
 import os
 import subprocess
@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.cpu_timing import PROCESS_AND_CHILDREN, PROCESS_AND_CHILDREN_RESOLUTION_SECONDS, THREAD, CpuTiming  # noqa: E402
+from twosl_dsp.cpu_timing import PROCESS_AND_CHILDREN, PROCESS_AND_CHILDREN_RESOLUTION_SECONDS, THREAD, CpuTiming  # noqa: E402
 
 BUSY_CHILD_SECONDS = 0.2
 # the child spins until its own CPU clock has passed BUSY_CHILD_SECONDS, so its CPU time is at least that by

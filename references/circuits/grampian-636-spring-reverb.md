@@ -5,7 +5,7 @@ Written 2026-10-21 for 2sl dub's studio tank (2sl dub SPEC §3.3), from 2sl dub'
 Tags: **VERIFIED** (primary source read), **SECONDARY**, **COMPUTED**, **UNVERIFIED**, **ASSUMED** (a number we had to
 pick), **DESIGN** (a choice), **MEASURED** (the module, rendered).
 
-## Grampian 636 spring reverb (m4l_dev/circuit_modules/grampian_636_spring_reverb.py)
+## Grampian 636 spring reverb (twosl_dsp/circuit_modules/grampian_636_spring_reverb.py)
 
 Two springs, 29 / 37 ms, on the kit's parametric spring reverb (references/dsp.md), driven flat (constant current).
 Its interface is the kit's spring tank interface (architecture/dsp-blocks.md, "Spring tanks"). Measured

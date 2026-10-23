@@ -1,8 +1,8 @@
-// ---- the m4l-dev kit's chord block (templates/chord-block.template.js; architecture/chord-block.md) --------------
+// ---- the 2sl-dsp kit's chord block (templates/chord-block.template.js; architecture/chord-block.md) --------------
 // What a key plays: a stored chord shape stacked on it (fixed intervals, or Live 12's Scale Mode with In key), or,
 // with the shape "held notes", the key itself; the keys held (a key held twice, from two clips or two controllers,
 // is released by its last note-off); a name for any set of pitches; another voicing of a chord (Drift), drawn from
-// the kit's seeded random. The shapes are the kit's (m4l_dev/chord_block.py), fitted by the build to the notes the
+// the kit's seeded random. The shapes are the kit's (twosl_dsp/chord_block.py), fitted by the build to the notes the
 // device can sound for one chord.
 // The script that includes this defines DEVICE_NAME and includes the kit's seeded random (randomNext()); it passes
 // every control message to chordBlockMessage(name, args) (true when it took it: chord_shape, chord_in_key,

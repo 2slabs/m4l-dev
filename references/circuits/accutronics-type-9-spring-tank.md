@@ -6,7 +6,7 @@ references/dsp.md. Tags: **VERIFIED** (primary source read), **SECONDARY**, **CO
 numbers), **UNVERIFIED**, **ASSUMED** (a number we had to pick where no source gives one), **DESIGN** (a choice),
 **MEASURED** (the module, rendered).
 
-## Accutronics type 9 spring tank (m4l_dev/circuit_modules/accutronics_type_9_spring_tank.py)
+## Accutronics type 9 spring tank (twosl_dsp/circuit_modules/accutronics_type_9_spring_tank.py)
 
 Three springs, 33 / 37 / 41 ms, on the kit's parametric spring reverb (references/dsp.md), each with its own chirp;
 the guitar amp's current drive in front (§3); its recovery high-pass after (§3). Its interface is the kit's spring

@@ -14,11 +14,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 import fixture_device  # noqa: E402
-from m4l_dev import amxd  # noqa: E402
-from m4l_dev import live_preset_files  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.device_repository import KIT_DIRECTORY, DeviceRepository  # noqa: E402
-from m4l_dev.display_text import display_texts  # noqa: E402
+from twosl_dsp import amxd  # noqa: E402
+from twosl_dsp import live_preset_files  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.device_repository import KIT_DIRECTORY, DeviceRepository  # noqa: E402
+from twosl_dsp.display_text import display_texts  # noqa: E402
 
 DEVICE_FOLDER = os.path.join("devices", fixture_device.FIXTURE_SCRIPT_NAME)
 
@@ -262,10 +262,10 @@ class DeviceRepositoryTests(unittest.TestCase):
         os.makedirs(os.path.join(self.root, "src"))
         with self.assertRaisesRegex(BuildError, "git submodule update --init"):
             DeviceRepository.of_build_script(self.build_script)
-        os.makedirs(os.path.join(self.root, "m4l-dev", "m4l_dev"))
+        os.makedirs(os.path.join(self.root, "2sl-dsp", "twosl_dsp"))
         with self.assertRaisesRegex(BuildError, "isn't a git submodule checkout"):
             DeviceRepository.of_build_script(self.build_script)
-        open(os.path.join(self.root, "m4l-dev", ".git"), "w").close()
+        open(os.path.join(self.root, "2sl-dsp", ".git"), "w").close()
         with self.assertRaisesRegex(BuildError, "not this repository's submodule"):
             DeviceRepository.of_build_script(self.build_script)
 

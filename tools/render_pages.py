@@ -6,11 +6,11 @@ each page and each group choice shows (the UI script's PAGE_NAMES / PAGES / GROU
 
 One image per page and per choice of its group selectors: `<page>.png` is the page as it opens (every group on its
 first choice), `<page>--<selector>-<item>.png` each other choice. Plus `layout.txt`: per image, every shown box by
-band (x, width, the gap before it) and where a box leaves the layout contract (m4l_dev/layout_rules.py).
+band (x, width, the gap before it) and where a box leaves the layout contract (twosl_dsp/layout_rules.py).
 
-Positions, sizes, labels and colours (m4l_dev/themes.py) are exact; the controls' insides are drawn the plain way
+Positions, sizes, labels and colours (twosl_dsp/themes.py) are exact; the controls' insides are drawn the plain way
 (Live's own drawing isn't), and a display (jsui) is its frame and the text it draws when first painted (the views
-script run in Duktape, m4l_dev/display_text.py), not its other drawing. Cozette text is drawn
+script run in Duktape, twosl_dsp/display_text.py), not its other drawing. Cozette text is drawn
 from the glyphs the views use (templates/cozette-glyphs.js); Live's own font, which no source gives, is the kit's
 stand-in (layout_rules.LIVE_FONT_FILE_NAME at LIVE_FONT_PIXELS, found among LIVE_FONT_CANDIDATES), whose advances
 layout_rules.LIVE_FONT_ADVANCES holds: checked against the font file here.
@@ -32,9 +32,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, KIT_DIRECTORY)
-from m4l_dev import layout_rules  # noqa: E402
-from m4l_dev.display_text import display_texts  # noqa: E402
-from m4l_dev.themes import THEMES  # noqa: E402
+from twosl_dsp import layout_rules  # noqa: E402
+from twosl_dsp.display_text import display_texts  # noqa: E402
+from twosl_dsp.themes import THEMES  # noqa: E402
 
 COZETTE_GLYPHS_PATH = os.path.join(KIT_DIRECTORY, "templates", "cozette-glyphs.js")
 LIVE_FONT_CANDIDATES = (f"/usr/share/fonts/truetype/liberation/{layout_rules.LIVE_FONT_FILE_NAME}",

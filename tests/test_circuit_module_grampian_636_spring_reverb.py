@@ -1,4 +1,4 @@
-"""The Grampian 636 spring reverb module (m4l_dev/circuit_modules/grampian_636_spring_reverb.py): the maker's sheet
+"""The Grampian 636 spring reverb module (twosl_dsp/circuit_modules/grampian_636_spring_reverb.py): the maker's sheet
 (references/circuits/grampian-636-spring-reverb.md): two springs of 29 and 37 ms, "2 seconds at 300 Hz", the reverb
 path "100 Hz to 6K Hz ±3db". Rendered through our GenExpr renderer (ours, not Max's compiler). Standard library
 only."""
@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.circuit_modules.grampian_636_spring_reverb import (  # noqa: E402
+from twosl_dsp.circuit_modules.grampian_636_spring_reverb import (  # noqa: E402
     DECAY_REFERENCE_HZ, NOMINAL_LENGTH_S, Grampian636SpringReverb, Grampian636SpringReverbCharacter, damping_hz,
     round_trips_ms)
 from gen_block_harness import autocorrelation, band_decay_seconds, band_levels_db, harness  # noqa: E402

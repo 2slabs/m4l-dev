@@ -46,7 +46,7 @@ on it without saying so.
 - The "clicks and crunches" of the steps ([SOS news](https://www.soundonsound.com/news/audio-merge-ktbk-passive-filter))
   **[SECONDARY]**; that they come from a switch changing a network with energy in it is **[UNVERIFIED]**.
 
-## The module: `m4l_dev/circuit_modules/altec_9069b_high_pass.py`
+## The module: `twosl_dsp/circuit_modules/altec_9069b_high_pass.py`
 
 - The network as it is (§2's circuit), each step's parts from §2, the terminations as the character (600 / 600, §3).
   Each part a trapezoidal companion model prewarped at the step's corner: the corner exact at any sample rate.

@@ -1,8 +1,8 @@
 """The patch matcher's validation before any real target exists (architecture/patch-matcher.md): parameter recovery.
 Opt-in, slow (about a minute a target on 6 cores; each search's CPU time reported with the machine's load):
 
-    M4L_DEV_SLOW_TESTS=1 python3 -m unittest tests.test_patch_matcher_recovery
-    (M4L_DEV_RECOVERY_TARGETS=N: how many targets, default 12)
+    TWOSL_DSP_SLOW_TESTS=1 python3 -m unittest tests.test_patch_matcher_recovery
+    (TWOSL_DSP_RECOVERY_TARGETS=N: how many targets, default 12)
 
 Each target is the fixture drum voice at random known settings (a seeded draw over the whole unit cube), rendered
 with a different noise seed than the search renders with, as a recording's noise never repeats the voice's. The
@@ -20,9 +20,9 @@ import unittest
 TESTS_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [os.path.dirname(TESTS_DIRECTORY), TESTS_DIRECTORY]
 from fixture_drum_voice import FIXTURE_DRUM_VOICE  # noqa: E402
-from m4l_dev.cpu_timing import PROCESS_AND_CHILDREN, CpuTiming  # noqa: E402
-from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
-from m4l_dev.patch_match_search import SearchSettings, match_patch  # noqa: E402
+from twosl_dsp.cpu_timing import PROCESS_AND_CHILDREN, CpuTiming  # noqa: E402
+from twosl_dsp.patch_match_score import MatchTarget  # noqa: E402
+from twosl_dsp.patch_match_search import SearchSettings, match_patch  # noqa: E402
 
 RATE = 48000
 TARGET_SECONDS = 0.5
@@ -35,12 +35,12 @@ PARAMETER_TOLERANCE = 0.05
 REQUIRED_RECOVERY_RATE = 0.75
 
 
-@unittest.skipUnless(os.environ.get("M4L_DEV_SLOW_TESTS") == "1", "slow: set M4L_DEV_SLOW_TESTS=1")
+@unittest.skipUnless(os.environ.get("TWOSL_DSP_SLOW_TESTS") == "1", "slow: set TWOSL_DSP_SLOW_TESTS=1")
 class ParameterRecoveryTests(unittest.TestCase):
     def test_the_matcher_recovers_known_settings_of_the_fixture_drum_voice(self):
         voice = FIXTURE_DRUM_VOICE
         target_voice = dataclasses.replace(voice, noise_seed=TARGET_NOISE_SEED)
-        target_count = int(os.environ.get("M4L_DEV_RECOVERY_TARGETS", "12"))
+        target_count = int(os.environ.get("TWOSL_DSP_RECOVERY_TARGETS", "12"))
         rows = []
         for target_number in range(target_count):
             draw = random.Random(f"recovery/{target_number}")

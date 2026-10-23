@@ -1,7 +1,7 @@
 # Build and release
 
 `build_device(repository, patch, layout, views_code, device_scripts, live_preset_files, command_line_arguments)`
-(`m4l_dev/device_build.py`), in order:
+(`twosl_dsp/device_build.py`), in order:
 
 1. **Check the patch** (`DevicePatchBuilder.check`): the preset book against the controls, the gen~ Param defaults
    written from what the initial values send (presets.md), the layout (nothing shown at the same time overlaps or leaves the device, on
@@ -17,7 +17,7 @@
 
 Nothing is written before steps 1-3 pass (step 2 includes the generated-numbers check: overview.md, "Generated
 numbers"). Every byte depends only on the sources, on every machine: every computed number goes through
-`generated_number`, the frozen files' dates are a fixed constant (`m4l_dev/amxd.py`), the `.adv` gzip header is
+`generated_number`, the frozen files' dates are a fixed constant (`twosl_dsp/amxd.py`), the `.adv` gzip header is
 written by hand (mtime 0, OS 3), the zip's entries carry a fixed date, `LastModDate` in presets is 0. A build under
 Python 3.9 and 3.11 writes the same bytes.
 

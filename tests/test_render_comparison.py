@@ -1,4 +1,4 @@
-"""The kit's render comparator (m4l_dev/render_comparison.py, architecture/testing.md) on both sides of its limits:
+"""The kit's render comparator (twosl_dsp/render_comparison.py, architecture/testing.md) on both sides of its limits:
 the differences two machines make (the maths library's last bits, a threshold event a sample later: 2sl filter's
 isolated -64 dBFS one-sample spikes, macOS on ARM vs Linux on x86) pass; real changes (a 0.1 dB level, a cutoff
 moved 1 %, a click, a 1 ms dropout, a sample of delay) fail, each saying its numbers."""
@@ -8,8 +8,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import render_comparison  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
+from twosl_dsp import render_comparison  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
 
 RATE = 48000
 SECONDS = 0.5

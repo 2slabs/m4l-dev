@@ -6,7 +6,7 @@ and its own code until 0.6.0 took the spring out), with the tank's numbers from 
 **[UNVERIFIED]**, **[DESIGN]** a choice, **[MEASURED]**. `fetch-buchla-208-spring-reverb-sources.sh` (here; moved from
 gate) fetches the three sources (2026-10-21, sha256 in that script); each source has one page, so a place in it is named by its label.
 
-## Buchla 208 spring reverb (m4l_dev/circuit_modules/buchla_208_spring_reverb.py)
+## Buchla 208 spring reverb (twosl_dsp/circuit_modules/buchla_208_spring_reverb.py)
 
 Card 12's driver (§2) into a two-spring tank on the kit's dispersive-loop spring tank (references/dsp.md), with gate's
 numbers (§3), so it renders gate's spring: tests/test_circuit_module_buchla_208_spring_reverb.py holds the module to

@@ -1,4 +1,4 @@
-"""The patch builder's rules (m4l_dev/patch_builder.py, layout_rules.py, preset_book.py): the layout check (nothing
+"""The patch builder's rules (twosl_dsp/patch_builder.py, layout_rules.py, preset_book.py): the layout check (nothing
 shown at the same time overlaps or leaves the device), groups, controls kept out of presets, the Init values and the
 presets, gen~ Params, live.tab widths. Builds small patches in memory; writes nothing."""
 import os
@@ -6,12 +6,12 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import layout_rules  # noqa: E402
-from m4l_dev import live_parameter_identity as identity  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
-from m4l_dev.preset_book import PresetBook  # noqa: E402
-from m4l_dev.techniques.defined_latency_pad import DefinedLatency  # noqa: E402
+from twosl_dsp import layout_rules  # noqa: E402
+from twosl_dsp import live_parameter_identity as identity  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
+from twosl_dsp.preset_book import PresetBook  # noqa: E402
+from twosl_dsp.techniques.defined_latency_pad import DefinedLatency  # noqa: E402
 
 INFO = {name: (name, "text") for name in ("A", "B", "C", "Volume", "Page", "Preset", "Stop", "Link view", "Pick", "Tool")}
 # a and volume: set by controls, so no default in the code (the build writes it); b: set by no control in most tests
@@ -284,7 +284,7 @@ class InfoTests(unittest.TestCase):
     def test_a_builder_leaves_the_devices_info_alone(self):
         # a device builds twice in one process (its build, then its tests' in-memory build): a block adding its
         # controls' text to the info must not find it there the second time
-        from m4l_dev.seeded_random import SeededRandom
+        from twosl_dsp.seeded_random import SeededRandom
         info = dict(INFO)
         for _ in range(2):
             patch = DevicePatchBuilder(device_name="t", script_name="t", version="0", subtitle="", link_chip_text="t",

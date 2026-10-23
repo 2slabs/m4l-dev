@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert between Max patcher JSON (.maxpat) and Max for Live devices (.amxd); the format is m4l_dev/amxd.py's.
+"""Convert between Max patcher JSON (.maxpat) and Max for Live devices (.amxd); the format is twosl_dsp/amxd.py's.
 
   amxd.py pack   foo.maxpat foo.amxd --type audio|midi|instrument
   amxd.py freeze foo.maxpat foo-1.0.0.amxd --type instrument --embed a.js b.js
@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import amxd  # noqa: E402
+from twosl_dsp import amxd  # noqa: E402
 
 
 def main(argument_list):

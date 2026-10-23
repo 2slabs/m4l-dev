@@ -1,4 +1,4 @@
-// The kit's zero-delay ladder filter (m4l_dev/techniques/zero_delay_ladder_filter.py) as a display draws it: its
+// The kit's zero-delay ladder filter (twosl_dsp/techniques/zero_delay_ladder_filter.py) as a display draws it: its
 // small-signal response, the analog ladder 1 / ((1 + s)^4 + k) at s = j tan(pi f / sr) / tan(pi fc / sr) (the
 // technique's prewarped bilinear transform), and each form's k (the saturating ladder's, the linear one's). The
 // constants are the technique's, filled in by the build.

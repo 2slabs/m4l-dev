@@ -1,4 +1,4 @@
-"""A fresh device moves to its start values once; a saved set or preset keeps its own (m4l_dev/fresh_start.py running
+"""A fresh device moves to its start values once; a saved set or preset keeps its own (twosl_dsp/fresh_start.py running
 the fixture's built UI script in node, architecture/presets.md "Neutral, Init, and a fresh device")."""
 import contextlib
 import io
@@ -11,8 +11,8 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 import fixture_device  # noqa: E402
-from m4l_dev import fresh_start  # noqa: E402
-from m4l_dev.preset_book import PresetBook, SavedRecord  # noqa: E402
+from twosl_dsp import fresh_start  # noqa: E402
+from twosl_dsp.preset_book import PresetBook, SavedRecord  # noqa: E402
 
 
 class FreshStartTests(unittest.TestCase):

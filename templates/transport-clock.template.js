@@ -1,4 +1,4 @@
-// ---- the m4l-dev kit's transport clock (templates/transport-clock.template.js) -------------------
+// ---- the 2sl-dsp kit's transport clock (templates/transport-clock.template.js) -------------------
 // The patch sends `tick <ticks>` on every 16th while Live plays: a [metro 16n @quantize 16n] bang asks
 // [transport] for Live's song position in ticks (480 per quarter note, whatever the time signature). Every 16th
 // of the song is played exactly once: a second bang on the same 16th is ignored, and a bang between 16ths (the

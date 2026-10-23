@@ -1,4 +1,4 @@
-// The kit's Moog transistor ladder (m4l_dev/circuit_modules/moog_transistor_ladder.py), one instance of it, as a
+// The kit's Moog transistor ladder (twosl_dsp/circuit_modules/moog_transistor_ladder.py), one instance of it, as a
 // display draws it: its Emphasis law and its small-signal response (the module's small_signal_response, magnitude,
 // before the output's coupling capacitor). The constants are the instance's, filled in by the build.
 

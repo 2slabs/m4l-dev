@@ -1,5 +1,5 @@
-"""Tests for m4l_dev/build_comparison.py: two builds are the same build only when they are the same to the last
-digit (the kit writes the same bytes on every machine: m4l_dev/generated_numbers.py), and a difference says where."""
+"""Tests for twosl_dsp/build_comparison.py: two builds are the same build only when they are the same to the last
+digit (the kit writes the same bytes on every machine: twosl_dsp/generated_numbers.py), and a difference says where."""
 import gzip
 import json
 import os
@@ -9,8 +9,8 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.amxd import unfrozen_device_bytes  # noqa: E402
-from m4l_dev.build_comparison import build_differences, file_difference  # noqa: E402
+from twosl_dsp.amxd import unfrozen_device_bytes  # noqa: E402
+from twosl_dsp.build_comparison import build_differences, file_difference  # noqa: E402
 
 # the numbers 2sl filter's build printed on two machines (2026-10-20), before generated_numbers: the same
 # coefficients, the last digits apart; now a difference

@@ -8,7 +8,7 @@ The user's rule (2026-10-21): "the build should be the same, but the tests aren'
   source, not a render). Those stay exact.
 - **A sound is compared as sound.** Two renders (plugin vs device, before vs after a change that should keep the
   sound, -O2 vs -O0, a block reset vs a fresh one, a preset migrated vs as it was) are compared by
-  `m4l_dev/render_comparison.py`, the one comparator: `renders_are_similar(reference, candidate, sample_rate)` gives
+  `twosl_dsp/render_comparison.py`, the one comparator: `renders_are_similar(reference, candidate, sample_rate)` gives
   a verdict and its numbers; `assert_renders_similar(...)` fails a test with them. Never `==`, `assertEqual`, a hash
   or `array_equal` on renders, and no second comparator.
 - **Exact stays exact where the claim is a value, not a sound**: silence that must be exactly 0 (an idle voice), a
@@ -19,7 +19,7 @@ The user's rule (2026-10-21): "the build should be the same, but the tests aren'
   measured exactly). Every other pair of sample sequences compared with each other is two renders.
 - **Accuracy bounds stay**: a test holding a block to its equation or to a twin within a bound on each sample far
   over the last bits and far under the comparator's (1e-9 on a signal near 1) claims more than "the same sound" and
-  keeps its bound; another machine's last bits (1e-16) pass it. It says so through `m4l_dev/model_accuracy.py`, the
+  keeps its bound; another machine's last bits (1e-16) pass it. It says so through `twosl_dsp/model_accuracy.py`, the
   one way: `assert_matches_model(actual, expected, tolerance, what, tolerance_reason)`, every sample within an
   absolute tolerance, the reason for that tolerance stated at the call.
 
@@ -83,7 +83,7 @@ largest sample difference and where; quote it. Bit-identical is a claim about a 
 
 A test that times something reads the machine's load first (`os.getloadavg()`) and reports it with the result,
 measures CPU time (the thread's clock, `time.thread_time`, or the process's and its children's, `getrusage`'s
-microsecond fields; never `os.times()`, whose fields are truncated to 10 ms ticks), not wall clock, and times one run: no best-of-N, no averaging. `m4l_dev/cpu_timing.py`'s `CpuTiming` is the one way: THREAD
+microsecond fields; never `os.times()`, whose fields are truncated to 10 ms ticks), not wall clock, and times one run: no best-of-N, no averaging. `twosl_dsp/cpu_timing.py`'s `CpuTiming` is the one way: THREAD
 for work on the calling thread, PROCESS_AND_CHILDREN for work over worker processes (the patch matcher's), and a
 timing whose load before it plus the cores it uses is over the machine's cores says NOT JUDGED with its numbers: a
 test that would judge it skips, loudly, and a report (the recovery tests' CPU seconds a search) prints it.

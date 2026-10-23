@@ -1,4 +1,4 @@
-"""The Buchla 259 principal oscillator module (m4l_dev/circuit_modules/buchla_259_principal_oscillator.py): the
+"""The Buchla 259 principal oscillator module (twosl_dsp/circuit_modules/buchla_259_principal_oscillator.py): the
 shaped sine's harmonics, its phase under a frequency, a sweep, through-zero FM and a reset, the run-time shaper
 drive and the band-limited corners, through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
 import cmath
@@ -9,12 +9,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.buchla_259_principal_oscillator import (  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_259_principal_oscillator import (  # noqa: E402
     Buchla259PrincipalOscillator, Buchla259PrincipalOscillatorCharacter, shaped_sine)
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
 from gen_block_harness import folded, frequency_by_zero_crossings, harness, worst_alias_db  # noqa: E402
 
 SAMPLERATE = 44100.0

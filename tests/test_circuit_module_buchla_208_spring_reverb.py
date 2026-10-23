@@ -1,4 +1,4 @@
-"""The Buchla 208 spring reverb module (m4l_dev/circuit_modules/buchla_208_spring_reverb.py): built with 2sl gate's
+"""The Buchla 208 spring reverb module (twosl_dsp/circuit_modules/buchla_208_spring_reverb.py): built with 2sl gate's
 numbers it renders the same sound as gate's own spring code, copied below verbatim as the reference program; the
 driver's resonance against the schematic's parts; the tank interface. Rendered through our GenExpr renderer (ours,
 not Max's compiler). Standard library only."""
@@ -10,15 +10,15 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.buchla_208_spring_reverb import (  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_208_spring_reverb import (  # noqa: E402
     Buchla208SpringReverb, Buchla208SpringReverbCharacter, dc_block_hz, driver_q, driver_resonance_hz,
     driver_response)
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.generated_numbers import generated_number  # noqa: E402
-from m4l_dev.genexpr import GenProgram, check  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
-from m4l_dev.techniques.zero_delay_state_variable_filter import ZeroDelayStateVariableFilter  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.generated_numbers import generated_number  # noqa: E402
+from twosl_dsp.genexpr import GenProgram, check  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.techniques.zero_delay_state_variable_filter import ZeroDelayStateVariableFilter  # noqa: E402
 from gen_block_harness import harness  # noqa: E402
 
 SAMPLERATE = 44100.0

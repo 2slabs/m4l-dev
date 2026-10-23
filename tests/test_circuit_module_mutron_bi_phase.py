@@ -1,4 +1,4 @@
-"""The Mu-Tron Bi-Phase module (m4l_dev/circuit_modules/mutron_bi_phase.py): its claims, rendered through our GenExpr
+"""The Mu-Tron Bi-Phase module (twosl_dsp/circuit_modules/mutron_bi_phase.py): its claims, rendered through our GenExpr
 renderer (ours, not Max's compiler) on a harness around one unit (tests/gen_block_harness.py). Volts in, volts out.
 Standard library only."""
 import dataclasses
@@ -9,16 +9,16 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev import es5  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.generated_scripts import check_es5  # noqa: E402
-from m4l_dev.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
+from twosl_dsp import es5  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.generated_scripts import check_es5  # noqa: E402
+from twosl_dsp.circuit_modules.mutron_bi_phase import (MutronBiPhase, MutronBiPhaseCharacter,  # noqa: E402
                                                      RUNTIME_CHARACTER_FIELDS, cell_ohms, feedback_gain,
                                                      feedback_pot_position, phasor_notches_hz, phasor_response,
                                                      phasor_small_signal_response, stage_corner_hz)
 from gen_block_harness import amplitude_at, harness, phase_degrees  # noqa: E402
-from m4l_dev.model_accuracy import assert_matches_model  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.model_accuracy import assert_matches_model  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
 
 SAMPLERATE = 44100.0
 MATCHED = MutronBiPhaseCharacter(stage_corner_spread=0.0)

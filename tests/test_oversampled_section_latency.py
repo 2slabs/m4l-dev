@@ -12,14 +12,14 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_block_harness import complex_amplitude_at  # noqa: E402
-from m4l_dev.circuit_modules.buchla_259_modulation_oscillator import Buchla259ModulationOscillator  # noqa: E402
-from m4l_dev.circuit_modules.buchla_259_principal_oscillator import Buchla259PrincipalOscillator  # noqa: E402
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
-from m4l_dev.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
-from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
-from m4l_dev.techniques.defined_latency_pad import DefinedLatencyPad  # noqa: E402
-from m4l_dev.techniques.halfband_oversampler import (  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_259_modulation_oscillator import Buchla259ModulationOscillator  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_259_principal_oscillator import Buchla259PrincipalOscillator  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.techniques.antiderivative_tanh_saturator import AntiderivativeTanhSaturator  # noqa: E402
+from twosl_dsp.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
+from twosl_dsp.techniques.defined_latency_pad import DefinedLatencyPad  # noqa: E402
+from twosl_dsp.techniques.halfband_oversampler import (  # noqa: E402
     LATENCY_FREQUENCY_HZ, LATENCY_SAMPLE_RATE, ControlsAtTheUpsampledSteps, HalfbandDownsampler,
     HalfbandLinearPhaseDownsampler, HalfbandUpsampler)
 

@@ -1,21 +1,20 @@
-# m4l-dev: the partitions and their patterns
+# 2sl-dsp: the partitions and their patterns
 
-m4l-dev is the 2sl kit: the shared code that builds a Max for Live device from Python, consumed by each device's own
+2sl-dsp is the 2sl kit: the shared code that builds a Max for Live device from Python, consumed by each device's own
 repository as a git submodule (device-repository.md). It holds no device.
 
 | partition | what it is | the pattern |
 |---|---|---|
-| `m4l_dev/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
-| `m4l_dev/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, generated_numbers, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
-| `m4l_dev/circuit_modules/` | gen blocks, layer 2: one modelled piece of hardware per file (dsp-blocks.md) | one `CircuitModule` a file: inputs the circuit's controls in its units, character a frozen dataclass of numbers, cites its references/circuits/ file; built from techniques |
+| `twosl_dsp/` | the build library (Python 3.9+, standard library + libduktape; a C compiler for rendering gen~ code in tests) | one module per concern (below); every failure is a `BuildError` saying what is wrong and where to fix it; nothing is written until every check has passed; every byte written depends only on the inputs |
+| `twosl_dsp/techniques/` | gen blocks, layer 1: DSP techniques with no circuit identity (dsp-blocks.md) | `Technique` subclasses; import only gen_blocks, build_error, generated_scripts, generated_numbers, other techniques; each cites its references/dsp.md section; claims in tests/test_techniques.py |
+| `twosl_dsp/circuit_modules/` | gen blocks, layer 2: one modelled piece of hardware per file (dsp-blocks.md) | one `CircuitModule` a file: inputs the circuit's controls in its units, character a frozen dataclass of numbers, cites its references/circuits/ file; built from techniques |
 | `templates/` | the ES5 scripts every device gets (UI, views), the blocks a device includes (transport clock, seeded sequence and seeded random, chord block, chord display, stored table), the gen blocks' display responses and the Cozette glyphs | ES5 only (Max's [js]); each place the build fills is a `/*MARKER*/` filled by `fill_template`; at run time every surprise is an `error(DEVICE_NAME + ": ...")` in the Max window, never a silent fallback |
-| `plugin/cpp/` | ([plugins.md](plugins.md): the approach a port follows) the C++ every 2sl plugin shares (no JUCE except MaxScript): `PluginTable.h` (the generated header's types; a route's value), `GenProgram.h` (one running copy of an exported gen~ program: Params, state, render), `MaxScript.h/.cpp` (a device's [js] brain run unchanged in JUCE's JavascriptEngine, QuickJS, with the Max globals it uses and a Task clock the plugin moves) | the generated header fills in the tables; a plugin's own wrapper connects the parts the way the device's Max objects do |
-| `tools/` | command-line tools | a thin CLI over `m4l_dev` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests); `match_patch.py` (the patch matcher's CLI, patch-matcher.md); `render_pages.py` (a built device's pages and group choices as PNGs at the device's size, plus layout.txt: every box's x / width / gap by band and its breaks of the layout contract; each display's first-paint text; fails on the overlap rule or a control with no text) |
+| `tools/` | command-line tools | a thin CLI over `twosl_dsp` (amxd.py, es5check.py), or a standalone tool that must not depend on the kit's code: `compare_device_builds.py` (compares any two builds, old kit or new), `bdf2js.py` (makes templates/cozette-glyphs.js), `max_sandbox.js` (node sandbox with Max's [js] globals, for script tests); `match_patch.py` (the patch matcher's CLI, patch-matcher.md); `render_pages.py` (a built device's pages and group choices as PNGs at the device's size, plus layout.txt: every box's x / width / gap by band and its breaks of the layout contract; each display's first-paint text; fails on the overlap rule or a control with no text) |
 | `tests/` | the kit's tests | `python3 -m unittest discover -s tests`; built on the fixture device (tests/fixture_device.py) in temporary repositories; node script tests run from a Python test that fails when node is missing; a build compared byte for byte, two renders by `render_comparison` (testing.md) |
 | `references/` | sources (Max, Live, Live presets, DSP techniques in dsp.md, circuits in circuits/) | links and quotes; the code cites them by section. The Live preset example is also the template the preset writer copies. Papers and datasheets aren't kept: a fetch script per set downloads and checks them (`fetch-dsp-sources.sh`, `circuits/fetch-circuit-sources.sh`) |
 | `architecture/` | this | the partitions and the contracts below |
 
-## m4l_dev/, module by module
+## twosl_dsp/, module by module
 
 | module | concern |
 |---|---|
@@ -39,10 +38,6 @@ repository as a git submodule (device-repository.md). It holds no device.
 | `c_library_cache.py` | the one place the kit runs a C compiler: `load_c_library(c_source, flags)` builds once per source / compiler / flags into the cache, loads once; the renderer and the patch matcher's analysis both use it |
 | `genexpr_export.py` | a device's gen~ code as a C file and header for a plugin (the renderer's C with the sample rate an argument, thread-local state, prefixed names, Python's noise seeding): the same bits as the renderer |
 | `build_comparison.py` | two builds of a device compared as the device tests compare them: exactly (every machine writes the same bytes: `generated_numbers.py`), `.adv` by its XML (not zlib's compression), saying where two differ (`.maxpat` value by value, `.amxd` by patch, `.adv` by tag, text by character) |
-| `plugin/parameters.py` | a device's host parameters for its plugin, read off its patch: the Live parameter lock for what the host knows them by, the patch's routes (`messages_for`, its tempo routes) for how each reaches the device's gen~ programs, script (brain) and raw boxes; Stored Only values as the plugin's state; presets as held, with their Stored values |
-| `plugin/header.py` | the plugin's generated C++ header from those: parameters, routes, Stored values, presets, latency, each exported gen~ program as a `ProgramSpec` |
-| `plugin/vstpreset.py` | VST3 presets (.vstpreset) the way Live saves them: JUCE's class id from the plugin codes, JUCE's state XML and private data, Live's meta info; rebuilds a preset Live saved byte for byte |
-| `plugin/generated_files.py` | a plugin's generated folder: written from the device's sources, or checked to be what they make |
 | `gen_blocks.py` | the gen block pattern: `GenBlock` and its two layers' bases `Technique` and `CircuitModule`, `gen_code_with_blocks`, the shared `smoothing_coefficient` (dsp-blocks.md) |
 | `techniques/`, `circuit_modules/` | the gen blocks, by layer (their own partitions, above) |
 | `render_comparison.py` | `renders_are_similar` / `assert_renders_similar`: the one way a test compares two renders, by the residual's level against the reference's, whole and in 10 ms windows, with its limits (testing.md) |
@@ -58,27 +53,27 @@ repository as a git submodule (device-repository.md). It holds no device.
 ## The kit's API, as a device build uses it
 
 ```python
-from m4l_dev.device_repository import DeviceRepository   # DeviceRepository.of_build_script(__file__)
-from m4l_dev.preset_book import PresetBook               # PresetBook.from_file(path, display_name)
-from m4l_dev.patch_builder import DevicePatchBuilder     # DevicePatchBuilder(device_name, script_name, version,
+from twosl_dsp.device_repository import DeviceRepository   # DeviceRepository.of_build_script(__file__)
+from twosl_dsp.preset_book import PresetBook               # PresetBook.from_file(path, display_name)
+from twosl_dsp.patch_builder import DevicePatchBuilder     # DevicePatchBuilder(device_name, script_name, version,
                                                          #   subtitle, link_chip_text, device_type, device_width,
                                                          #   page_names, info, preset_book, latency_samples)
                                                          # latency_samples: the Defined Latency, an int: the
                                                          #   rule's declared figure (below, "Defined Latency")
-from m4l_dev.techniques.defined_latency_pad import DefinedLatency  # DefinedLatency(device_name, {path: latency})
-from m4l_dev.live_preset_files import LivePresetFiles    # LivePresetFiles(stored_only_values_of_preset)
-from m4l_dev.generated_scripts import fill_template, kit_template_text
-from m4l_dev.device_build import build_device            # build_device(repository, patch, layout, views_code,
+from twosl_dsp.techniques.defined_latency_pad import DefinedLatency  # DefinedLatency(device_name, {path: latency})
+from twosl_dsp.live_preset_files import LivePresetFiles    # LivePresetFiles(stored_only_values_of_preset)
+from twosl_dsp.generated_scripts import fill_template, kit_template_text
+from twosl_dsp.device_build import build_device            # build_device(repository, patch, layout, views_code,
                                                          #   device_scripts, live_preset_files, command_line_arguments)
-from m4l_dev.seeded_random import SeededRandom           # SeededRandom(patch, brain, brain_control_inlet)
-from m4l_dev.chord_block import ChordBlock               # ChordBlock(patch, seeded_random, brain, control inlet,
+from twosl_dsp.seeded_random import SeededRandom           # SeededRandom(patch, brain, brain_control_inlet)
+from twosl_dsp.chord_block import ChordBlock               # ChordBlock(patch, seeded_random, brain, control inlet,
                                                          #   display outlet, display box, most_notes_per_chord)
-from m4l_dev.stored_table import StoredTable, ContinuousField, ChoiceField, stored_tables_brain_code
+from twosl_dsp.stored_table import StoredTable, ContinuousField, ChoiceField, stored_tables_brain_code
                                                          # StoredTable(patch, name, fields, row_count, brain,
                                                          #   brain_inlet, brain_outlet); .editor_dial / _menu / _toggle
-from m4l_dev.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
-from m4l_dev.techniques.zero_delay_ladder_filter import ZeroDelayLadderFilter   # one module per technique
-from m4l_dev.circuit_modules.ltc1060_mf10_section import Ltc1060Mf10Section     # one module per circuit
+from twosl_dsp.gen_blocks import gen_code_with_blocks      # gen_code_with_blocks(template, blocks, name, replacements)
+from twosl_dsp.techniques.zero_delay_ladder_filter import ZeroDelayLadderFilter   # one module per technique
+from twosl_dsp.circuit_modules.ltc1060_mf10_section import Ltc1060Mf10Section     # one module per circuit
 ```
 
 The builder's helpers: `box`, `wire`, `find`, `gen_box(code, ins, outs, rect, box_text, outlet_type)`, `dial`, `menu`,
@@ -93,7 +88,7 @@ message, destination)`, `messages_for(values, destination, beats_per_minute)`. S
 
 A block is a piece of a device that is the same in every device that has it, and improves in one place. Its pattern:
 
-- **Python** (`m4l_dev/<block>.py`): one class made with the device's patch and the boxes it wires to (the brain
+- **Python** (`twosl_dsp/<block>.py`): one class made with the device's patch and the boxes it wires to (the brain
   and its inlets / outlets, a display the device made). Its methods make its controls (the device places them and,
   where Live knows them by a name the device already shipped, names them) and give its code (`brain_code()`,
   `display_code()`), filled from the Init values and build-time constants. The kit owns what is the same everywhere
@@ -112,8 +107,8 @@ chord block (chord-block.md), the stored table (stored-table.md).
 
 ## Gen blocks: kit gen~ code a device includes, in layers
 
-The same idea for the gen~ code (dsp-blocks.md), in three layers: techniques (`m4l_dev/techniques/`), circuit modules
-(`m4l_dev/circuit_modules/`), and the instruments, which are the devices. A block instance is made with a name and its
+The same idea for the gen~ code (dsp-blocks.md), in three layers: techniques (`twosl_dsp/techniques/`), circuit modules
+(`twosl_dsp/circuit_modules/`), and the instruments, which are the devices. A block instance is made with a name and its
 inputs as GenExpr expressions; the device's gen~ template has `/*GEN_BLOCK_FUNCTIONS*/`, `/*GEN_BLOCK_DECLARATIONS*/`
 and a `/*<NAME>*/` per instance, filled by `gen_code_with_blocks`. Tests: tests/test_techniques.py,
 tests/test_circuit_module_*.py, and tests/test_gen_block_layers.py for the layers' rules.
@@ -141,7 +136,7 @@ playback. The rule (ours, so no tie and no float crumb decides anything):
 
 Every machine writes the same bytes from the same sources. The one thing that varied was numbers computed through
 the platform's maths library (math / cmath / `**` round the last bit differently on glibc and macOS), so the rule
-(`m4l_dev/generated_numbers.py`, which holds the measurements behind it):
+(`twosl_dsp/generated_numbers.py`, which holds the measurements behind it):
 
 - **Every computed number a build writes goes through `generated_number`, where it is computed**: a float is rounded
   to 10 significant digits (well past what any filter needs, well short of the last-bit noise); a `Fraction`, exact
@@ -150,7 +145,7 @@ the platform's maths library (math / cmath / `**` round the last bit differently
   keeps the number the code holds.
 - **The check**: `check_generated_text` fails on a decimal literal longer than 10 significant digits that
   `generated_number` didn't write from a Fraction; `build_device` runs it on the patch and every script before
-  writing, the plugin layer (`plugin/generated_files.main`) on every generated file. A number the Live parameter lock
+  writing, a plugin's generator on every generated file. A number the Live parameter lock
   holds passes (the lock already holds it to the byte; it can't change without changing what Live knows).
 - **Hand-written code** obeys the same rule (a GenExpr constant: `pi`, `halfpi`; C: a hex literal).
 - **Proof**: tests/test_generated_numbers.py builds every gen block and the fixture device with every maths-library

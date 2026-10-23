@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Match a voice's parameters to a target hit (architecture/patch-matcher.md): a thin CLI over m4l_dev's patch matcher.
+"""Match a voice's parameters to a target hit (architecture/patch-matcher.md): a thin CLI over twosl_dsp's patch matcher.
 
     python3 tools/match_patch.py --voice tests/fixture_drum_voice.py:FIXTURE_DRUM_VOICE \\
         --target match-targets/909-kick.wav --out match-targets/909-kick.result.json
@@ -21,11 +21,11 @@ KIT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if KIT_DIRECTORY not in sys.path:
     sys.path.insert(0, KIT_DIRECTORY)
 
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
-from m4l_dev.patch_match_search import SearchSettings, match_patch  # noqa: E402
-from m4l_dev.patch_match_voice import MatchedVoice  # noqa: E402
-from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.patch_match_score import MatchTarget  # noqa: E402
+from twosl_dsp.patch_match_search import SearchSettings, match_patch  # noqa: E402
+from twosl_dsp.patch_match_voice import MatchedVoice  # noqa: E402
+from twosl_dsp.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
 
 def load_voice(reference):

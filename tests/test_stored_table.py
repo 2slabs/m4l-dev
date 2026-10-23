@@ -1,4 +1,4 @@
-"""The stored table (m4l_dev/stored_table.py, architecture/stored-table.md): its fields and packing, its value in the
+"""The stored table (twosl_dsp/stored_table.py, architecture/stored-table.md): its fields and packing, its value in the
 preset book (Init whole, presets by field), its Stored Only parameters and their values per preset, its editors, the
 Preset menu's values, and the Seed dial and taller tab lines it came with. Builds small patches in memory; the brain's
 code runs in tests/kit-scripts.test.js on the fixture device."""
@@ -8,13 +8,13 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import layout_rules  # noqa: E402
-from m4l_dev import live_parameter_identity as identity  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
-from m4l_dev.preset_book import PresetBook, stored_only_values_of_preset  # noqa: E402
-from m4l_dev.seeded_random import SeededRandom  # noqa: E402
-from m4l_dev.stored_table import (ChoiceField, ContinuousField, HeldTable, StoredTable,  # noqa: E402
+from twosl_dsp import layout_rules  # noqa: E402
+from twosl_dsp import live_parameter_identity as identity  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.patch_builder import FRESH_START_FLAG_NAME, DevicePatchBuilder  # noqa: E402
+from twosl_dsp.preset_book import PresetBook, stored_only_values_of_preset  # noqa: E402
+from twosl_dsp.seeded_random import SeededRandom  # noqa: E402
+from twosl_dsp.stored_table import (ChoiceField, ContinuousField, HeldTable, StoredTable,  # noqa: E402
                                   stored_tables_brain_code)
 
 INIT_STAGES = {"Pitch": [0, 7, -24], "Level": [100, -100, 0], "Pulse": ["off", "on", "off"],

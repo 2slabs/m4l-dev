@@ -1,4 +1,4 @@
-"""The Buchla 292 low pass gate channel module (m4l_dev/circuit_modules/buchla_292_low_pass_gate_channel.py): the
+"""The Buchla 292 low pass gate channel module (twosl_dsp/circuit_modules/buchla_292_low_pass_gate_channel.py): the
 photocell fit and the network against DAFx-13 (references/circuits/buchla-292-low-pass-gate.md §2-§3), and the
 rendered vactrol and network against the module's own Python twins and the release law, through our GenExpr renderer
 (ours, not Max's compiler). Standard library only."""
@@ -9,8 +9,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.buchla_292_low_pass_gate_channel import (  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_292_low_pass_gate_channel import (  # noqa: E402
     DECAY_END_RESISTANCE, MODE_NAMES, VCA_MODE_INPUT_GAIN, Buchla292LowPassGateChannel, Buchla292LowPassGateChannelCharacter,
     led_current_at_resistance, network_coefficients, network_response, photocell_resistance, release_span)
 from gen_block_harness import amplitude_at, harness  # noqa: E402

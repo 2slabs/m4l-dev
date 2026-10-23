@@ -1,4 +1,4 @@
-// The kit's LTC1060 / MF10 section (m4l_dev/circuit_modules/ltc1060_mf10_section.py) as a display draws it: the section's
+// The kit's LTC1060 / MF10 section (twosl_dsp/circuit_modules/ltc1060_mf10_section.py) as a display draws it: the section's
 // small-signal response at its three pins, the tick sequence's z-domain response at the clock (z = e^(j 2 pi f /
 // f_clock)), no Q enhancement, no images. The constants are the module's, filled in by the build.
 var LTC1060_MF10_LOWEST_CENTER_HZ = /*LTC1060_MF10_LOWEST_CENTER_HZ*/;

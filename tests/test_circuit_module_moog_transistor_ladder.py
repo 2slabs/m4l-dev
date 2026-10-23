@@ -1,4 +1,4 @@
-"""The Moog transistor ladder module (m4l_dev/circuit_modules/moog_transistor_ladder.py): the cutoff law and the
+"""The Moog transistor ladder module (twosl_dsp/circuit_modules/moog_transistor_ladder.py): the cutoff law and the
 small-signal ladder against the sources (references/circuits/moog-transistor-ladder.md), and the rendered module
 against its own Python twin and the large-signal model's behaviour (self-oscillation, the pass band's drop, the
 Newton solve, aliases), through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
@@ -12,12 +12,12 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev import es5  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules import moog_transistor_ladder  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
-from m4l_dev.techniques import halfband_oversampler  # noqa: E402
-from m4l_dev.circuit_modules.moog_transistor_ladder import (  # noqa: E402
+from twosl_dsp import es5  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules import moog_transistor_ladder  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.techniques import halfband_oversampler  # noqa: E402
+from twosl_dsp.circuit_modules.moog_transistor_ladder import (  # noqa: E402
     MoogTransistorLadder, MoogTransistorLadderCharacter, control_volts_for_cutoff_hz, cutoff_hz_at_control_volts,
     emphasis_for_feedback_gain, emphasis_pot_ohms_above_wiper, feedback_gain_at_emphasis, ladder_cutoff_hz,
     regeneration_trim_wiper, small_signal_response)

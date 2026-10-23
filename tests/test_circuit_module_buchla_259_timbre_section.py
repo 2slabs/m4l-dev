@@ -1,4 +1,4 @@
-"""The Buchla 259 timbre section module (m4l_dev/circuit_modules/buchla_259_timbre_section.py): the folder against
+"""The Buchla 259 timbre section module (twosl_dsp/circuit_modules/buchla_259_timbre_section.py): the folder against
 the circuit (DAFx-17 eqs. 8-11 with the original's extras, references/circuits/buchla-259.md §3), and the GenExpr it
 writes against the Python model, through our GenExpr renderer (ours, not Max's compiler). Standard library only."""
 import cmath
@@ -10,14 +10,14 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.buchla_259_timbre_section import (  # noqa: E402
     DRIVE_STAGE_HZ, RUNTIME_CELL_RAIL_VOLTS, TONE_FILTER_HZ, Buchla259TimbreSection, Buchla259TimbreSectionCharacter,
     cell_fold_point_volts, cell_node_volts, output_volts, summed_output_volts_unlimited, transfer_pieces)
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar  # noqa: E402
-from m4l_dev.techniques.halfband_oversampler import HalfbandDownsampler, HalfbandLinearPhaseDownsampler  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar  # noqa: E402
+from twosl_dsp.techniques.halfband_oversampler import HalfbandDownsampler, HalfbandLinearPhaseDownsampler  # noqa: E402
 from gen_block_harness import (coherent_frequency, coherent_worst_alias_db, complex_amplitude_at,  # noqa: E402
                                equalised_adaa_outputs, exact_second_order_mean, harness)
 

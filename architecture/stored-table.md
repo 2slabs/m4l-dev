@@ -2,7 +2,7 @@
 
 A device's table of values (rows x fields: a sequencer's stages, a pattern's steps) that the set and every preset
 keep, that the brain and the DSP read, and that is **not** automated: Live's Stored Only parameters, packed 16 bits
-each. A block (overview.md, "Blocks"): `m4l_dev/stored_table.py`, `templates/stored-table.template.js`, tests in
+each. A block (overview.md, "Blocks"): `twosl_dsp/stored_table.py`, `templates/stored-table.template.js`, tests in
 tests/test_stored_table.py and tests/kit-scripts.test.js (the fixture device has one).
 
 Why not a Live parameter per value: 16 stages x 10 values is ~170 parameters in Live's automation list, Push's banks
@@ -63,5 +63,5 @@ surfaces" (references/README.md, "Live presets").
 - The DSP's copy: a gen~ reads a table in the form its algorithm wants (Params a stage, a buffer); the listener is
   the seam.
 - Undo of an edit: Stored Only changes are Live's to undo or not; the kit has no source either way.
-- A plugin's view of the editors: Hidden parameters are host parameters to `plugin/parameters.host_parameters` unless
+- A plugin's view of the editors: Hidden parameters are host parameters to a plugin port's host parameters unless
   left out by name (as Page is); a device porting a table to a plugin leaves its editors out the same way.

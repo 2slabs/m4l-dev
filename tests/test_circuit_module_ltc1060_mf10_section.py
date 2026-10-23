@@ -1,4 +1,4 @@
-"""The LTC1060 / MF10 section module (m4l_dev/circuit_modules/ltc1060_mf10_section.py): its claims, rendered through
+"""The LTC1060 / MF10 section module (twosl_dsp/circuit_modules/ltc1060_mf10_section.py): its claims, rendered through
 our GenExpr renderer (ours, not Max's compiler), each on a small harness (tests/gen_block_harness.py) at the lowest
 length that still tests it. The claims are stated in fractions of the chip's full scale: the harness feeds the section
 volts (in1 x full scale) and reads its output back in full scale. Standard library only."""
@@ -11,9 +11,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev import es5  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.ltc1060_mf10_section import (MAXIMUM_TICKS_PER_SAMPLE,  # noqa: E402
+from twosl_dsp import es5  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.ltc1060_mf10_section import (MAXIMUM_TICKS_PER_SAMPLE,  # noqa: E402
                                                           Q_ENHANCEMENT_FITS, Ltc1060Mf10Character,
                                                           Ltc1060Mf10Section, response_script_code,
                                                           small_signal_response)

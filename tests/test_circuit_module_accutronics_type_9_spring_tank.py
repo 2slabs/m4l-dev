@@ -1,4 +1,4 @@
-"""The Accutronics type 9 spring tank module (m4l_dev/circuit_modules/accutronics_type_9_spring_tank.py): its three
+"""The Accutronics type 9 spring tank module (twosl_dsp/circuit_modules/accutronics_type_9_spring_tank.py): its three
 springs' echo spacing, its decay at its reference frequency, its current drive's 6 dB/oct rise and the band it leaves,
 against references/circuits/accutronics-type-9-spring-tank.md. Rendered through our GenExpr renderer (ours, not
 Max's compiler). Standard library only."""
@@ -10,10 +10,10 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.circuit_modules.accutronics_type_9_spring_tank import (  # noqa: E402
+from twosl_dsp.circuit_modules.accutronics_type_9_spring_tank import (  # noqa: E402
     DECAY_REFERENCE_HZ, NOMINAL_LENGTH_S, AccutronicsType9SpringTank, AccutronicsType9SpringTankCharacter,
     damping_hz, round_trips_ms)
-from m4l_dev.techniques.zero_delay_one_pole_filter import small_signal_response  # noqa: E402
+from twosl_dsp.techniques.zero_delay_one_pole_filter import small_signal_response  # noqa: E402
 from gen_block_harness import autocorrelation, band_decay_seconds, band_levels_db, harness  # noqa: E402
 
 SAMPLERATE = 44100.0

@@ -6,20 +6,20 @@ original Buchla schematics, Andre Theelen's DIY redraw, the DAFx-17 paper and th
 §6 are from 2sl gate's research brief (2026-10-17), moved here with the modules on 2026-10-20.
 `fetch-circuit-sources.sh` downloads every file used here into `sources/` (not in git) and checks its sha256.
 
-## Buchla 259 principal oscillator (m4l_dev/circuit_modules/buchla_259_principal_oscillator.py)
+## Buchla 259 principal oscillator (twosl_dsp/circuit_modules/buchla_259_principal_oscillator.py)
 
 Sheet 2A "Principle Oscillator": a triangle core (§5: a symmetry trimmer balances the rise against the fall) and the
 shaper that bends it into the sine the timbre section folds (§5, "slight sine impurity"; the sine's amplitude is not
 marked on the sheet, §3.3). Linear through-zero FM is 2sl gate's [DESIGN] (§5: the original's FM law is
 [UNVERIFIED]); the reset is the 259e / 261e note sync (§5).
 
-## Buchla 259 timbre section (m4l_dev/circuit_modules/buchla_259_timbre_section.py)
+## Buchla 259 timbre section (twosl_dsp/circuit_modules/buchla_259_timbre_section.py)
 
 Sheet 3A "Symmetry + Timbre": the drive stage IC29, Symmetry's offset through Q10, the five CA3160 cells on their
 ±6 V rails, the summers and the limiter, the 1.33 kHz tone filter (§1-§4, §6). The Symmetry-shaped comparator wave
 and Order's crossfade (§2.3, sheet 4A) are not modelled.
 
-## Buchla 259 modulation oscillator (m4l_dev/circuit_modules/buchla_259_modulation_oscillator.py)
+## Buchla 259 modulation oscillator (twosl_dsp/circuit_modules/buchla_259_modulation_oscillator.py)
 
 Sheet 4A "Order + Modulator": the modulation oscillator, whose index routes it to the principal oscillator's pitch,
 amplitude and timbre (§5). Its waves and ranges are from the repair notes (§5 [SECONDARY]); the routing (FM, AM) is

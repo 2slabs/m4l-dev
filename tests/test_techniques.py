@@ -1,5 +1,5 @@
-"""The kit's techniques (m4l_dev/techniques/): each technique's claims, rendered through our GenExpr renderer
-(m4l_dev/genexpr.py: ours, not Max's compiler). Each claim runs on a small harness program around one technique
+"""The kit's techniques (twosl_dsp/techniques/): each technique's claims, rendered through our GenExpr renderer
+(twosl_dsp/genexpr.py: ours, not Max's compiler). Each claim runs on a small harness program around one technique
 (tests/gen_block_harness.py), at the lowest sample rate that still tests it, so the whole file takes seconds. Standard
 library only."""
 import cmath
@@ -11,67 +11,67 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev import es5  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
-from m4l_dev.techniques.antiderivative_antialiasing_equaliser import (  # noqa: E402
+from twosl_dsp import es5  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.techniques.antiderivative_antialiasing_equaliser import (  # noqa: E402
     ADAA_EQUALISER_EDGE_AT_2X, AntiderivativeAntialiasingEqualiser, adaa_equaliser_decision, adaa_equaliser_remez_design,
     checked_equaliser_taps)
-from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
+from twosl_dsp.techniques.antiderivative_piecewise_linear_shaper import (  # noqa: E402
     AntiderivativePiecewiseLinearShaper, PiecewiseLinearMotion, PiecewiseLinearTable)
-from m4l_dev.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,  # noqa: E402
+from twosl_dsp.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,  # noqa: E402
                                                               AntiderivativeTanhSaturatorLinearTwin)
-from m4l_dev.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
-from m4l_dev.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
-from m4l_dev.techniques.input_keyed_duck import KNEE_DB, InputKeyedDuck  # noqa: E402
-from m4l_dev.techniques import sidechain_style_pump  # noqa: E402
-from m4l_dev.techniques.sidechain_style_pump import SidechainStylePump  # noqa: E402
+from twosl_dsp.techniques.band_limited_edges import BandLimitedEdges  # noqa: E402
+from twosl_dsp.techniques.knee_soft_clip import KneeSoftClip  # noqa: E402
+from twosl_dsp.techniques.input_keyed_duck import KNEE_DB, InputKeyedDuck  # noqa: E402
+from twosl_dsp.techniques import sidechain_style_pump  # noqa: E402
+from twosl_dsp.techniques.sidechain_style_pump import SidechainStylePump  # noqa: E402
 
 
-from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
-from m4l_dev.techniques.tape_style_echo import (STEREO_MODES, WIDE_RIGHT_RATIO, TapeStyleEcho,  # noqa: E402
+from twosl_dsp.techniques.led_driven_photocell import LedDrivenPhotocell  # noqa: E402
+from twosl_dsp.techniques.tape_style_echo import (STEREO_MODES, WIDE_RIGHT_RATIO, TapeStyleEcho,  # noqa: E402
                                                TapeStyleEchoTapeWriter)
-from m4l_dev.techniques import bucket_brigade_echo  # noqa: E402
-from m4l_dev.techniques.bucket_brigade_echo import (TWO_CHIP_STAGES, BucketBrigadeEcho,  # noqa: E402
+from twosl_dsp.techniques import bucket_brigade_echo  # noqa: E402
+from twosl_dsp.techniques.bucket_brigade_echo import (TWO_CHIP_STAGES, BucketBrigadeEcho,  # noqa: E402
                                                     BucketBrigadeEchoWriter)
-from m4l_dev.cpu_timing import THREAD, CpuTiming  # noqa: E402
-from m4l_dev.gen_blocks import Technique  # noqa: E402
-from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets  # noqa: E402
-from m4l_dev.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
+from twosl_dsp.cpu_timing import THREAD, CpuTiming  # noqa: E402
+from twosl_dsp.gen_blocks import Technique  # noqa: E402
+from twosl_dsp.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets  # noqa: E402
+from twosl_dsp.techniques.zero_delay_allpass_cascade import (FirstOrderAllpassStage,  # noqa: E402
                                                            SecondOrderAllpassStage, ZeroDelayAllpassCascade)
-from m4l_dev.techniques.zero_delay_allpass_cascade import \
+from twosl_dsp.techniques.zero_delay_allpass_cascade import \
     small_signal_response as cascade_small_signal_response  # noqa: E402
-from m4l_dev.techniques.zero_delay_ladder_filter import (LINEAR_FEEDBACK_AT_FULL_RESONANCE,  # noqa: E402
+from twosl_dsp.techniques.zero_delay_ladder_filter import (LINEAR_FEEDBACK_AT_FULL_RESONANCE,  # noqa: E402
                                                          ZeroDelayLadderFilter, response_script_code,
                                                          small_signal_magnitude)
-from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter  # noqa: E402
-from m4l_dev.techniques.zero_delay_one_pole_filter import \
+from twosl_dsp.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter  # noqa: E402
+from twosl_dsp.techniques.zero_delay_one_pole_filter import \
     small_signal_response as one_pole_small_signal_response  # noqa: E402
-from m4l_dev.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
+from twosl_dsp.techniques.zero_delay_state_variable_filter import (ZeroDelayStateVariableFilter,  # noqa: E402
                                                                  ring_time_constant_seconds, small_signal_response)
-from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
-from m4l_dev.model_accuracy import assert_matches_model  # noqa: E402
-from m4l_dev.techniques import drum_envelope  # noqa: E402
-from m4l_dev.techniques.bell_equalizer import BellEqualizer  # noqa: E402
-from m4l_dev.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
-from m4l_dev.techniques.defined_latency_pad import (THIRAN_MAXIMUM_ORDER,  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
+from twosl_dsp.model_accuracy import assert_matches_model  # noqa: E402
+from twosl_dsp.techniques import drum_envelope  # noqa: E402
+from twosl_dsp.techniques.bell_equalizer import BellEqualizer  # noqa: E402
+from twosl_dsp.techniques.bell_equalizer import small_signal_response as bell_small_signal_response  # noqa: E402
+from twosl_dsp.techniques.defined_latency_pad import (THIRAN_MAXIMUM_ORDER,  # noqa: E402
                                                     THIRAN_PHASE_DELAY_ERROR_BOUNDS, DefinedLatency,
                                                     DefinedLatencyPad)
-from m4l_dev.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
-from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,  # noqa: E402
+from twosl_dsp.techniques.drum_envelope import DrumEnvelope, exponential_rise  # noqa: E402
+from twosl_dsp.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,  # noqa: E402
                                                      HalfbandLinearPhaseDownsampler,
                                                      HalfbandUpsampler, halfband_attenuation_db, halfband_coefficients,
                                                      halfband_phase_delay_doubled_rate_samples, halfband_response,
                                                      linear_phase_halfband_response,
                                                      linear_phase_halfband_taps)
-from m4l_dev.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetallicNoise, lfsr_cycle  # noqa: E402
-from m4l_dev.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
-from m4l_dev.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
-from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
-from m4l_dev.techniques.dispersive_loop_spring_tank import (DispersiveLoopSpringTank,  # noqa: E402
+from twosl_dsp.techniques.metallic_noise import METALLIC_NOISE_SOURCES, LfsrMetallicNoise, lfsr_cycle  # noqa: E402
+from twosl_dsp.techniques.pitch_modulator import SHAPES, PitchModulator  # noqa: E402
+from twosl_dsp.techniques.pitch_modulator import wave as pitch_modulator_wave  # noqa: E402
+from twosl_dsp.techniques.seeded_white_noise import SeededWhiteNoise, park_miller_sequence  # noqa: E402
+from twosl_dsp.techniques.dispersive_loop_spring_tank import (DispersiveLoopSpringTank,  # noqa: E402
                                                              allpass_chain_group_delay_samples)
-from m4l_dev.techniques.parametric_spring_reverb import (ParametricSpringReverb,  # noqa: E402
+from twosl_dsp.techniques.parametric_spring_reverb import (ParametricSpringReverb,  # noqa: E402
                                                          chain_group_delay_seconds, ideal_chain_group_delay_seconds,
                                                          section_response, sections_for_round_trip)
 from gen_block_harness import (amplitude_at, autocorrelation, band_decay_seconds, cents,  # noqa: E402

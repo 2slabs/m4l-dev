@@ -1,6 +1,6 @@
 # Sound matching: sources for the patch matcher
 
-Date: 2026-10-19. Purpose: the sources behind the score and the search of m4l_dev's patch matcher (render a synth
+Date: 2026-10-19. Purpose: the sources behind the score and the search of twosl_dsp's patch matcher (render a synth
 voice, score it against a target drum-hit WAV, search the parameters). Text of each PDF read with
 `pdftotext -layout`; quotes are the paper's own words, reflowed over line breaks only.
 `fetch-sound-matching-sources.sh` downloads every PDF below into `references/sound-matching-sources/` (gitignored,
@@ -275,7 +275,7 @@ restarts are warranted. These are Dexed pitched tones scored by MFCC; no drums, 
 Matcher takes: the formulas above verbatim for a CMA-ES implementation (positive weights only: the tutorial's
 negative weights are not used), σ0 = 0.3 of the range with parameters normalised to a box, restarts with a larger λ.
 The box is NOT handled by (62) or (63): the search runs in an unbounded space that a triangle wave folds onto the box
-(m4l_dev/patch_match_search.py, `fold_onto_unit_interval`), so CMA-ES sees an ordinary (periodic) function of its
+(twosl_dsp/patch_match_search.py, `fold_onto_unit_interval`), so CMA-ES sees an ordinary (periodic) function of its
 own unclipped samples and nothing is repaired behind its back, which is what the tutorial's warning is about. That
 is our choice, not the tutorial's; no source here was read for it.
 

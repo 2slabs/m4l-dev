@@ -1,5 +1,5 @@
 """The harness every gen block test renders through: a gen~ program around blocks, rendered by our GenExpr renderer
-(m4l_dev/genexpr.py), and the spectral measures the claims are stated in. Standard library only."""
+(twosl_dsp/genexpr.py), and the spectral measures the claims are stated in. Standard library only."""
 import cmath
 import math
 from fractions import Fraction
@@ -7,8 +7,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram, check  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram, check  # noqa: E402
 
 
 def harness(blocks, params, outputs, num_inputs=1, samplerate=44100.0):

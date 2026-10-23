@@ -1,4 +1,4 @@
-"""The Altec 9069B module (m4l_dev/circuit_modules/altec_9069b_high_pass.py): its claims, rendered through our GenExpr
+"""The Altec 9069B module (twosl_dsp/circuit_modules/altec_9069b_high_pass.py): its claims, rendered through our GenExpr
 renderer on a harness around one unit (tests/gen_block_harness.py). Volts in, volts out. Standard library only."""
 import math
 import os
@@ -7,8 +7,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.circuit_modules.altec_9069b_high_pass import (STEP_CORNERS_HZ, Altec9069BHighPass,  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.circuit_modules.altec_9069b_high_pass import (STEP_CORNERS_HZ, Altec9069BHighPass,  # noqa: E402
                                                            Altec9069BHighPassCharacter, magnitude_db,
                                                            small_signal_response)
 from gen_block_harness import amplitude_at, harness  # noqa: E402

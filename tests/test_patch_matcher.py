@@ -1,5 +1,5 @@
 """The patch matcher (architecture/patch-matcher.md): its score orders hits the way they obviously sound, its parts
-are what they claim (loudness = m4l_dev/bs1770.py's, alignment, the centroid term's ordering), its search is CMA-ES and
+are what they claim (loudness = twosl_dsp/bs1770.py's, alignment, the centroid term's ordering), its search is CMA-ES and
 deterministic, its voice spec and WAV files fail loudly. Fast: the parameter-recovery validation is the opt-in
 tests/test_patch_matcher_recovery.py."""
 import dataclasses
@@ -17,18 +17,18 @@ TESTS_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 KIT_DIRECTORY = os.path.dirname(TESTS_DIRECTORY)
 sys.path[:0] = [KIT_DIRECTORY, TESTS_DIRECTORY]
 from fixture_drum_voice import FIXTURE_DRUM_VOICE  # noqa: E402
-from m4l_dev import bs1770  # noqa: E402
-from m4l_dev import patch_match_score  # noqa: E402
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.patch_match_score import MatchTarget  # noqa: E402
-from m4l_dev.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
+from twosl_dsp import bs1770  # noqa: E402
+from twosl_dsp import patch_match_score  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.patch_match_score import MatchTarget  # noqa: E402
+from twosl_dsp.patch_match_search import (CovarianceMatrixAdaptation, SearchSettings, fold_onto_unit_interval,  # noqa: E402
                                         match_patch, symmetric_eigendecomposition)
-from m4l_dev.gen_blocks import gen_code_with_blocks  # noqa: E402
-from m4l_dev.genexpr import GenProgram  # noqa: E402
-from m4l_dev.patch_match_voice import MatchedParameter, MatchedVoice  # noqa: E402
-from m4l_dev.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
-from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise  # noqa: E402
-from m4l_dev.wave_files import read_wave_file, write_wave_file  # noqa: E402
+from twosl_dsp.gen_blocks import gen_code_with_blocks  # noqa: E402
+from twosl_dsp.genexpr import GenProgram  # noqa: E402
+from twosl_dsp.patch_match_voice import MatchedParameter, MatchedVoice  # noqa: E402
+from twosl_dsp.render_comparison import assert_renders_similar, renders_are_similar  # noqa: E402
+from twosl_dsp.techniques.seeded_white_noise import SeededWhiteNoise  # noqa: E402
+from twosl_dsp.wave_files import read_wave_file, write_wave_file  # noqa: E402
 
 RATE = 48000
 

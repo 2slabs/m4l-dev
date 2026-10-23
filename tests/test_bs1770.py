@@ -1,4 +1,4 @@
-"""The kit's ITU-R BS.1770-5 meter (m4l_dev/bs1770.py, references/itu-r-bs1770.md, references/ebu-tech-3341.md): the
+"""The kit's ITU-R BS.1770-5 meter (twosl_dsp/bs1770.py, references/itu-r-bs1770.md, references/ebu-tech-3341.md): the
 K-weighting at other rates is the standard's 48 kHz response, and the loudness reads what the standards say a known
 signal reads."""
 import math
@@ -7,8 +7,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev import bs1770  # noqa: E402
-from m4l_dev.preset_loudness import FAST_SAMPLE_RATE, SAMPLE_RATE  # noqa: E402
+from twosl_dsp import bs1770  # noqa: E402
+from twosl_dsp.preset_loudness import FAST_SAMPLE_RATE, SAMPLE_RATE  # noqa: E402
 
 
 class MeterTests(unittest.TestCase):

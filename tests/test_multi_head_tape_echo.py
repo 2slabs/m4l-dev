@@ -1,4 +1,4 @@
-"""The multi-head tape echo's promises (m4l_dev/techniques/multi_head_tape_echo.py), one test each."""
+"""The multi-head tape echo's promises (twosl_dsp/techniques/multi_head_tape_echo.py), one test each."""
 import math
 import os
 import sys
@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_block_harness import fft, harness  # noqa: E402
-from m4l_dev.techniques.multi_head_tape_echo import MultiHeadTapeEcho, MultiHeadTapeEchoTapeWriter  # noqa: E402
+from twosl_dsp.techniques.multi_head_tape_echo import MultiHeadTapeEcho, MultiHeadTapeEchoTapeWriter  # noqa: E402
 
 RATE = 44100.0
 OUTPUTS = ["echo_left", "echo_right", "echo_speed", "echo_loop_samples"]

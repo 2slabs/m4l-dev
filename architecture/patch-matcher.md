@@ -12,21 +12,21 @@ derivative-free search moves the parameters. Sources for every choice: reference
 
 | module | what it is |
 |---|---|
-| `m4l_dev/patch_match_voice.py` | `MatchedVoice` (GenExpr code, inputs / outputs, `MatchedParameter`s, fixed values, `MatchTrigger`, audio output, noise seed) and the unit-cube map: plain picklable data |
-| `m4l_dev/patch_match_score.py` | `MatchTarget`: a target analysed once; `components(candidate)` / `score(candidate)`; the analysis C built into the kit's C cache |
-| `m4l_dev/patch_match_features.c` | onset, loudness (BS.1770 K-weighting from `bs1770.py`), log-mel spectrograms, envelope, the distance (cells, envelope, log spectral centroid). Every layout decision is here |
-| `m4l_dev/patch_match_search.py` | `match_patch(voice, target, rate, SearchSettings)`: CMA-ES strands in processes, enum sweeps, refinement, the score curve |
-| `m4l_dev/wave_files.py` | WAV in (PCM 8-32, float 32/64, extensible) and out (float 32) |
+| `twosl_dsp/patch_match_voice.py` | `MatchedVoice` (GenExpr code, inputs / outputs, `MatchedParameter`s, fixed values, `MatchTrigger`, audio output, noise seed) and the unit-cube map: plain picklable data |
+| `twosl_dsp/patch_match_score.py` | `MatchTarget`: a target analysed once; `components(candidate)` / `score(candidate)`; the analysis C built into the kit's C cache |
+| `twosl_dsp/patch_match_features.c` | onset, loudness (BS.1770 K-weighting from `bs1770.py`), log-mel spectrograms, envelope, the distance (cells, envelope, log spectral centroid). Every layout decision is here |
+| `twosl_dsp/patch_match_search.py` | `match_patch(voice, target, rate, SearchSettings)`: CMA-ES strands in processes, enum sweeps, refinement, the score curve |
+| `twosl_dsp/wave_files.py` | WAV in (PCM 8-32, float 32/64, extensible) and out (float 32) |
 | `tools/match_patch.py` | the CLI: `--voice module:NAME --target hit.wav --out result.json` (+ `.match.wav` / `.target.wav` for A/B) |
 | `tests/fixture_drum_voice.py` | the validation voice: swept sine + filtered noise + drive, 8 parameters |
 | `tests/test_patch_matcher.py` | fast (seconds): score orderings and parts, voice spec, CMA-ES, a 2-parameter match, WAV, the CLI |
-| `tests/test_patch_matcher_recovery.py` | slow, opt-in (`M4L_DEV_SLOW_TESTS=1`): parameter recovery at random known settings |
+| `tests/test_patch_matcher_recovery.py` | slow, opt-in (`TWOSL_DSP_SLOW_TESTS=1`): parameter recovery at random known settings |
 
 Targets: `match-targets/` at the kit root (gitignored), or anywhere outside a repository.
 
 ## The contract
 
-- **A voice** is any program the kit renders (`m4l_dev/genexpr.py`): a drum voice's own gen~ code, with its Params.
+- **A voice** is any program the kit renders (`twosl_dsp/genexpr.py`): a drum voice's own gen~ code, with its Params.
   Each searched Param has a range on a linear or log scale, or is an integer range (an ordered count), or an enum (its
   values: choices in no order of sound, like a filter mode or a shift register's pattern); the
   range must sit inside the Param's own min / max (the renderer would clamp it silently otherwise). Params not

@@ -1,4 +1,4 @@
-"""Tests for m4l_dev/generated_numbers.py: the rule every number a build writes follows, the check that holds a build
+"""Tests for twosl_dsp/generated_numbers.py: the rule every number a build writes follows, the check that holds a build
 to it, and what it is for: the kit writes the same bytes whatever the machine's maths library rounds.
 
 The perturbation test simulates another maths library: a child Python process has every math / cmath function
@@ -64,34 +64,34 @@ def install_perturbed_libm(mode):
 def every_block_text():
     """{block class name: the text it writes}: every technique and circuit module in the kit, made with plain
     expressions for its inputs and its default design and character."""
-    from m4l_dev.generated_numbers import generated_number
-    from m4l_dev.circuit_modules.buchla_259_modulation_oscillator import Buchla259ModulationOscillator
-    from m4l_dev.circuit_modules.buchla_259_principal_oscillator import Buchla259PrincipalOscillator
-    from m4l_dev.circuit_modules.buchla_259_timbre_section import Buchla259TimbreSection
-    from m4l_dev.circuit_modules.buchla_292_low_pass_gate_channel import Buchla292LowPassGateChannel
-    from m4l_dev.circuit_modules import ltc1060_mf10_section, moog_transistor_ladder, mutron_bi_phase
-    from m4l_dev.techniques import sidechain_style_pump, zero_delay_ladder_filter
-    from m4l_dev.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
-    from m4l_dev.techniques.antiderivative_piecewise_linear_shaper import (AntiderivativePiecewiseLinearShaper,
+    from twosl_dsp.generated_numbers import generated_number
+    from twosl_dsp.circuit_modules.buchla_259_modulation_oscillator import Buchla259ModulationOscillator
+    from twosl_dsp.circuit_modules.buchla_259_principal_oscillator import Buchla259PrincipalOscillator
+    from twosl_dsp.circuit_modules.buchla_259_timbre_section import Buchla259TimbreSection
+    from twosl_dsp.circuit_modules.buchla_292_low_pass_gate_channel import Buchla292LowPassGateChannel
+    from twosl_dsp.circuit_modules import ltc1060_mf10_section, moog_transistor_ladder, mutron_bi_phase
+    from twosl_dsp.techniques import sidechain_style_pump, zero_delay_ladder_filter
+    from twosl_dsp.techniques.antiderivative_antialiasing_equaliser import AntiderivativeAntialiasingEqualiser
+    from twosl_dsp.techniques.antiderivative_piecewise_linear_shaper import (AntiderivativePiecewiseLinearShaper,
                                                                           PiecewiseLinearTable)
-    from m4l_dev.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,
+    from twosl_dsp.techniques.antiderivative_tanh_saturator import (AntiderivativeTanhSaturator,
                                                                   AntiderivativeTanhSaturatorLinearTwin)
-    from m4l_dev.techniques.band_limited_edges import BandLimitedEdges
-    from m4l_dev.techniques.bell_equalizer import BellEqualizer
-    from m4l_dev.techniques.defined_latency_pad import DefinedLatency, DefinedLatencyPad
-    from m4l_dev.techniques.drum_envelope import DrumEnvelope
-    from m4l_dev.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,
+    from twosl_dsp.techniques.band_limited_edges import BandLimitedEdges
+    from twosl_dsp.techniques.bell_equalizer import BellEqualizer
+    from twosl_dsp.techniques.defined_latency_pad import DefinedLatency, DefinedLatencyPad
+    from twosl_dsp.techniques.drum_envelope import DrumEnvelope
+    from twosl_dsp.techniques.halfband_oversampler import (ControlsAtTheUpsampledSteps, HalfbandDownsampler,
                                                          HalfbandLinearPhaseDownsampler, HalfbandUpsampler)
-    from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
-    from m4l_dev.techniques.knee_soft_clip import KneeSoftClip
-    from m4l_dev.techniques.led_driven_photocell import LedDrivenPhotocell
-    from m4l_dev.techniques.metallic_noise import LfsrMetallicNoise
-    from m4l_dev.techniques.pitch_modulator import PitchModulator
-    from m4l_dev.techniques.seeded_white_noise import SeededWhiteNoise
-    from m4l_dev.techniques.tape_style_echo import TapeStyleEcho
-    from m4l_dev.techniques.zero_delay_allpass_cascade import FirstOrderAllpassStage, ZeroDelayAllpassCascade
-    from m4l_dev.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter
-    from m4l_dev.techniques.zero_delay_state_variable_filter import ZeroDelayStateVariableFilter
+    from twosl_dsp.techniques.histories_start_at_their_targets import HistoriesStartAtTheirTargets
+    from twosl_dsp.techniques.knee_soft_clip import KneeSoftClip
+    from twosl_dsp.techniques.led_driven_photocell import LedDrivenPhotocell
+    from twosl_dsp.techniques.metallic_noise import LfsrMetallicNoise
+    from twosl_dsp.techniques.pitch_modulator import PitchModulator
+    from twosl_dsp.techniques.seeded_white_noise import SeededWhiteNoise
+    from twosl_dsp.techniques.tape_style_echo import TapeStyleEcho
+    from twosl_dsp.techniques.zero_delay_allpass_cascade import FirstOrderAllpassStage, ZeroDelayAllpassCascade
+    from twosl_dsp.techniques.zero_delay_one_pole_filter import ZeroDelayOnePoleFilter
+    from twosl_dsp.techniques.zero_delay_state_variable_filter import ZeroDelayStateVariableFilter
 
     upsampler = HalfbandUpsampler("up", input="in1")
     # a curve measured from a model: pieces whose numbers carry the maths library's last bits
@@ -183,7 +183,7 @@ def probe(mode):
     import shutil
     import tempfile
     sys.path[:0] = [KIT_ROOT, TESTS]
-    from m4l_dev.generated_numbers import check_generated_text
+    from twosl_dsp.generated_numbers import check_generated_text
     import fixture_device
     digests = {}
     for name, text in every_block_text().items():
@@ -216,7 +216,7 @@ class GeneratedNumberTests(unittest.TestCase):
         sys.path.insert(0, KIT_ROOT)
 
     def test_a_float_is_rounded_to_ten_significant_digits(self):
-        from m4l_dev.generated_numbers import generated_number
+        from twosl_dsp.generated_numbers import generated_number
         self.assertEqual(generated_number(0.9497427837050028), 0.9497427837)
         self.assertEqual(generated_number(0.9497427837050002), 0.9497427837)
         self.assertEqual(repr(generated_number(4.3583271392608154e-05)), "4.358327139e-05")
@@ -224,21 +224,21 @@ class GeneratedNumberTests(unittest.TestCase):
         self.assertEqual(generated_number(3), 3.0)
 
     def test_a_fraction_keeps_every_digit_and_the_check_lets_it_through(self):
-        from m4l_dev.generated_numbers import check_generated_text, generated_number
+        from twosl_dsp.generated_numbers import check_generated_text, generated_number
         written = generated_number(Fraction(1, 24))
         self.assertEqual(written, 1 / 24)
         check_generated_text(f"y = {written!r} * x - {generated_number(-Fraction(7, 30))!r};", "a fraction")
 
     def test_anything_else_fails(self):
-        from m4l_dev.build_error import BuildError
-        from m4l_dev.generated_numbers import generated_number
+        from twosl_dsp.build_error import BuildError
+        from twosl_dsp.generated_numbers import generated_number
         for bad in (math.inf, math.nan, "0.5", True, None):
             with self.assertRaises(BuildError, msg=bad):
                 generated_number(bad)
 
     def test_the_check_fails_a_float_that_skipped_the_rule_and_says_where(self):
-        from m4l_dev.build_error import BuildError
-        from m4l_dev.generated_numbers import check_generated_text
+        from twosl_dsp.build_error import BuildError
+        from twosl_dsp.generated_numbers import check_generated_text
         check_generated_text("a = 0.9497427837 * b + 52.0 - 1e-05; // 2.6.1, 0x1.921fb54442d18p+1, stage_12", "fine")
         for text in ("a = 0.9497427837050028 * b;", "x = 4.3583271392608154e-05;", "[0.30000000000000004]"):
             with self.assertRaises(BuildError, msg=text) as failure:
@@ -247,8 +247,8 @@ class GeneratedNumberTests(unittest.TestCase):
             self.assertIn("generated_number", str(failure.exception))
 
     def test_a_number_the_live_parameter_lock_holds_is_let_through(self):
-        from m4l_dev.build_error import BuildError
-        from m4l_dev.generated_numbers import check_generated_text, literals_held_by_the_lock
+        from twosl_dsp.build_error import BuildError
+        from twosl_dsp.generated_numbers import check_generated_text, literals_held_by_the_lock
         held = literals_held_by_the_lock('{"name": "LFO Rate", "minimum": 0.016666666666666666, "maximum": 3600.0}')
         check_generated_text('"parameter_mmin": 0.016666666666666666', "patch", held)
         with self.assertRaises(BuildError):
@@ -266,7 +266,7 @@ class GeneratedNumberTests(unittest.TestCase):
     def test_the_perturbation_reaches_the_kit(self):
         # the probe's perturbation is real: unrounded, the half-band's coefficients move with it
         script = ("import sys; sys.path[:0] = [%r, %r]; import test_generated_numbers as t; t.install_perturbed_libm("
-                  "'up4'); from m4l_dev.techniques import halfband_oversampler as h; import math; "
+                  "'up4'); from twosl_dsp.techniques import halfband_oversampler as h; import math; "
                   "k, q = h._transition_parameters(0.04); print(repr(q))") % (KIT_ROOT, TESTS)
         moved = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, cwd=KIT_ROOT)
         own = subprocess.run([sys.executable, "-c", script.replace("t.install_perturbed_libm('up4'); ", "")],

@@ -6,7 +6,7 @@ Fetched 2026-10-19, sha256 dd5a7b0b611024e616b86a42c89eed0ded33f3129afc199420488
 `fetch-ebu-tech-3341.sh` gets the same copy. PRIMARY (the EBU's meter specification). Text read with
 `pdftotext -layout`; page numbers are PDF pages.
 
-Used by `m4l_dev/bs1770.py` (`max_momentary_loudness`) and, through it, `m4l_dev/preset_loudness.py`: the loudness
+Used by `twosl_dsp/bs1770.py` (`max_momentary_loudness`) and, through it, `twosl_dsp/preset_loudness.py`: the loudness
 every preset is levelled to Init by.
 
 - **§2.1, p.4-5, the time scales:** "The shortest time scale is called 'Momentary', abbreviated 'M'." "The loudness

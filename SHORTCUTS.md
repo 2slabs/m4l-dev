@@ -2,13 +2,13 @@
 
 Things done the quick way, to come back to. Each with when it was taken.
 
-- 2026-10-16: the frozen device's file dates (mdat) are a fixed 2026-01-01 (`m4l_dev/amxd.py`), so freezing is
+- 2026-10-16: the frozen device's file dates (mdat) are a fixed 2026-01-01 (`twosl_dsp/amxd.py`), so freezing is
   repeatable. No source says how Max uses mdat. Proper: find out (a frozen device with an old date vs. a newer file of
   the same name in Max's search path) and pick on evidence.
-- 2026-10-16: the live.tab button rule (`m4l_dev/layout_rules.py`: 6 px a character + 1) is calibrated from one case
+- 2026-10-16: the live.tab button rule (`twosl_dsp/layout_rules.py`: 6 px a character + 1) is calibrated from one case
   that ships and looks right in Live (2sl stab's Sub Mode, "-2 pls" in 37 px), not from Live's font metrics. Proper:
   measure live.tab's text width in Live.
-- 2026-10-16: libduktape is found by trying fixed paths (`m4l_dev/es5.py`: Homebrew's two prefixes, Debian's soname,
+- 2026-10-16: libduktape is found by trying fixed paths (`twosl_dsp/es5.py`: Homebrew's two prefixes, Debian's soname,
   `brew --prefix`), since Homebrew ships only libduktape.so and ctypes.util.find_library misses it on macOS.
 - 2026-10-16: the Live preset writer knows only a Max Instrument with float and enum parameters (the one example Live
   wrote). An audio or MIDI effect, or an Int parameter, fails the build. Proper: save a preset of each from Live into
@@ -16,7 +16,7 @@ Things done the quick way, to come back to. Each with when it was taken.
   saved, for 2sl filter); the same file holds an Int parameter's form, not taught yet. A MIDI effect is still unseen.
 - 2026-10-16: a device without a Preset menu still gets the UI script's Preset-menu code (`PRESETS = []`, msg_int, which
   then only errors). Proper, if it matters: leave the code out when there is no menu.
-- 2026-10-18 (re-done 2026-10-21): how wide a Live control must be for its text (`m4l_dev/layout_rules.py`) is
+- 2026-10-18 (re-done 2026-10-21): how wide a Live control must be for its text (`twosl_dsp/layout_rules.py`) is
   measured with a stand-in font (Liberation Sans at 11 px, `LIVE_FONT_ADVANCES`, the size calibrated from one
   observation: 2sl gate v0.5's 8-character dial names in 44 px dials, played in Live), not Live's own font, whose
   metrics no source gives (references/README.md, "Live's control font"). Since 2026-10-21 per character with padding

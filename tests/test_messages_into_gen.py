@@ -1,16 +1,16 @@
-"""Two build checks of what a patch sends: Max time values are real (m4l_dev/max_time_values.py, in
+"""Two build checks of what a patch sends: Max time values are real (twosl_dsp/max_time_values.py, in
 DevicePatchBuilder.box), and every message sent straight into a gen~ names a Param it declares: the patch's own
 (check_messages_into_gen_name_params: tell's [prepend], message boxes) and its scripts' (check_script_messages_into_gen,
-reading outlet() calls with m4l_dev/script_outlet_calls.py). Builds small patches in memory; writes nothing."""
+reading outlet() calls with twosl_dsp/script_outlet_calls.py). Builds small patches in memory; writes nothing."""
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from m4l_dev.build_error import BuildError  # noqa: E402
-from m4l_dev.max_time_values import MAX_NOTE_VALUE_TICKS  # noqa: E402
-from m4l_dev.script_outlet_calls import outlet_calls  # noqa: E402
+from twosl_dsp.build_error import BuildError  # noqa: E402
+from twosl_dsp.max_time_values import MAX_NOTE_VALUE_TICKS  # noqa: E402
+from twosl_dsp.script_outlet_calls import outlet_calls  # noqa: E402
 from test_patch_builder import builder  # noqa: E402  (its gen~, patch.target, declares a, b and volume)
 
 
