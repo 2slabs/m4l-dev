@@ -29,9 +29,9 @@ What it promises (tests/test_multi_head_tape_echo.py checks each):
   scaled by `tape` (none on clean).
 - **Howl** held by the saturator, tanh(g x) / g, as the kit's tape-style echo.
 - **Stop**, **rounds** and the **Time glide**: as TapeStyleEcho's.
-- **Stereo** (`stereo_mode`: 0 stereo, 1 ping-pong, 2 heads, 3 mono; STEREO_MODES): stereo is two tapes side by side,
+- **Stereo** (`stereo_mode`: 0 stereo, 1 ping-pong, 2 spread, 3 mono; STEREO_MODES): stereo is two tapes side by side,
   the right heard `right_lag_ms` late. Ping-pong crosses them (the input into the left, each repeat onto the other).
-  Heads gives each head a place, head 1 left, head 2 right, head 3 centre (both tapes then carry the inputs' mean).
+  Spread gives each head a place, head 1 left, head 2 right, head 3 centre (both tapes then carry the inputs' mean).
   Mono: both tapes the mean, both outputs the same.
 - **The device's processing in the loop** (always): it leaves what goes onto each tape in `<name>_left_into_tape` /
   `<name>_right_into_tape`; a MultiHeadTapeEchoTapeWriter writes what the device made of it.
@@ -49,7 +49,7 @@ from m4l_dev.techniques.histories_start_at_their_targets import HistoriesStartAt
 from m4l_dev.techniques.tape_style_echo import (HIGHEST_SAMPLE_RATE, HIGHEST_TIME_CHANGE, LEVEL_METER_FALL_MS,
                                                 STOP_FADE_MS, TIME_GLIDE_DOWN_MS, TIME_GLIDE_UP_MS)
 
-STEREO_MODES = ("stereo", "ping-pong", "heads", "mono")
+STEREO_MODES = ("stereo", "ping-pong", "spread", "mono")
 HEADS = 3
 HEAD_FADE_MS = 6.0                       # a change of heads crossfades over this (Shift: no glide, no click)
 HEAD_GLIDE_MS = 120.0                    # heads 1 and 2 moving (Spacing): they glide, as a head being moved would
@@ -286,7 +286,7 @@ if ({p}_clean <= 0) {{
 {p}_{side}_fed = {p}_{side}_saturator_out / {p}_saturation_gain;
 """
         code += f"""
-// what goes onto each tape: stereo side by side; ping-pong crosses (the inputs into the left); heads and mono put the
+// what goes onto each tape: stereo side by side; ping-pong crosses (the inputs into the left); spread and mono put the
 // inputs' mean on both
 {p}_left_sent = ${{left_input}};
 {p}_right_sent = ${{right_input}};
@@ -297,7 +297,7 @@ if ({p}_clean <= 0) {{
 {p}_right_into_tape = (1 - {p}_shared) * (1 - {p}_cross) * {p}_right_sent + {p}_shared * {p}_both_sent
 	+ {p}_clean * ((1 - {p}_cross) * {p}_right_fed + {p}_cross * {p}_left_fed);
 
-// what is heard: the heads, their sum held near one head's level; heads mode places them (1 left, 2 right, 3 centre);
+// what is heard: the heads, their sum held near one head's level; spread places them (1 left, 2 right, 3 centre);
 // mono gives both sides their mean
 {p}_heard_scale = 1 / sqrt({p}_heads_on);
 {p}_left_plain = {heard["left"]};

@@ -108,7 +108,7 @@ class MultiHeadTapeEchoTests(unittest.TestCase):
         shares = [band_share_db(out[int((0.01 + k * 0.3) * RATE):int((0.03 + k * 0.3) * RATE)], 3000, 15000) for k in (1, 2, 3)]
         self.assertLess(max(shares) - min(shares), 1.0, shares)
 
-    def test_heads_mode_places_head_1_left_head_2_right_head_3_centre(self):
+    def test_spread_places_head_1_left_head_2_right_head_3_centre(self):
         left, right = program(mode=2.0, h1=1.0, h2=1.0, h3=1.0, feedback=0.0).run(int(0.4 * RATE), [click(0.4)])[:2]
         near = lambda sig, t: max(abs(v) for v in sig[int((t - 0.003) * RATE):int((t + 0.003) * RATE)])
         self.assertGreater(near(left, 0.11), 10 * near(right, 0.11))
